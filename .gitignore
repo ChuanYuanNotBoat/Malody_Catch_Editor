@@ -1,0 +1,65 @@
+# Visual Studio / MSVC
+*.suo
+*.user
+*.vcxproj.user
+*.vcxproj.*.user
+*.lastbuildstate
+ipch/
+*.pdb
+*.obj
+*.idb
+*.ipdb
+*.tlog/
+
+# CMake build 目录
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+*.ninja
+*.log
+*.vcxproj*
+*.sln
+*.dir
+*.property
+
+# Qt moc/uic自动生成文件
+moc_*.cpp
+ui_*.h
+*.moc
+*.qmlc
+*.qrc.cpp
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*~
+*.swp
+*.DS_Store
+Thumbs.db
+
+# 可能的不应提交的资源
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.lib
+*.a
+*.log
+
+# 其他
+*.user
+*.lock
+main.md
+vibe.md
+.vs
+beatmap/*
