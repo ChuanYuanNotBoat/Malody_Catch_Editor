@@ -20,16 +20,20 @@
 #include <QMessageBox>
 #include <QLabel>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QAction>
 #include <QApplication>
 #include <QFileInfo>
-#include <QSlider>
 #include <QSpinBox>
-#include <QDialog>
+#include <QPainter> 
 #include <QDialogButtonBox>
 #include <QFormLayout>
-#include <QPainter> 
+#include <QColorDialog>
+#include <QTabWidget>
+#include <QDoubleSpinBox>
 #include <QDebug>
+#include <QSlider>
+#include <QPushButton>
 
 class MainWindow::Private {
 public:
@@ -50,7 +54,9 @@ public:
     QAction* hyperfruitAction;
     QAction* playAction;
     QMenu* skinMenu;
-    QAction* noteSizeAction;       // 新增
+    QAction* noteSizeAction;
+    QAction* calibrateSkinAction;
+    QAction* outlineAction;
 };
 
 MainWindow::MainWindow(ChartController* chartCtrl,
@@ -68,10 +74,11 @@ MainWindow::MainWindow(ChartController* chartCtrl,
     d->skin = skin;
 
     setupUi();
-    createCentralArea();
+    createCentralArea(); // 必须在 createMenus 之前，因为 createMenus 需要 canvas 存在
     createMenus();
     retranslateUi();
 
+    // 连接控制器信号
     connect(d->chartController, &ChartController::chartChanged, this, [this]() {
         d->canvas->update();
         d->undoAction->setEnabled(d->chartController->canUndo());
@@ -145,44 +152,14 @@ void MainWindow::createMenus()
     d->hyperfruitAction->setChecked(Settings::instance().hyperfruitOutlineEnabled());
     connect(d->hyperfruitAction, &QAction::toggled, this, &MainWindow::toggleHyperfruitMode);
 
-    // 设置菜单（新增）
+    // 设置菜单
     QMenu* settingsMenu = menuBar()->addMenu(tr("&Settings"));
     d->noteSizeAction = settingsMenu->addAction(tr("Note Size..."));
-    connect(d->noteSizeAction, &QAction::triggered, this, [this]() {
-        QDialog dialog(this);
-        dialog.setWindowTitle(tr("Note Size"));
-        QFormLayout form(&dialog);
-        QSpinBox* sizeSpin = new QSpinBox(&dialog);
-        sizeSpin->setRange(8, 48);
-        sizeSpin->setValue(Settings::instance().noteSize());
-        form.addRow(tr("Size (pixels):"), sizeSpin);
-        QLabel* previewLabel = new QLabel(&dialog);
-        previewLabel->setFixedSize(100, 100);
-        previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
-        // 实时预览
-        auto updatePreview = [previewLabel, sizeSpin, this]() {
-            int sz = sizeSpin->value();
-            QPixmap pix(sz, sz);
-            pix.fill(Qt::white);
-            QPainter painter(&pix);
-            painter.setBrush(Qt::lightGray);
-            painter.setPen(Qt::black);
-            painter.drawEllipse(0, 0, sz, sz);
-            previewLabel->setPixmap(pix);
-        };
-        updatePreview();
-        connect(sizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), updatePreview);
-        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-        form.addRow(buttons);
-        if (dialog.exec() == QDialog::Accepted) {
-            int newSize = sizeSpin->value();
-            Settings::instance().setNoteSize(newSize);
-            adjustNoteSize(newSize);
-            Logger::info(QString("Note size set to %1").arg(newSize));
-        }
-    });
+    connect(d->noteSizeAction, &QAction::triggered, this, &MainWindow::adjustNoteSize);
+    d->calibrateSkinAction = settingsMenu->addAction(tr("Calibrate Skin..."));
+    connect(d->calibrateSkinAction, &QAction::triggered, this, &MainWindow::calibrateSkin);
+    d->outlineAction = settingsMenu->addAction(tr("Outline Settings..."));
+    connect(d->outlineAction, &QAction::triggered, this, &MainWindow::configureOutline);
 
     // 播放菜单
     QMenu* playMenu = menuBar()->addMenu(tr("&Playback"));
@@ -209,13 +186,6 @@ void MainWindow::createMenus()
     populateSkinMenu();
 
     Logger::debug("Menus created");
-}
-
-void MainWindow::adjustNoteSize(int newSize)
-{
-    d->canvas->setNoteSize(newSize);
-    d->canvas->update();
-    Logger::debug(QString("Note size adjusted to %1").arg(newSize));
 }
 
 void MainWindow::populateSkinMenu()
@@ -265,7 +235,7 @@ void MainWindow::changeSkin(const QString& skinName)
         delete newSkin;
         QMessageBox::warning(this, tr("Skin Error"), tr("Failed to load skin: %1").arg(skinName));
     }
-    populateSkinMenu();
+    populateSkinMenu(); // 更新菜单选中状态
 }
 
 void MainWindow::setSkin(Skin* skin)
@@ -286,7 +256,7 @@ void MainWindow::createCentralArea()
     d->canvas->setColorMode(Settings::instance().colorNoteEnabled());
     d->canvas->setHyperfruitEnabled(Settings::instance().hyperfruitOutlineEnabled());
     if (d->skin) d->canvas->setSkin(d->skin);
-    d->canvas->setNoteSize(Settings::instance().noteSize());  // 应用保存的大小
+    d->canvas->setNoteSize(Settings::instance().noteSize());
 
     d->rightPanelContainer = new QWidget(this);
     QVBoxLayout* rightLayout = new QVBoxLayout(d->rightPanelContainer);
@@ -307,8 +277,14 @@ void MainWindow::createCentralArea()
     d->bpmPanel->setChartController(d->chartController);
     d->metaPanel->setChartController(d->chartController);
 
+    // 连接模式切换信号
+    connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode) {
+        d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode));
+        Logger::debug(QString("Canvas mode set to %1").arg(mode));
+    });
+    // 连接时间分度变化信号
     connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
-    Logger::debug("Connected time division signal");
+    Logger::debug("Connected mode and time division signals");
 
     d->splitter = new QSplitter(Qt::Horizontal, this);
     d->splitter->addWidget(d->canvas);
@@ -322,6 +298,7 @@ void MainWindow::createCentralArea()
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(false);
         d->currentRightPanel = d->notePanel;
+        d->canvas->setMode(ChartCanvas::PlaceNote);
         Logger::debug("Switched to Note panel");
     });
     toolBar->addAction(tr("BPM"), [this]() {
@@ -450,6 +427,195 @@ void MainWindow::togglePlayback()
     } else {
         Logger::debug("Playback started");
         d->playbackController->play();
+    }
+}
+
+void MainWindow::adjustNoteSize()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Note Size"));
+    dialog.setMinimumSize(400, 300);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+    // 大小选择
+    QHBoxLayout* sizeLayout = new QHBoxLayout;
+    QLabel* label = new QLabel(tr("Size (pixels):"));
+    QSpinBox* sizeSpin = new QSpinBox;
+    sizeSpin->setRange(8, 64);
+    sizeSpin->setValue(Settings::instance().noteSize());
+    sizeLayout->addWidget(label);
+    sizeLayout->addWidget(sizeSpin);
+    layout->addLayout(sizeLayout);
+
+    // 预览区域
+    QLabel* previewLabel = new QLabel;
+    previewLabel->setFixedSize(128, 128);
+    previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
+    previewLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(previewLabel, 0, Qt::AlignCenter);
+
+    // 实时更新预览，使用当前皮肤
+    auto updatePreview = [previewLabel, sizeSpin, this]() {
+        int sz = sizeSpin->value();
+        QPixmap pix(sz, sz);
+        pix.fill(Qt::white);
+        QPainter painter(&pix);
+        // 使用当前皮肤绘制一个示例音符（假设分母=4，普通note）
+        Note exampleNote(0, 1, 4, 256);
+        QPointF center(sz/2, sz/2);
+        if (d->skin && d->skin->isValid()) {
+            // 获取皮肤图片，缩放至指定大小
+            const QPixmap* notePix = d->skin->getNotePixmap(2); // type 2 = 1/4
+            if (notePix && !notePix->isNull()) {
+                QPixmap scaled = notePix->scaled(sz, sz, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                painter.drawPixmap((sz - scaled.width())/2, (sz - scaled.height())/2, scaled);
+            } else {
+                painter.setBrush(Qt::lightGray);
+                painter.drawEllipse(0, 0, sz, sz);
+            }
+        } else {
+            painter.setBrush(Qt::lightGray);
+            painter.drawEllipse(0, 0, sz, sz);
+        }
+        previewLabel->setPixmap(pix);
+    };
+    updatePreview();
+    connect(sizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), updatePreview);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        int newSize = sizeSpin->value();
+        Settings::instance().setNoteSize(newSize);
+        d->canvas->setNoteSize(newSize);
+        Logger::info(QString("Note size set to %1").arg(newSize));
+    }
+}
+
+void MainWindow::calibrateSkin()
+{
+    if (!d->skin || !d->skin->isValid()) {
+        QMessageBox::information(this, tr("No Skin"), tr("No skin loaded, cannot calibrate."));
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Calibrate Skin: %1").arg(d->skin->title()));
+    dialog.setMinimumSize(600, 400);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+    // 创建选项卡，每种 note 类型一个
+    QTabWidget* tabs = new QTabWidget;
+    QStringList typeNames = {"1/1", "1/2", "1/4", "1/8/16/32", "1/3/6/12/24", "Rain"};
+    for (int i = 0; i <= 5; ++i) {
+        QWidget* page = new QWidget;
+        QVBoxLayout* pageLayout = new QVBoxLayout(page);
+
+        // 当前缩放比例
+        QHBoxLayout* scaleLayout = new QHBoxLayout;
+        QLabel* scaleLabel = new QLabel(tr("Scale Factor:"));
+        QDoubleSpinBox* scaleSpin = new QDoubleSpinBox;
+        scaleSpin->setRange(0.2, 3.0);
+        scaleSpin->setSingleStep(0.05);
+        scaleSpin->setValue(d->skin->getNoteScale(i));
+        scaleLayout->addWidget(scaleLabel);
+        scaleLayout->addWidget(scaleSpin);
+        pageLayout->addLayout(scaleLayout);
+
+        // 预览区域
+        QLabel* previewLabel = new QLabel;
+        previewLabel->setFixedSize(128, 128);
+        previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
+        previewLabel->setAlignment(Qt::AlignCenter);
+        pageLayout->addWidget(previewLabel, 0, Qt::AlignCenter);
+
+        // 实时更新预览
+        auto updatePreview = [previewLabel, scaleSpin, this, i]() {
+            double scale = scaleSpin->value();
+            QPixmap pix(128, 128);
+            pix.fill(Qt::white);
+            QPainter painter(&pix);
+            const QPixmap* notePix = d->skin->getNotePixmap(i);
+            if (notePix && !notePix->isNull()) {
+                int scaledW = notePix->width() * scale;
+                int scaledH = notePix->height() * scale;
+                QPixmap scaled = notePix->scaled(scaledW, scaledH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                painter.drawPixmap((128 - scaled.width())/2, (128 - scaled.height())/2, scaled);
+            } else {
+                painter.setBrush(Qt::lightGray);
+                painter.drawEllipse(20, 20, 88, 88);
+            }
+            previewLabel->setPixmap(pix);
+        };
+        updatePreview();
+        connect(scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), updatePreview);
+
+        // 保存控件以便最后获取
+        scaleSpin->setProperty("noteType", i);
+        page->setProperty("scaleSpin", QVariant::fromValue(scaleSpin));
+        pageLayout->addStretch();
+        tabs->addTab(page, typeNames[i]);
+    }
+    layout->addWidget(tabs);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        // 保存所有校准值到皮肤配置
+        for (int i = 0; i <= 5; ++i) {
+            QWidget* page = tabs->widget(i);
+            QDoubleSpinBox* scaleSpin = page->property("scaleSpin").value<QDoubleSpinBox*>();
+            if (scaleSpin) {
+                d->skin->setNoteScale(i, scaleSpin->value());
+            }
+        }
+        d->skin->saveConfig();  // 保存到 skin_config.json
+        d->canvas->update();
+        Logger::info("Skin calibration saved");
+        dialog.accept();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    dialog.exec();
+}
+
+void MainWindow::configureOutline()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Outline Settings"));
+    QFormLayout form(&dialog);
+
+    QSpinBox* widthSpin = new QSpinBox;
+    widthSpin->setRange(1, 8);
+    widthSpin->setValue(Settings::instance().outlineWidth());
+    form.addRow(tr("Outline Width (px):"), widthSpin);
+
+    // 颜色选择
+    QPushButton* colorBtn = new QPushButton;
+    QColor outlineColor = Settings::instance().outlineColor();
+    colorBtn->setStyleSheet(QString("background-color: %1").arg(outlineColor.name()));
+    connect(colorBtn, &QPushButton::clicked, [&]() {
+        QColor newColor = QColorDialog::getColor(outlineColor, &dialog);
+        if (newColor.isValid()) {
+            outlineColor = newColor;
+            colorBtn->setStyleSheet(QString("background-color: %1").arg(outlineColor.name()));
+        }
+    });
+    form.addRow(tr("Outline Color:"), colorBtn);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    form.addRow(buttons);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        Settings::instance().setOutlineWidth(widthSpin->value());
+        Settings::instance().setOutlineColor(outlineColor);
+        d->canvas->update();
+        Logger::info("Outline settings updated");
     }
 }
 

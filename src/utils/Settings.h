@@ -2,16 +2,15 @@
 
 #include <QSettings>
 #include <QKeySequence>
+#include <QColor>
 
 class Settings {
 public:
     static Settings& instance();
 
-    // 文件路径
     QString lastOpenPath() const;
     void setLastOpenPath(const QString& path);
 
-    // 显示设置
     bool colorNoteEnabled() const;
     void setColorNoteEnabled(bool enabled);
 
@@ -24,15 +23,18 @@ public:
     QString currentSkin() const;
     void setCurrentSkin(const QString& skinName);
 
-    // 音符大小（像素）
     int noteSize() const;
     void setNoteSize(int size);
 
-    // 语言
+    // 描边设置
+    int outlineWidth() const;
+    void setOutlineWidth(int width);
+    QColor outlineColor() const;
+    void setOutlineColor(const QColor& color);
+
     QString language() const;
     void setLanguage(const QString& languageCode);
 
-    // 快捷键
     QKeySequence shortcut(const QString& action) const;
     void setShortcut(const QString& action, const QKeySequence& seq);
 

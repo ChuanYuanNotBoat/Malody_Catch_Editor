@@ -15,6 +15,7 @@ bool SkinIO::loadSkin(const QString& folderPath, Skin& outSkin)
         return false;
     }
 
+    // 读取预览信息
     QFile previewFile(skinDir.filePath("preview.json"));
     if (previewFile.open(QIODevice::ReadOnly)) {
         QJsonDocument doc = QJsonDocument::fromJson(previewFile.readAll());
@@ -31,6 +32,7 @@ bool SkinIO::loadSkin(const QString& folderPath, Skin& outSkin)
         outSkin.setDesc("");
     }
 
+    // 实际加载图片资源
     if (!outSkin.loadFromDir(folderPath)) {
         Logger::error("Failed to load skin resources from " + folderPath);
         return false;

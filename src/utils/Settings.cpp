@@ -49,6 +49,20 @@ void Settings::setNoteSize(int size) {
     m_settings.setValue("noteSize", size);
 }
 
+int Settings::outlineWidth() const {
+    return m_settings.value("outlineWidth", 1).toInt();
+}
+void Settings::setOutlineWidth(int width) {
+    m_settings.setValue("outlineWidth", width);
+}
+
+QColor Settings::outlineColor() const {
+    return m_settings.value("outlineColor", QColor(Qt::black)).value<QColor>();
+}
+void Settings::setOutlineColor(const QColor& color) {
+    m_settings.setValue("outlineColor", color);
+}
+
 QString Settings::language() const {
     return m_settings.value("language", "en_US").toString();
 }
