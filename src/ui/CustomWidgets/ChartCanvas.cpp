@@ -5,6 +5,7 @@
 #include "render/GridRenderer.h"
 #include "render/HyperfruitDetector.h"
 #include "utils/MathUtils.h"
+#include "utils/Settings.h"
 #include "model/Chart.h"
 #include <QPainter>
 #include <QMouseEvent>
@@ -42,6 +43,8 @@ ChartCanvas::ChartCanvas(QWidget* parent)
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setMinimumSize(800, 400);
+    // 从配置加载 note 大小
+    m_noteRenderer->setNoteSize(Settings::instance().noteSize());
 }
 
 ChartCanvas::~ChartCanvas()
@@ -91,6 +94,7 @@ void ChartCanvas::setHyperfruitEnabled(bool enabled)
 void ChartCanvas::setTimeDivision(int division)
 {
     m_timeDivision = division;
+    qDebug() << "ChartCanvas::setTimeDivision" << division;
     update();
 }
 
@@ -108,6 +112,12 @@ void ChartCanvas::setGridSnap(bool snap)
 void ChartCanvas::setScrollPos(double timeMs)
 {
     m_scrollPos = timeMs;
+    update();
+}
+
+void ChartCanvas::setNoteSize(int size)
+{
+    m_noteRenderer->setNoteSize(size);
     update();
 }
 
@@ -179,7 +189,10 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         QPointF pos = noteToPos(note);
         if (note.isRain) {
             double endNoteTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
-            QRectF rainRect(pos.x() - 256, pos.y(), 512, (endNoteTime - noteTime) * (height() / m_visibleRange));
+            double durationMs = endNoteTime - noteTime;
+            if (durationMs < 0) durationMs = 0;
+            double heightPx = (durationMs / m_visibleRange) * height();
+            QRectF rainRect(pos.x() - 256, pos.y(), 512, heightPx);
             m_noteRenderer->drawRain(painter, note, rainRect, selected);
         } else {
             m_noteRenderer->drawNote(painter, note, pos, selected);
@@ -210,7 +223,11 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
 void ChartCanvas::drawGrid(QPainter& painter)
 {
     QRect rect = this->rect();
-    m_gridRenderer->drawGrid(painter, rect, m_gridDivision, m_scrollPos, m_scrollPos + m_visibleRange, m_timeDivision);
+    const auto& bpmList = m_chartController->chart()->bpmList();
+    int offset = m_chartController->chart()->meta().offset;
+    m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
+                             m_scrollPos, m_scrollPos + m_visibleRange,
+                             m_timeDivision, bpmList, offset);
 }
 
 QPointF ChartCanvas::noteToPos(const Note& note) const
@@ -241,125 +258,115 @@ Note ChartCanvas::posToNote(const QPointF& pos) const
 void ChartCanvas::mousePressEvent(QMouseEvent* event)
 {
     qDebug() << "ChartCanvas::mousePressEvent: button=" << event->button() << "pos=" << event->pos();
-    try {
-        if (event->button() == Qt::LeftButton) {
-            if (m_isPasting) {
-                qDebug() << "ChartCanvas::mousePressEvent: In paste mode";
-                if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40) {
-                    qDebug() << "ChartCanvas::mousePressEvent: Confirming paste";
-                    for (const Note& note : m_pasteNotes) {
-                        Note newNote = note;
-                        newNote.x += static_cast<int>(m_pasteOffset.x() / width() * 512);
-                        double timeDelta = m_pasteOffset.y() / height() * m_visibleRange;
-                        double newTime = MathUtils::beatToMs(newNote.beatNum, newNote.numerator, newNote.denominator,
-                                                             m_chartController->chart()->bpmList(),
-                                                             m_chartController->chart()->meta().offset) + timeDelta;
-                        int beat, num, den;
-                        MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
-                                            m_chartController->chart()->meta().offset, beat, num, den);
-                        newNote.beatNum = beat;
-                        newNote.numerator = num;
-                        newNote.denominator = den;
-                        if (newNote.x < 0 || newNote.x > 512) {
-                            QMessageBox::StandardButton reply = QMessageBox::question(this, tr("Out of Bounds"),
-                                tr("Some notes are outside the playfield (x=0~512). Force fix them to edges?"),
-                                QMessageBox::Yes | QMessageBox::No);
-                            if (reply == QMessageBox::Yes) {
-                                newNote.x = qBound(0, newNote.x, 512);
-                                m_chartController->addNote(newNote);
-                            }
-                        } else {
+    if (event->button() == Qt::LeftButton) {
+        if (m_isPasting) {
+            // 处理粘贴预览的确认/取消
+            if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40) {
+                // 确认粘贴
+                for (const Note& note : m_pasteNotes) {
+                    Note newNote = note;
+                    newNote.x += static_cast<int>(m_pasteOffset.x() / width() * 512);
+                    double timeDelta = m_pasteOffset.y() / height() * m_visibleRange;
+                    double newTime = MathUtils::beatToMs(newNote.beatNum, newNote.numerator, newNote.denominator,
+                                                         m_chartController->chart()->bpmList(),
+                                                         m_chartController->chart()->meta().offset) + timeDelta;
+                    int beat, num, den;
+                    MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
+                                        m_chartController->chart()->meta().offset, beat, num, den);
+                    newNote.beatNum = beat;
+                    newNote.numerator = num;
+                    newNote.denominator = den;
+                    if (newNote.x < 0 || newNote.x > 512) {
+                        QMessageBox::StandardButton reply = QMessageBox::question(this, tr("Out of Bounds"),
+                            tr("Some notes are outside the playfield (x=0~512). Force fix them to edges?"),
+                            QMessageBox::Yes | QMessageBox::No);
+                        if (reply == QMessageBox::Yes) {
+                            newNote.x = qBound(0, newNote.x, 512);
                             m_chartController->addNote(newNote);
                         }
-                    }
-                    m_isPasting = false;
-                    update();
-                } else if (event->pos().x() >= 120 && event->pos().x() <= 220 && event->pos().y() >= 10 && event->pos().y() <= 40) {
-                    qDebug() << "ChartCanvas::mousePressEvent: Cancelling paste";
-                    m_isPasting = false;
-                    update();
-                } else {
-                    qDebug() << "ChartCanvas::mousePressEvent: Moving paste preview";
-                    m_isDragging = true;
-                    m_dragStart = event->pos();
-                    m_draggedNotes.clear();
-                }
-                return;
-            }
-
-            if (m_currentMode == PlaceNote) {
-                qDebug() << "ChartCanvas::mousePressEvent: PlaceNote mode";
-                Note note = posToNote(event->pos());
-                qDebug() << "ChartCanvas::mousePressEvent: Adding note at" << event->pos() << "-> beat=" << note.beatNum;
-                m_chartController->addNote(note);
-            } else if (m_currentMode == PlaceRain) {
-                qDebug() << "ChartCanvas::mousePressEvent: PlaceRain mode";
-                static bool rainFirst = true;
-                static QPointF startPos;
-                if (rainFirst) {
-                    startPos = event->pos();
-                    rainFirst = false;
-                } else {
-                    QPointF endPos = event->pos();
-                    rainFirst = true;
-                    Note startNote = posToNote(startPos);
-                    Note endNote = posToNote(endPos);
-                    double startTime = MathUtils::beatToMs(startNote.beatNum, startNote.numerator, startNote.denominator,
-                                                           m_chartController->chart()->bpmList(),
-                                                           m_chartController->chart()->meta().offset);
-                    double endTime = MathUtils::beatToMs(endNote.beatNum, endNote.numerator, endNote.denominator,
-                                                         m_chartController->chart()->bpmList(),
-                                                         m_chartController->chart()->meta().offset);
-                    if (endTime > startTime) {
-                        Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
-                                      endNote.beatNum, endNote.numerator, endNote.denominator,
-                                      startNote.x);
-                        m_chartController->addNote(rainNote);
-                    }
-                }
-            } else if (m_currentMode == Select) {
-                if (event->modifiers() & Qt::ControlModifier) {
-                    m_isSelecting = true;
-                    m_selectionStart = event->pos();
-                    m_selectionEnd = event->pos();
-                } else {
-                    const auto& notes = m_chartController->chart()->notes();
-                    double minDist = 10;
-                    int hitIndex = -1;
-                    for (int i = 0; i < notes.size(); ++i) {
-                        QPointF pos = noteToPos(notes[i]);
-                        double dist = QLineF(pos, event->pos()).length();
-                        if (dist < minDist) {
-                            minDist = dist;
-                            hitIndex = i;
-                        }
-                    }
-                    if (hitIndex >= 0) {
-                        if (m_selectionController->selectedIndices().contains(hitIndex))
-                            m_selectionController->removeFromSelection(hitIndex);
-                        else
-                            m_selectionController->addToSelection(hitIndex);
                     } else {
-                        m_selectionController->clearSelection();
+                        m_chartController->addNote(newNote);
                     }
                 }
-            } else if (m_currentMode == Delete) {
+                m_isPasting = false;
+                update();
+            } else if (event->pos().x() >= 120 && event->pos().x() <= 220 && event->pos().y() >= 10 && event->pos().y() <= 40) {
+                m_isPasting = false;
+                update();
+            } else {
+                m_isDragging = true;
+                m_dragStart = event->pos();
+                m_draggedNotes.clear();
+            }
+            return;
+        }
+
+        if (m_currentMode == PlaceNote) {
+            Note note = posToNote(event->pos());
+            m_chartController->addNote(note);
+        } else if (m_currentMode == PlaceRain) {
+            static bool rainFirst = true;
+            static QPointF startPos;
+            if (rainFirst) {
+                startPos = event->pos();
+                rainFirst = false;
+            } else {
+                QPointF endPos = event->pos();
+                rainFirst = true;
+                Note startNote = posToNote(startPos);
+                Note endNote = posToNote(endPos);
+                double startTime = MathUtils::beatToMs(startNote.beatNum, startNote.numerator, startNote.denominator,
+                                                       m_chartController->chart()->bpmList(),
+                                                       m_chartController->chart()->meta().offset);
+                double endTime = MathUtils::beatToMs(endNote.beatNum, endNote.numerator, endNote.denominator,
+                                                     m_chartController->chart()->bpmList(),
+                                                     m_chartController->chart()->meta().offset);
+                if (endTime > startTime) {
+                    Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
+                                  endNote.beatNum, endNote.numerator, endNote.denominator,
+                                  startNote.x);
+                    m_chartController->addNote(rainNote);
+                }
+            }
+        } else if (m_currentMode == Select) {
+            if (event->modifiers() & Qt::ControlModifier) {
+                m_isSelecting = true;
+                m_selectionStart = event->pos();
+                m_selectionEnd = event->pos();
+            } else {
                 const auto& notes = m_chartController->chart()->notes();
+                double minDist = 10;
+                int hitIndex = -1;
                 for (int i = 0; i < notes.size(); ++i) {
                     QPointF pos = noteToPos(notes[i]);
-                    if (QRectF(pos.x()-8, pos.y()-8, 16, 16).contains(event->pos())) {
-                        m_chartController->removeNote(notes[i]);
-                        break;
+                    double dist = QLineF(pos, event->pos()).length();
+                    if (dist < minDist) {
+                        minDist = dist;
+                        hitIndex = i;
                     }
                 }
+                if (hitIndex >= 0) {
+                    if (m_selectionController->selectedIndices().contains(hitIndex))
+                        m_selectionController->removeFromSelection(hitIndex);
+                    else
+                        m_selectionController->addToSelection(hitIndex);
+                } else {
+                    m_selectionController->clearSelection();
+                }
             }
-        } else if (event->button() == Qt::RightButton) {
-            // 右键菜单（复制/粘贴等），可后续实现
+        } else if (m_currentMode == Delete) {
+            const auto& notes = m_chartController->chart()->notes();
+            int noteSize = m_noteRenderer->getNoteSize();
+            for (int i = 0; i < notes.size(); ++i) {
+                QPointF pos = noteToPos(notes[i]);
+                if (QRectF(pos.x() - noteSize/2, pos.y() - noteSize/2, noteSize, noteSize).contains(event->pos())) {
+                    m_chartController->removeNote(notes[i]);
+                    break;
+                }
+            }
         }
-    } catch (const std::exception& e) {
-        qCritical() << "ChartCanvas::mousePressEvent exception:" << e.what();
-    } catch (...) {
-        qCritical() << "ChartCanvas::mousePressEvent unknown exception";
+    } else if (event->button() == Qt::RightButton) {
+        // 右键菜单（复制/粘贴等），可后续实现
     }
 }
 

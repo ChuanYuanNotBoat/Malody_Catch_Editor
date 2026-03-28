@@ -23,9 +23,14 @@
 #include <QAction>
 #include <QApplication>
 #include <QFileInfo>
+#include <QSlider>
+#include <QSpinBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QPainter> 
 #include <QDebug>
 
-// Private 实现类
 class MainWindow::Private {
 public:
     ChartController* chartController;
@@ -44,10 +49,10 @@ public:
     QAction* colorAction;
     QAction* hyperfruitAction;
     QAction* playAction;
-    QMenu* skinMenu; // 皮肤菜单
+    QMenu* skinMenu;
+    QAction* noteSizeAction;       // 新增
 };
 
-// 构造函数
 MainWindow::MainWindow(ChartController* chartCtrl,
                        SelectionController* selCtrl,
                        PlaybackController* playCtrl,
@@ -57,19 +62,16 @@ MainWindow::MainWindow(ChartController* chartCtrl,
 {
     Logger::info("MainWindow constructor called");
 
-    // 保存控制器指针
     d->chartController = chartCtrl;
     d->selectionController = selCtrl;
     d->playbackController = playCtrl;
     d->skin = skin;
 
-    // 创建 UI 组件（顺序重要：setupUi → createCentralArea → createMenus）
     setupUi();
-    createCentralArea(); // 必须先创建 canvas，以便菜单能使用它
+    createCentralArea();
     createMenus();
     retranslateUi();
 
-    // 连接控制器信号
     connect(d->chartController, &ChartController::chartChanged, this, [this]() {
         d->canvas->update();
         d->undoAction->setEnabled(d->chartController->canUndo());
@@ -143,6 +145,45 @@ void MainWindow::createMenus()
     d->hyperfruitAction->setChecked(Settings::instance().hyperfruitOutlineEnabled());
     connect(d->hyperfruitAction, &QAction::toggled, this, &MainWindow::toggleHyperfruitMode);
 
+    // 设置菜单（新增）
+    QMenu* settingsMenu = menuBar()->addMenu(tr("&Settings"));
+    d->noteSizeAction = settingsMenu->addAction(tr("Note Size..."));
+    connect(d->noteSizeAction, &QAction::triggered, this, [this]() {
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Note Size"));
+        QFormLayout form(&dialog);
+        QSpinBox* sizeSpin = new QSpinBox(&dialog);
+        sizeSpin->setRange(8, 48);
+        sizeSpin->setValue(Settings::instance().noteSize());
+        form.addRow(tr("Size (pixels):"), sizeSpin);
+        QLabel* previewLabel = new QLabel(&dialog);
+        previewLabel->setFixedSize(100, 100);
+        previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
+        // 实时预览
+        auto updatePreview = [previewLabel, sizeSpin, this]() {
+            int sz = sizeSpin->value();
+            QPixmap pix(sz, sz);
+            pix.fill(Qt::white);
+            QPainter painter(&pix);
+            painter.setBrush(Qt::lightGray);
+            painter.setPen(Qt::black);
+            painter.drawEllipse(0, 0, sz, sz);
+            previewLabel->setPixmap(pix);
+        };
+        updatePreview();
+        connect(sizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), updatePreview);
+        QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        form.addRow(buttons);
+        if (dialog.exec() == QDialog::Accepted) {
+            int newSize = sizeSpin->value();
+            Settings::instance().setNoteSize(newSize);
+            adjustNoteSize(newSize);
+            Logger::info(QString("Note size set to %1").arg(newSize));
+        }
+    });
+
     // 播放菜单
     QMenu* playMenu = menuBar()->addMenu(tr("&Playback"));
     d->playAction = playMenu->addAction(tr("&Play/Pause"), this, &MainWindow::togglePlayback);
@@ -168,6 +209,13 @@ void MainWindow::createMenus()
     populateSkinMenu();
 
     Logger::debug("Menus created");
+}
+
+void MainWindow::adjustNoteSize(int newSize)
+{
+    d->canvas->setNoteSize(newSize);
+    d->canvas->update();
+    Logger::debug(QString("Note size adjusted to %1").arg(newSize));
 }
 
 void MainWindow::populateSkinMenu()
@@ -206,11 +254,9 @@ void MainWindow::changeSkin(const QString& skinName)
     QString skinPath = skinsBaseDir + "/" + skinName;
     Skin* newSkin = new Skin();
     if (SkinIO::loadSkin(skinPath, *newSkin)) {
-        // 替换全局皮肤
         if (d->skin) delete d->skin;
         d->skin = newSkin;
         Settings::instance().setCurrentSkin(skinName);
-        // 通知画布更新皮肤
         d->canvas->setSkin(d->skin);
         d->canvas->update();
         Logger::info(QString("Skin changed to %1").arg(skinName));
@@ -219,7 +265,7 @@ void MainWindow::changeSkin(const QString& skinName)
         delete newSkin;
         QMessageBox::warning(this, tr("Skin Error"), tr("Failed to load skin: %1").arg(skinName));
     }
-    populateSkinMenu(); // 更新菜单选中状态
+    populateSkinMenu();
 }
 
 void MainWindow::setSkin(Skin* skin)
@@ -234,20 +280,18 @@ void MainWindow::createCentralArea()
 {
     Logger::debug("Creating central area...");
 
-    // 创建画布
     d->canvas = new ChartCanvas(this);
     d->canvas->setChartController(d->chartController);
     d->canvas->setSelectionController(d->selectionController);
     d->canvas->setColorMode(Settings::instance().colorNoteEnabled());
     d->canvas->setHyperfruitEnabled(Settings::instance().hyperfruitOutlineEnabled());
     if (d->skin) d->canvas->setSkin(d->skin);
+    d->canvas->setNoteSize(Settings::instance().noteSize());  // 应用保存的大小
 
-    // 右侧面板容器
     d->rightPanelContainer = new QWidget(this);
     QVBoxLayout* rightLayout = new QVBoxLayout(d->rightPanelContainer);
     rightLayout->setContentsMargins(0, 0, 0, 0);
 
-    // 创建各个子面板
     d->notePanel = new NoteEditPanel(d->rightPanelContainer);
     d->bpmPanel = new BPMTimePanel(d->rightPanelContainer);
     d->metaPanel = new MetaEditPanel(d->rightPanelContainer);
@@ -258,24 +302,20 @@ void MainWindow::createCentralArea()
     d->bpmPanel->setVisible(false);
     d->metaPanel->setVisible(false);
 
-    // 设置控制器
     d->notePanel->setChartController(d->chartController);
     d->notePanel->setSelectionController(d->selectionController);
     d->bpmPanel->setChartController(d->chartController);
     d->metaPanel->setChartController(d->chartController);
 
-    // 连接时间分度变化信号
     connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
     Logger::debug("Connected time division signal");
 
-    // 创建分割器
     d->splitter = new QSplitter(Qt::Horizontal, this);
     d->splitter->addWidget(d->canvas);
     d->splitter->addWidget(d->rightPanelContainer);
     d->splitter->setSizes({800, 300});
     setCentralWidget(d->splitter);
 
-    // 工具栏（简单示例）
     QToolBar* toolBar = addToolBar(tr("Tools"));
     toolBar->addAction(tr("Note"), [this]() {
         d->notePanel->setVisible(true);
@@ -368,7 +408,6 @@ void MainWindow::exportMcz()
         Logger::debug("Export cancelled");
         return;
     }
-    // TODO: 实现导出
     Logger::warn("Export .mcz not implemented yet");
     QMessageBox::information(this, tr("Not Implemented"), tr("Export .mcz is not yet implemented."));
 }
@@ -425,8 +464,6 @@ void MainWindow::changeEvent(QEvent* event)
 void MainWindow::retranslateUi()
 {
     setWindowTitle(tr("Catch Chart Editor"));
-    // 菜单文本在 createMenus 中动态创建，此处不重复设置
-    // 但可以重新填充皮肤菜单以更新显示名称（如果语言影响皮肤名）
     populateSkinMenu();
     Logger::debug("UI retranslated");
 }

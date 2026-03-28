@@ -3,9 +3,11 @@
 #include "render/HyperfruitDetector.h"
 #include <QPainter>
 #include <QPen>
+#include "utils/Logger.h"
 
 NoteRenderer::NoteRenderer()
-    : m_skin(nullptr), m_showColors(true), m_hyperfruitEnabled(true), m_hyperfruitDetector(nullptr)
+    : m_skin(nullptr), m_showColors(true), m_hyperfruitEnabled(true),
+      m_hyperfruitDetector(nullptr), m_noteSize(16)
 {
 }
 
@@ -34,10 +36,38 @@ void NoteRenderer::setHyperfruitSet(const QSet<int>& hyperSet)
     m_hyperfruitSet = hyperSet;
 }
 
+void NoteRenderer::setNoteSize(int size)
+{
+    m_noteSize = size;
+}
+
+int NoteRenderer::getNoteSize() const
+{
+    return m_noteSize;
+}
+
+// 根据分母获取颜色，严格按照需求文档
+static QColor getNoteColor(int denominator, int numerator)
+{
+    Q_UNUSED(numerator); // 需求中颜色仅由分母决定，分子为1
+    switch (denominator) {
+    case 1:  return QColor(255, 0, 0);       // 红色
+    case 2:  return QColor(135, 206, 235);   // 水色
+    case 3:  return QColor(0, 255, 0);       // 绿色
+    case 4:  return QColor(128, 0, 128);     // 紫色
+    case 6:  return QColor(0, 255, 0);       // 绿色
+    case 8:  return QColor(255, 215, 0);     // 金色
+    case 12: return QColor(0, 255, 0);       // 绿色
+    case 16: return QColor(255, 215, 0);     // 金色
+    case 24: return QColor(0, 255, 0);       // 绿色
+    case 32: return QColor(255, 215, 0);     // 金色
+    default: return QColor(173, 216, 230);   // 默认浅蓝
+    }
+}
+
 void NoteRenderer::drawNote(QPainter& painter, const Note& note, const QPointF& pos, bool selected) const
 {
-    QRectF rect(pos.x() - 8, pos.y() - 8, 16, 16);
-    QColor fillColor;
+    QRectF rect(pos.x() - m_noteSize/2, pos.y() - m_noteSize/2, m_noteSize, m_noteSize);
     QColor outlineColor = Qt::black;
 
     if (selected) {
@@ -51,20 +81,10 @@ void NoteRenderer::drawNote(QPainter& painter, const Note& note, const QPointF& 
     }
 
     if (m_showColors && !m_skin) {
-        // 使用颜色模式，根据分度确定颜色
-        double fraction = static_cast<double>(note.numerator) / note.denominator;
-        // 近似分母对应的颜色（简化）
-        if (note.denominator == 2) fillColor = QColor(135, 206, 235); // 水色
-        else if (note.denominator == 3) fillColor = QColor(0, 255, 0); // 绿
-        else if (note.denominator == 4) fillColor = QColor(128, 0, 128); // 紫
-        else if (note.denominator == 6) fillColor = QColor(0, 255, 0);
-        else if (note.denominator == 8) fillColor = QColor(255, 215, 0); // 金
-        else if (note.denominator == 12) fillColor = QColor(0, 255, 0);
-        else if (note.denominator == 16) fillColor = QColor(255, 215, 0);
-        else if (note.denominator == 24) fillColor = QColor(0, 255, 0);
-        else if (note.denominator == 32) fillColor = QColor(255, 215, 0);
-        else fillColor = Qt::lightGray;
+        // 使用颜色模式，根据分母获取颜色
+        QColor fillColor = getNoteColor(note.denominator, note.numerator);
         painter.setBrush(fillColor);
+        painter.drawEllipse(rect);
     } else if (m_skin) {
         // 使用皮肤图片
         int noteType = 0; // 默认
@@ -79,12 +99,12 @@ void NoteRenderer::drawNote(QPainter& painter, const Note& note, const QPointF& 
         }
         // 皮肤缺失时回退到颜色
         painter.setBrush(Qt::lightGray);
+        painter.drawEllipse(rect);
     } else {
         // 默认样式
         painter.setBrush(Qt::lightGray);
+        painter.drawEllipse(rect);
     }
-
-    painter.drawEllipse(rect);
 }
 
 void NoteRenderer::drawRain(QPainter& painter, const Note& note, const QRectF& rect, bool selected) const
