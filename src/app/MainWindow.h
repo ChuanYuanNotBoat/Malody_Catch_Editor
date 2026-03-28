@@ -36,7 +36,9 @@ private slots:
     void toggleHyperfruitMode(bool on);
     void togglePlayback();
     void changeSkin(const QString& skinName);
-    void adjustNoteSize(int newSize);        // 新增
+    void adjustNoteSize();                       // 改为打开对话框
+    void calibrateSkin();                        // 新增：皮肤校准
+    void configureOutline();                     // 新增：描边设置
 
 private:
     void setupUi();

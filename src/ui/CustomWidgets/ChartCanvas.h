@@ -28,8 +28,9 @@ public:
     void setGridDivision(int division);
     void setGridSnap(bool snap);
     void setScrollPos(double timeMs);
-    void setNoteSize(int size);  // 新增
-    void paste();
+    void setNoteSize(int size);
+    void setMode(Mode mode);           // 新增，供外部切换模式
+    void paste();                      // 粘贴预览
 
 public slots:
     void showGridSettings();
@@ -45,6 +46,7 @@ private:
     void drawGrid(QPainter& painter);
     QPointF noteToPos(const Note& note) const;
     Note posToNote(const QPointF& pos) const;
+    void updateSelectionRect(const QRectF& rect);  // 辅助矩形选择
 
     ChartController* m_chartController;
     SelectionController* m_selectionController;
@@ -61,6 +63,7 @@ private:
     double m_scrollPos;
     double m_visibleRange;
 
+    // 交互状态
     bool m_isSelecting;
     QPointF m_selectionStart;
     QPointF m_selectionEnd;
@@ -68,6 +71,7 @@ private:
     QPointF m_dragStart;
     QSet<int> m_draggedNotes;
 
+    // 粘贴预览
     bool m_isPasting;
     QVector<Note> m_pasteNotes;
     QPointF m_pasteOffset;

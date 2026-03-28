@@ -20,6 +20,7 @@
 #include <QMimeData>
 #include <QMessageBox>
 #include <QDebug>
+#include "utils/Logger.h"
 
 ChartCanvas::ChartCanvas(QWidget* parent)
     : QWidget(parent),
@@ -43,7 +44,6 @@ ChartCanvas::ChartCanvas(QWidget* parent)
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setMinimumSize(800, 400);
-    // 从配置加载 note 大小
     m_noteRenderer->setNoteSize(Settings::instance().noteSize());
 }
 
@@ -94,7 +94,6 @@ void ChartCanvas::setHyperfruitEnabled(bool enabled)
 void ChartCanvas::setTimeDivision(int division)
 {
     m_timeDivision = division;
-    qDebug() << "ChartCanvas::setTimeDivision" << division;
     update();
 }
 
@@ -121,6 +120,13 @@ void ChartCanvas::setNoteSize(int size)
     update();
 }
 
+void ChartCanvas::setMode(Mode mode)
+{
+    m_currentMode = mode;
+    Logger::debug(QString("ChartCanvas mode set to %1").arg(mode));
+    update();
+}
+
 void ChartCanvas::paste()
 {
     if (!m_selectionController) return;
@@ -132,6 +138,7 @@ void ChartCanvas::paste()
     m_isPasting = true;
     setFocus();
     update();
+    Logger::debug("Paste preview started");
 }
 
 void ChartCanvas::showGridSettings()
@@ -155,6 +162,7 @@ void ChartCanvas::showGridSettings()
     if (dialog.exec() == QDialog::Accepted) {
         setGridSnap(snapCheck->isChecked());
         setGridDivision(divisionSpin->value());
+        Logger::info("Grid settings updated");
     }
 }
 
@@ -180,6 +188,7 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         m_noteRenderer->setHyperfruitSet(hyperSet);
     }
 
+    // 绘制音符
     for (int i = 0; i < notes.size(); ++i) {
         const Note& note = notes[i];
         double noteTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
@@ -199,6 +208,7 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         }
     }
 
+    // 粘贴预览
     if (m_isPasting && !m_pasteNotes.isEmpty()) {
         painter.setOpacity(0.5);
         for (const Note& note : m_pasteNotes) {
@@ -212,12 +222,16 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         painter.drawText(QRect(120,10,100,30), Qt::AlignCenter, tr("Cancel"));
     }
 
+    // 矩形选择区域
     if (m_isSelecting) {
         QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
-        painter.setPen(Qt::black);
-        painter.setBrush(QColor(0,0,0,50));
+        painter.setPen(Qt::red);
+        painter.setBrush(QColor(255, 255, 0, 80));
         painter.drawRect(rect);
     }
+
+    // 绘制选中的音符外框（已在 NoteRenderer 中处理，这里仅作额外提示）
+    // 但根据需求，选中音符应红色描边，内部黄色半透明，这个在 NoteRenderer 中已实现。
 }
 
 void ChartCanvas::drawGrid(QPainter& painter)
@@ -257,10 +271,9 @@ Note ChartCanvas::posToNote(const QPointF& pos) const
 
 void ChartCanvas::mousePressEvent(QMouseEvent* event)
 {
-    qDebug() << "ChartCanvas::mousePressEvent: button=" << event->button() << "pos=" << event->pos();
     if (event->button() == Qt::LeftButton) {
         if (m_isPasting) {
-            // 处理粘贴预览的确认/取消
+            // 粘贴预览按钮区域（屏幕坐标）
             if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40) {
                 // 确认粘贴
                 for (const Note& note : m_pasteNotes) {
@@ -290,9 +303,11 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 }
                 m_isPasting = false;
                 update();
+                Logger::debug("Paste confirmed");
             } else if (event->pos().x() >= 120 && event->pos().x() <= 220 && event->pos().y() >= 10 && event->pos().y() <= 40) {
                 m_isPasting = false;
                 update();
+                Logger::debug("Paste cancelled");
             } else {
                 m_isDragging = true;
                 m_dragStart = event->pos();
@@ -301,15 +316,18 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
             return;
         }
 
+        // 模式处理
         if (m_currentMode == PlaceNote) {
             Note note = posToNote(event->pos());
             m_chartController->addNote(note);
+            Logger::debug("Note placed at beat " + QString::number(note.beatNum));
         } else if (m_currentMode == PlaceRain) {
             static bool rainFirst = true;
             static QPointF startPos;
             if (rainFirst) {
                 startPos = event->pos();
                 rainFirst = false;
+                Logger::debug("Rain start position set");
             } else {
                 QPointF endPos = event->pos();
                 rainFirst = true;
@@ -326,14 +344,20 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                                   endNote.beatNum, endNote.numerator, endNote.denominator,
                                   startNote.x);
                     m_chartController->addNote(rainNote);
+                    Logger::debug("Rain note added");
+                } else {
+                    Logger::warn("Rain note end time before start, ignored");
                 }
             }
         } else if (m_currentMode == Select) {
             if (event->modifiers() & Qt::ControlModifier) {
+                // Ctrl + 左键开始矩形选择
                 m_isSelecting = true;
                 m_selectionStart = event->pos();
                 m_selectionEnd = event->pos();
+                Logger::debug("Rect selection started");
             } else {
+                // 普通点击选择
                 const auto& notes = m_chartController->chart()->notes();
                 double minDist = 10;
                 int hitIndex = -1;
@@ -350,8 +374,10 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                         m_selectionController->removeFromSelection(hitIndex);
                     else
                         m_selectionController->addToSelection(hitIndex);
+                    Logger::debug(QString("Note %1 toggled selection").arg(hitIndex));
                 } else {
                     m_selectionController->clearSelection();
+                    Logger::debug("Selection cleared");
                 }
             }
         } else if (m_currentMode == Delete) {
@@ -361,12 +387,13 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 QPointF pos = noteToPos(notes[i]);
                 if (QRectF(pos.x() - noteSize/2, pos.y() - noteSize/2, noteSize, noteSize).contains(event->pos())) {
                     m_chartController->removeNote(notes[i]);
+                    Logger::debug(QString("Note %1 deleted").arg(i));
                     break;
                 }
             }
         }
     } else if (event->button() == Qt::RightButton) {
-        // 右键菜单（复制/粘贴等），可后续实现
+        // 右键菜单，可扩展
     }
 }
 
@@ -441,6 +468,7 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event)
             [this](const Note& note) { return noteToPos(note); });
         m_isSelecting = false;
         update();
+        Logger::debug("Rect selection completed");
     } else if (m_isDragging) {
         m_isDragging = false;
         m_draggedNotes.clear();
