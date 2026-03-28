@@ -14,6 +14,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QDebug>
 
 NoteEditPanel::NoteEditPanel(QWidget* parent)
     : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0)
@@ -25,7 +26,6 @@ void NoteEditPanel::setupUi()
 {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
-    // 模式选择
     QLabel* modeLabel = new QLabel(tr("Mode:"), this);
     mainLayout->addWidget(modeLabel);
 
@@ -45,7 +45,6 @@ void NoteEditPanel::setupUi()
     mainLayout->addWidget(rainRadio);
     mainLayout->addWidget(deleteRadio);
 
-    // 时间分度
     mainLayout->addWidget(new QLabel(tr("Time Division:"), this));
     m_timeDivisionCombo = new QComboBox(this);
     QStringList divisions = {"1", "2", "3", "4", "6", "8", "12", "16", "24", "32"};
@@ -56,13 +55,11 @@ void NoteEditPanel::setupUi()
     connect(m_timeDivisionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &NoteEditPanel::onTimeDivisionChanged);
     mainLayout->addWidget(m_timeDivisionCombo);
 
-    // 网格吸附
     m_gridSnapCheck = new QCheckBox(tr("Grid Snap"), this);
     m_gridSnapCheck->setChecked(true);
     connect(m_gridSnapCheck, &QCheckBox::toggled, this, &NoteEditPanel::onGridSnapToggled);
     mainLayout->addWidget(m_gridSnapCheck);
 
-    // 网格设置按钮
     m_gridSettingsBtn = new QPushButton(tr("Grid Settings..."), this);
     connect(m_gridSettingsBtn, &QPushButton::clicked, this, &NoteEditPanel::onGridSettingsClicked);
     mainLayout->addWidget(m_gridSettingsBtn);
@@ -75,8 +72,7 @@ void NoteEditPanel::setMode(int mode)
     m_currentMode = mode;
     emit modeChanged(mode);
     if (m_chartController && m_selectionController) {
-        // 通知画布模式变化（通过全局信号或直接设置画布模式）
-        // 实际可通过 ChartCanvas 直接获取当前模式，这里简单用信号
+        // 可通知画布
     }
 }
 
@@ -113,20 +109,22 @@ void NoteEditPanel::onGridSettingsClicked()
 
 void NoteEditPanel::onGridDivisionChanged(int value)
 {
-    // 通知画布网格分度变化
-    // 实际可通过信号传递
+    // 可通知画布
 }
 
 void NoteEditPanel::onGridSnapToggled(bool on)
 {
-    // 通知画布吸附开关
+    // 可通知画布
 }
 
 void NoteEditPanel::onTimeDivisionChanged(int index)
 {
-    // 通知画布时间分度变化
+    Q_UNUSED(index);
     int division = m_timeDivisionCombo->currentText().toInt();
-    // 发送信号或直接设置画布
+    if (division < 1) division = 1;
+    if (division > 96) division = 96;
+    qDebug() << "NoteEditPanel: Time division changed to" << division;
+    emit timeDivisionChanged(division);
 }
 
 void NoteEditPanel::setChartController(ChartController* controller)

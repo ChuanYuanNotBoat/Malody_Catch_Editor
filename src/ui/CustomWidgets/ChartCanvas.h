@@ -10,6 +10,7 @@ class SelectionController;
 class NoteRenderer;
 class GridRenderer;
 class HyperfruitDetector;
+class Skin;
 
 class ChartCanvas : public QWidget {
     Q_OBJECT
@@ -20,13 +21,14 @@ public:
 
     void setChartController(ChartController* controller);
     void setSelectionController(SelectionController* controller);
+    void setSkin(Skin* skin); // 新增
     void setColorMode(bool enabled);
     void setHyperfruitEnabled(bool enabled);
     void setTimeDivision(int division);
     void setGridDivision(int division);
     void setGridSnap(bool snap);
     void setScrollPos(double timeMs);
-    void paste(); // 粘贴预览
+    void paste();
 
 public slots:
     void showGridSettings();
@@ -58,7 +60,6 @@ private:
     double m_scrollPos;
     double m_visibleRange;
 
-    // 交互状态
     bool m_isSelecting;
     QPointF m_selectionStart;
     QPointF m_selectionEnd;
@@ -66,7 +67,6 @@ private:
     QPointF m_dragStart;
     QSet<int> m_draggedNotes;
 
-    // 粘贴预览
     bool m_isPasting;
     QVector<Note> m_pasteNotes;
     QPointF m_pasteOffset;

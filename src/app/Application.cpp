@@ -32,63 +32,77 @@ Application::~Application()
 bool Application::initialize()
 {
     try {
-        // 初始化日志
         Logger::init(QDir::home().filePath(".catch_editor.log"));
         Logger::info("========== Application Starting ==========");
 
-        // 加载设置
-        Logger::info("Loading settings...");
         Settings::instance();
+        Logger::info("Settings loaded.");
 
-        // 加载语言
-        Logger::info("Loading language...");
         loadLanguage();
+        Logger::info("Language loaded.");
 
-        // 创建控制器
-        Logger::info("Creating controllers...");
         m_chartController = new ChartController(this);
         m_selectionController = new SelectionController(this);
         m_playbackController = new PlaybackController(new AudioPlayer(this), this);
-        Logger::info("Controllers created successfully.");
+        Logger::info("Controllers created.");
 
         // 加载皮肤
-        Logger::info("Loading skin...");
         m_skin = new Skin();
-        QString skinPath = QCoreApplication::applicationDirPath() + "/skins/" + Settings::instance().currentSkin();
-        qDebug() << "Trying skin path:" << skinPath;
-        if (!SkinIO::loadSkin(skinPath, *m_skin)) {
-            // 尝试默认皮肤
-            skinPath = QCoreApplication::applicationDirPath() + "/skins/default";
-            qDebug() << "Trying default skin path:" << skinPath;
-            if (!SkinIO::loadSkin(skinPath, *m_skin)) {
-                Logger::warn("Failed to load skin, using default colors.");
+        QString skinName = Settings::instance().currentSkin();
+        QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/skins";
+        Logger::info(QString("Looking for skins in: %1").arg(skinsBaseDir));
+
+        // 扫描所有皮肤目录
+        QStringList skinDirs = SkinIO::getSkinList(skinsBaseDir);
+        if (skinDirs.isEmpty()) {
+            Logger::warn("No skin directories found, using fallback colors.");
+            m_skin = nullptr; // 不使用皮肤
+        } else {
+            bool loaded = false;
+            // 如果当前皮肤名在列表中，则加载它；否则加载第一个
+            if (!skinName.isEmpty() && skinDirs.contains(skinName)) {
+                QString skinPath = skinsBaseDir + "/" + skinName;
+                Logger::info(QString("Trying to load skin '%1' from %2").arg(skinName).arg(skinPath));
+                if (SkinIO::loadSkin(skinPath, *m_skin)) {
+                    loaded = true;
+                } else {
+                    Logger::error(QString("Failed to load skin '%1', will try first available").arg(skinName));
+                }
+            }
+            if (!loaded) {
+                // 使用第一个可用皮肤
+                QString firstSkin = skinDirs.first();
+                QString skinPath = skinsBaseDir + "/" + firstSkin;
+                Logger::info(QString("Loading first skin: %1 from %2").arg(firstSkin).arg(skinPath));
+                if (SkinIO::loadSkin(skinPath, *m_skin)) {
+                    loaded = true;
+                    // 保存为新默认皮肤
+                    Settings::instance().setCurrentSkin(firstSkin);
+                    Logger::info(QString("Set default skin to %1").arg(firstSkin));
+                } else {
+                    Logger::error("Failed to load any skin, using fallback colors.");
+                    m_skin = nullptr;
+                }
             }
         }
-        Logger::info("Skin loaded successfully.");
 
-        // 创建主窗口
-        Logger::info("Creating main window...");
-        m_mainWindow = new MainWindow(m_chartController, m_selectionController, m_playbackController);
+        m_mainWindow = new MainWindow(m_chartController, m_selectionController, m_playbackController, m_skin);
         m_mainWindow->show();
-        Logger::info("Main window created and shown.");
+        Logger::info("Main window created.");
 
-        // 加载插件
-        Logger::info("Loading plugins...");
         m_pluginManager = new PluginManager(this);
         QString pluginsDir = QCoreApplication::applicationDirPath() + "/plugins";
         m_pluginManager->loadPlugins(pluginsDir, m_mainWindow);
-        Logger::info("Plugins loaded successfully.");
+        Logger::info("Plugins loaded.");
 
-        // 连接信号（示例）
         connect(m_chartController, &ChartController::chartChanged, m_pluginManager, &PluginManager::notifyChartChanged);
 
-        // 自动加载上次项目
         loadLastProject();
 
         Logger::info("Application initialized successfully.");
         return true;
     } catch (const std::exception& e) {
-        Logger::error(QString("Exception during initialization: %1").arg(QString::fromStdString(std::string(e.what()))));
+        Logger::error(QString("Exception during initialization: %1").arg(e.what()));
         return false;
     } catch (...) {
         Logger::error("Unknown exception during initialization");
@@ -100,7 +114,7 @@ void Application::loadLastProject()
 {
     QString lastPath = Settings::instance().lastOpenPath();
     if (!lastPath.isEmpty()) {
-        // 可以尝试自动加载，但不必须
+        Logger::info(QString("Last project path: %1 (auto-load not implemented)").arg(lastPath));
     }
 }
 
