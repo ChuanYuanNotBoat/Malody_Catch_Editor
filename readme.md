@@ -115,8 +115,8 @@ The skin is included under permission and is used for demonstration purposes onl
 
 ## License / 许可证
 
-This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
-本项目基于 MIT 许可证发布，详见 [LICENSE](LICENSE) 文件。
+This project is licensed under the GPL-3.0 License – see the [LICENSE](LICENSE) file for details.
+本项目基于 GPL-3.0 许可证发布，详见 [LICENSE](LICENSE) 文件。
 
 ---
 
