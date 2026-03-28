@@ -16,6 +16,8 @@ public:
     void setHyperfruitEnabled(bool enabled);
     void setHyperfruitDetector(HyperfruitDetector* detector);
     void setHyperfruitSet(const QSet<int>& hyperSet);
+    void setNoteSize(int size);
+    int getNoteSize() const;               // 新增 getter
 
     void drawNote(QPainter& painter, const Note& note, const QPointF& pos, bool selected) const;
     void drawRain(QPainter& painter, const Note& note, const QRectF& rect, bool selected) const;
@@ -26,4 +28,5 @@ private:
     bool m_hyperfruitEnabled;
     HyperfruitDetector* m_hyperfruitDetector;
     QSet<int> m_hyperfruitSet;
+    int m_noteSize;
 };

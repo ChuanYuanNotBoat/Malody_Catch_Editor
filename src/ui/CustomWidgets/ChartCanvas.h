@@ -21,13 +21,14 @@ public:
 
     void setChartController(ChartController* controller);
     void setSelectionController(SelectionController* controller);
-    void setSkin(Skin* skin); // 新增
+    void setSkin(Skin* skin);
     void setColorMode(bool enabled);
     void setHyperfruitEnabled(bool enabled);
     void setTimeDivision(int division);
     void setGridDivision(int division);
     void setGridSnap(bool snap);
     void setScrollPos(double timeMs);
+    void setNoteSize(int size);  // 新增
     void paste();
 
 public slots:

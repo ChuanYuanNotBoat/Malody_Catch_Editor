@@ -42,6 +42,13 @@ void Settings::setCurrentSkin(const QString& skinName) {
     m_settings.setValue("currentSkin", skinName);
 }
 
+int Settings::noteSize() const {
+    return m_settings.value("noteSize", 16).toInt();
+}
+void Settings::setNoteSize(int size) {
+    m_settings.setValue("noteSize", size);
+}
+
 QString Settings::language() const {
     return m_settings.value("language", "en_US").toString();
 }
