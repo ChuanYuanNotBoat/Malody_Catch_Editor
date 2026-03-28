@@ -68,6 +68,12 @@ void ChartCanvas::setSelectionController(SelectionController* controller)
     connect(controller, &SelectionController::selectionChanged, this, QOverload<>::of(&ChartCanvas::update));
 }
 
+void ChartCanvas::setSkin(Skin* skin)
+{
+    m_noteRenderer->setSkin(skin);
+    update();
+}
+
 void ChartCanvas::setColorMode(bool enabled)
 {
     m_colorMode = enabled;
@@ -116,8 +122,6 @@ void ChartCanvas::paste()
     m_isPasting = true;
     setFocus();
     update();
-
-    // 创建临时悬浮按钮（简化，实际可用 QToolBar 或悬浮窗口）
 }
 
 void ChartCanvas::showGridSettings()

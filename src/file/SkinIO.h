@@ -8,4 +8,5 @@ class SkinIO {
 public:
     static bool loadSkin(const QString& folderPath, Skin& outSkin);
     static QStringList getSkinList(const QString& skinsDir);
+    static QString getSkinDisplayName(const QString& skinPath);
 };

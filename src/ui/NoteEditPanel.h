@@ -18,6 +18,7 @@ public:
 
 signals:
     void modeChanged(int mode); // 0: place note, 1: place rain, 2: delete mode
+    void timeDivisionChanged(int division); // 新增信号
 
 private slots:
     void onNoteModeClicked();
