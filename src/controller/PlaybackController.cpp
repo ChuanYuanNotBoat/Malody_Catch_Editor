@@ -1,5 +1,6 @@
 #include "PlaybackController.h"
 #include "utils/MathUtils.h"
+#include "utils/Logger.h"
 #include "model/Chart.h"
 #include <QTimer>
 
@@ -19,6 +20,7 @@ void PlaybackController::play()
     if (m_state == Stopped || m_state == Paused) {
         m_audioPlayer->play();
         m_state = Playing;
+        Logger::debug(QString("PlaybackController::play - Playing from position %1ms").arg(m_audioPlayer->position()));
         emit stateChanged(m_state);
     }
 }
@@ -28,6 +30,7 @@ void PlaybackController::pause()
     if (m_state == Playing) {
         m_audioPlayer->pause();
         m_state = Paused;
+        Logger::debug(QString("PlaybackController::pause - Paused at position %1ms").arg(m_audioPlayer->position()));
         emit stateChanged(m_state);
     }
 }
@@ -37,6 +40,7 @@ void PlaybackController::stop()
     if (m_state != Stopped) {
         m_audioPlayer->stop();
         m_state = Stopped;
+        Logger::debug("PlaybackController::stop - Playback stopped");
         emit stateChanged(m_state);
     }
 }
@@ -47,6 +51,7 @@ void PlaybackController::setSpeed(double speed)
     if (speed > 1.0) speed = 1.0;
     m_speed = speed;
     m_audioPlayer->setSpeed(speed);
+    Logger::debug(QString("PlaybackController::setSpeed - Speed changed to %1x").arg(speed));
     emit speedChanged(speed);
 }
 
@@ -57,6 +62,7 @@ double PlaybackController::speed() const
 
 void PlaybackController::seekTo(double timeMs)
 {
+    Logger::debug(QString("PlaybackController::seekTo - Seeking to %1ms").arg(timeMs));
     m_audioPlayer->setPosition(static_cast<qint64>(timeMs));
 }
 

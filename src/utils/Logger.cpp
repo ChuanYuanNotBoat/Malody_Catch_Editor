@@ -3,6 +3,8 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QJsonObject>
+#include <QJsonDocument>
 #include <iostream>
 
 QFile Logger::m_file;
@@ -10,6 +12,13 @@ QTextStream Logger::m_stream;
 QMutex Logger::m_mutex;
 QtMessageHandler Logger::m_previousHandler = nullptr;
 bool Logger::s_initialized = false;
+bool Logger::s_verbose = true;  // 默认输出详细日志
+QString Logger::s_logsDir = "logs";
+
+// JSON日志相关静态成员
+bool Logger::s_jsonLoggingEnabled = false;
+QFile Logger::m_jsonFile;
+QTextStream Logger::m_jsonStream;
 
 void Logger::init(const QString& logsDir) {
     QMutexLocker locker(&m_mutex);
@@ -18,6 +27,9 @@ void Logger::init(const QString& logsDir) {
     if (s_initialized) {
         return;
     }
+
+    // 保存日志文件夹路径
+    s_logsDir = logsDir;
 
     // 获取可执行文件所在目录
     QString appDir = QCoreApplication::applicationDirPath();
@@ -51,6 +63,16 @@ void Logger::init(const QString& logsDir) {
     m_stream << "======================================" << Qt::endl;
     m_stream.flush();
 
+    // 初始化JSON日志文件（默认可选）
+    if (s_jsonLoggingEnabled) {
+        QString jsonLogPath = logDirPath + "/CatchEditor_" + timestamp + ".jsonl";
+        m_jsonFile.setFileName(jsonLogPath);
+        if (m_jsonFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+            m_jsonStream.setDevice(&m_jsonFile);
+            m_jsonStream.flush();
+        }
+    }
+
     // 安装 Qt 消息处理器
     m_previousHandler = qInstallMessageHandler(qtMessageHandler);
 
@@ -69,6 +91,12 @@ void Logger::shutdown() {
         m_stream.flush();
         m_file.close();
     }
+    
+    // 关闭JSON日志文件
+    if (m_jsonFile.isOpen()) {
+        m_jsonFile.close();
+    }
+    
     // 恢复之前的消息处理器
     if (m_previousHandler) {
         qInstallMessageHandler(m_previousHandler);
@@ -83,12 +111,24 @@ bool Logger::isInitialized() {
     return s_initialized;
 }
 
+void Logger::setVerbose(bool verbose) {
+    QMutexLocker locker(&m_mutex);
+    s_verbose = verbose;
+}
+
+bool Logger::isVerbose() {
+    return s_verbose;
+}
+
 void Logger::log(Level level, const QString& message) {
     QMutexLocker locker(&m_mutex);
     if (!m_file.isOpen()) {
         qDebug() << message;
         return;
     }
+
+    // 检查日志文件大小，如果超过限制则轮换
+    rotateLogIfNeeded();
 
     QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
     QString levelStr;
@@ -150,4 +190,102 @@ void Logger::qtMessageHandler(QtMsgType type, const QMessageLogContext& context,
     if (m_previousHandler) {
         m_previousHandler(type, context, msg);
     }
+}
+
+void Logger::rotateLogIfNeeded() {
+    // 检查当前日志文件大小
+    if (!m_file.isOpen()) {
+        return;
+    }
+
+    qint64 fileSize = m_file.size();
+    if (fileSize < MAX_LOG_FILE_SIZE) {
+        return;  // 文件大小未超过限制，无需轮换
+    }
+
+    // 关闭当前日志文件
+    m_stream << "======================================" << Qt::endl;
+    m_stream << "Log rotated at " << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz") << Qt::endl;
+    m_stream << "======================================" << Qt::endl;
+    m_stream.flush();
+    m_file.close();
+
+    // 创建新的日志文件
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString logDirPath = appDir + "/" + s_logsDir;
+
+    // 生成新文件名，添加序列号以避免覆盖
+    QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_hh-mm-ss-zzz");
+    QString newLogFilePath = logDirPath + "/CatchEditor_" + timestamp + ".log";
+
+    m_file.setFileName(newLogFilePath);
+    if (m_file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
+        m_stream.setDevice(&m_file);
+        m_stream << "======================================" << Qt::endl;
+        m_stream << "Log rotated from previous file" << Qt::endl;
+        m_stream << "Rotated at " << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz") << Qt::endl;
+        m_stream << "======================================" << Qt::endl;
+        m_stream.flush();
+
+        // 输出到控制台
+        std::cout << "Log file rotated to: " << newLogFilePath.toStdString() << std::endl;
+    } else {
+        // 如果打开失败，尝试恢复
+        std::cerr << "Failed to open new log file: " << newLogFilePath.toStdString() << std::endl;
+    }
+}
+
+// JSON日志功能实现
+
+void Logger::setJsonLoggingEnabled(bool enabled) {
+    QMutexLocker locker(&m_mutex);
+    s_jsonLoggingEnabled = enabled;
+}
+
+bool Logger::isJsonLoggingEnabled() {
+    return s_jsonLoggingEnabled;
+}
+
+QString Logger::jsonLogFilePath() {
+    return m_jsonFile.fileName();
+}
+
+void Logger::logStructured(Level level, 
+                          const QString& message,
+                          const QString& module,
+                          const QMap<QString, QString>& context) {
+    QMutexLocker locker(&m_mutex);
+    
+    // 先输出到普通日志
+    log(level, message);
+
+    // 如果启用JSON日志，输出JSON格式
+    if (!s_jsonLoggingEnabled || !m_jsonFile.isOpen()) {
+        return;
+    }
+
+    QJsonObject logEntry;
+    logEntry["timestamp"] = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz");
+    
+    QString levelStr;
+    switch (level) {
+        case Debug:   levelStr = "DEBUG"; break;
+        case Info:    levelStr = "INFO"; break;
+        case Warning: levelStr = "WARN"; break;
+        case Error:   levelStr = "ERROR"; break;
+    }
+    logEntry["level"] = levelStr;
+    logEntry["module"] = module;
+    logEntry["message"] = message;
+
+    // 添加上下文信息
+    QJsonObject contextObj;
+    for (auto it = context.constBegin(); it != context.constEnd(); ++it) {
+        contextObj[it.key()] = it.value();
+    }
+    logEntry["context"] = contextObj;
+
+    QJsonDocument doc(logEntry);
+    m_jsonStream << doc.toJson(QJsonDocument::Compact) << "\n";
+    m_jsonStream.flush();
 }

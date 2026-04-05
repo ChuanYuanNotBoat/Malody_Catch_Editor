@@ -1,19 +1,29 @@
 // src/file/ChartIO.cpp
 #include "ChartIO.h"
 #include "utils/Logger.h"
+#include "utils/DiagnosticCollector.h"
+#include "utils/PerformanceTimer.h"
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDebug>
 
-bool ChartIO::load(const QString& filePath, Chart& outChart)
+bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
 {
-    Logger::info(QString("ChartIO::load - Loading chart from: %1").arg(filePath));
+    PerformanceTimer loadTimer("ChartIO::load", "chart_loading");
+    
+    Logger::info(QString("ChartIO::load - Loading chart from: %1 (verbose mode: %2)").arg(filePath).arg(verbose ? "on" : "off"));
+    
+    // 保存原来的 verbose 设置
+    bool previousVerbose = Logger::isVerbose();
+    // 设置为导入所需的 verbose 模式
+    Logger::setVerbose(verbose);
     
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         Logger::error(QString("ChartIO::load - Cannot open file: %1").arg(filePath));
+        Logger::setVerbose(previousVerbose);  // 恢复设置
         return false;
     }
 
@@ -24,6 +34,7 @@ bool ChartIO::load(const QString& filePath, Chart& outChart)
     QJsonDocument doc = QJsonDocument::fromJson(data);
     if (doc.isNull()) {
         Logger::error(QString("ChartIO::load - Invalid JSON in file: %1").arg(filePath));
+        Logger::setVerbose(previousVerbose);  // 恢复设置
         return false;
     }
 
@@ -54,16 +65,26 @@ bool ChartIO::load(const QString& filePath, Chart& outChart)
     }
 
     // 读取 note 数组
-    int normalNoteCount = 0, rainNoteCount = 0, soundNoteCount = 0;
+    int normalNoteCount = 0, rainNoteCount = 0, soundNoteCount = 0, skippedNoteCount = 0;
+    int totalNoteCount = 0;  // 用于统计成功率
+    
     if (root.contains("note") && root["note"].isArray()) {
         QJsonArray noteArray = root["note"].toArray();
-        Logger::debug(QString("ChartIO::load - Found 'note' array with %1 entries").arg(noteArray.size()));
+        totalNoteCount = noteArray.size();
+        Logger::debug(QString("ChartIO::load - Found 'note' array with %1 entries").arg(totalNoteCount));
         
         for (int i = 0; i < noteArray.size(); i++) {
             QJsonObject obj = noteArray[i].toObject();
             QJsonArray beatArr = obj["beat"].toArray();
+            
             if (!obj.contains("beat") || beatArr.size() < 3) {
-                Logger::warn(QString("ChartIO::load - Skipping note %1: invalid beat").arg(i));
+                Logger::warn(QString("ChartIO::load - Note %1: Skipped (invalid beat array)").arg(i));
+                skippedNoteCount++;
+                
+                // 记录诊断信息
+                QStringList missingFields;
+                missingFields << "beat";
+                DiagnosticCollector::instance().recordSkippedNote(i, -1, "invalid_beat", missingFields);
                 continue;
             }
             
@@ -79,21 +100,34 @@ bool ChartIO::load(const QString& filePath, Chart& outChart)
                 int offset = obj.value("offset").toInt(0);
                 outChart.addNote(Note(beatNum, num, den, sound, vol, offset));
                 soundNoteCount++;
-                Logger::debug(QString("ChartIO::load - Note %1: Sound note at [%2,%3,%4], sound=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(sound));
+                if (Logger::isVerbose()) {
+                    Logger::debug(QString("ChartIO::load - Note %1: Sound note at [%2,%3,%4], sound=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(sound));
+                }
             }
-            // Rain 音符（type=3）：有 endbeat 字段和 x 字段
-            else if (type == 3 && obj.contains("endbeat") && obj.contains("x")) {
+            // Rain 音符（type=3）：有 endbeat 字段，x 字段可选
+            else if (type == 3 && obj.contains("endbeat")) {
                 QJsonArray endBeatArr = obj["endbeat"].toArray();
                 if (endBeatArr.size() >= 3) {
-                    int x = obj["x"].toInt();
+                    int x = obj.value("x").toInt(256);  // 如果没有 x 字段，默认值为 256（屏幕中央）
                     int endBeatNum = endBeatArr[0].toInt();
                     int endNum = endBeatArr[1].toInt();
                     int endDen = endBeatArr[2].toInt();
                     outChart.addNote(Note(beatNum, num, den, endBeatNum, endNum, endDen, x));
                     rainNoteCount++;
-                    Logger::debug(QString("ChartIO::load - Note %1: Rain note at [%2,%3,%4]-[%5,%6,%7], x=%8").arg(i).arg(beatNum).arg(num).arg(den).arg(endBeatNum).arg(endNum).arg(endDen).arg(x));
+                    if (Logger::isVerbose()) {
+                        Logger::debug(QString("ChartIO::load - Note %1: Rain note at [%2,%3,%4]-[%5,%6,%7], x=%8").arg(i).arg(beatNum).arg(num).arg(den).arg(endBeatNum).arg(endNum).arg(endDen).arg(x));
+                    }
                 } else {
-                    Logger::warn(QString("ChartIO::load - Note %1: Invalid Rain note endbeat format").arg(i));
+                    Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=3, invalid endbeat format)").arg(i));
+                    skippedNoteCount++;
+                    
+                    // 记录诊断信息
+                    QStringList missingFields;
+                    missingFields << "endbeat";
+                    QStringList presentFields;
+                    presentFields << "beat" << "type";
+                    if (obj.contains("x")) presentFields << "x";
+                    DiagnosticCollector::instance().recordSkippedNote(i, 3, "invalid_endbeat_format", missingFields, presentFields);
                 }
             }
             // 普通音符（type=0）：必须有 x 字段
@@ -101,12 +135,64 @@ bool ChartIO::load(const QString& filePath, Chart& outChart)
                 int x = obj["x"].toInt();
                 outChart.addNote(Note(beatNum, num, den, x));
                 normalNoteCount++;
-                Logger::debug(QString("ChartIO::load - Note %1: Normal note at [%2,%3,%4], x=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(x));
-            } else {
-                Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=%2, missing required fields)").arg(i).arg(type));
+                if (Logger::isVerbose()) {
+                    Logger::debug(QString("ChartIO::load - Note %1: Normal note at [%2,%3,%4], x=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(x));
+                }
+            } 
+            // Sound note检查（type=1但缺少sound字段）
+            else if (type == 1) {
+                Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=1, missing 'sound' field)").arg(i));
+                skippedNoteCount++;
+                
+                QStringList missingFields;
+                missingFields << "sound";
+                QStringList presentFields;
+                presentFields << "beat" << "type";
+                if (obj.contains("vol")) presentFields << "vol";
+                if (obj.contains("offset")) presentFields << "offset";
+                DiagnosticCollector::instance().recordSkippedNote(i, 1, "missing_sound_field", missingFields, presentFields);
+            }
+            // Rain note检查（type=3但缺少endbeat字段）
+            else if (type == 3) {
+                Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=3, missing 'endbeat' field)").arg(i));
+                skippedNoteCount++;
+                
+                QStringList missingFields;
+                missingFields << "endbeat";
+                QStringList presentFields;
+                presentFields << "beat" << "type";
+                if (obj.contains("x")) presentFields << "x";
+                DiagnosticCollector::instance().recordSkippedNote(i, 3, "missing_endbeat_field", missingFields, presentFields);
+            }
+            // 普通音符缺少x字段
+            else {
+                Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=%2, missing 'x' field)").arg(i).arg(type));
+                skippedNoteCount++;
+                
+                QStringList missingFields;
+                missingFields << "x";
+                QStringList presentFields;
+                presentFields << "beat" << "type";
+                DiagnosticCollector::instance().recordSkippedNote(i, type, "missing_x_field", missingFields, presentFields);
             }
         }
-        Logger::info(QString("ChartIO::load - Loaded %1 normal notes, %2 rain notes, %3 sound notes").arg(normalNoteCount).arg(rainNoteCount).arg(soundNoteCount));
+        
+        // 输出详细统计信息
+        int totalLoadedNotes = normalNoteCount + rainNoteCount + soundNoteCount;
+        double successRate = totalNoteCount > 0 ? (totalLoadedNotes * 100.0 / totalNoteCount) : 0.0;
+        
+        Logger::info(QString("ChartIO::load - Loaded %1 normal notes, %2 rain notes, %3 sound notes")
+                    .arg(normalNoteCount).arg(rainNoteCount).arg(soundNoteCount));
+        Logger::info(QString("ChartIO::load - Note Summary: %1 / %2 notes loaded (%.1f%% success rate)")
+                    .arg(totalLoadedNotes).arg(totalNoteCount).arg(successRate));
+        
+        if (skippedNoteCount > 0) {
+            Logger::warn(QString("ChartIO::load - Skipped %1 notes with missing/invalid fields").arg(skippedNoteCount));
+        }
+        
+        // 记录加载指标
+        DiagnosticCollector::instance().recordLoadMetrics(filePath, loadTimer.elapsed(), 
+                                                         totalNoteCount, totalLoadedNotes, skippedNoteCount);
     } else {
         Logger::debug("ChartIO::load - No 'note' array found in file");
     }
@@ -134,12 +220,16 @@ bool ChartIO::load(const QString& filePath, Chart& outChart)
 
     outChart.sortNotes();
     Logger::info(QString("ChartIO::load - Chart loaded successfully from: %1").arg(filePath));
+    Logger::setVerbose(previousVerbose);  // 恢复原来的设置
     return true;
 }
 
 bool ChartIO::save(const QString& filePath, const Chart& chart)
 {
+    PerformanceTimer saveTimer("ChartIO::save", "chart_saving");
+    
     Logger::info(QString("ChartIO::save - Saving chart to: %1").arg(filePath));
+    Logger::debug(QString("ChartIO::save - Chart has %1 notes").arg(chart.notes().size()));
     
     QJsonObject root;
 
@@ -246,5 +336,9 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
     file.close();
     
     Logger::info(QString("ChartIO::save - Chart saved successfully (%1 bytes) to: %2").arg(jsonData.size()).arg(filePath));
+    
+    // 记录保存指标
+    DiagnosticCollector::instance().recordSaveMetrics(filePath, saveTimer.elapsed(), chart.notes().size());
+    
     return true;
 }

@@ -3,13 +3,17 @@
 #include "ui/NoteEditPanel.h"
 #include "ui/BPMTimePanel.h"
 #include "ui/MetaEditPanel.h"
+#include "ui/dialogs/LogSettingsDialog.h"
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
 #include "controller/PlaybackController.h"
 #include "audio/AudioPlayer.h"
 #include "utils/Settings.h"
 #include "utils/Translator.h"
+#include "utils/DiagnosticCollector.h"
 #include "file/SkinIO.h"
+#include "file/ProjectIO.h"
+#include "file/ChartIO.h"
 #include "model/Skin.h"
 #include "utils/Logger.h"
 #include <QMenuBar>
@@ -35,6 +39,19 @@
 #include <QSlider>
 #include <QPushButton>
 #include <QPainter>
+#include <QRadioButton>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QSysInfo>
+#include <QGroupBox>
+#include <QFile>
+#include <QTextStream>
+#include <QJsonDocument>
+#include <QInputDialog>
+#include <QListWidget>
+#include <QTemporaryDir>
 
 class MainWindow::Private {
 public:
@@ -58,6 +75,10 @@ public:
     QAction* noteSizeAction;
     QAction* calibrateSkinAction;
     QAction* outlineAction;
+    
+    // MCZ support
+    QTemporaryDir* mczTempDir;
+    QString currentChartPath;
 };
 
 MainWindow::MainWindow(ChartController* chartCtrl,
@@ -73,6 +94,8 @@ MainWindow::MainWindow(ChartController* chartCtrl,
     d->selectionController = selCtrl;
     d->playbackController = playCtrl;
     d->skin = skin;
+    d->mczTempDir = nullptr;
+    d->currentChartPath = "";
 
     setupUi();
     createCentralArea();
@@ -102,6 +125,10 @@ MainWindow::MainWindow(ChartController* chartCtrl,
 
 MainWindow::~MainWindow()
 {
+    if (d->mczTempDir) {
+        delete d->mczTempDir;
+        d->mczTempDir = nullptr;
+    }
     delete d;
     Logger::info("MainWindow destroyed");
 }
@@ -204,6 +231,11 @@ void MainWindow::createMenus()
     // 工具菜单
     QMenu* toolsMenu = menuBar()->addMenu(tr("&Tools"));
     QAction* gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
+    toolsMenu->addSeparator();
+    QAction* logSettingsAction = toolsMenu->addAction(tr("&Log Settings..."));
+    connect(logSettingsAction, &QAction::triggered, this, &MainWindow::openLogSettings);
+    QAction* exportDiagAction = toolsMenu->addAction(tr("&Export Diagnostics Report..."));
+    connect(exportDiagAction, &QAction::triggered, this, &MainWindow::exportDiagnosticsReport);
 
     // 皮肤菜单
     d->skinMenu = menuBar()->addMenu(tr("&Skin"));
@@ -524,26 +556,145 @@ void MainWindow::createCentralArea()
 void MainWindow::openChart()
 {
     Logger::info("Open chart requested");
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Chart"), Settings::instance().lastOpenPath(),
-                                                    tr("Malody Catch Chart (*.mc);;All Files (*.*)"));
-    if (fileName.isEmpty()) {
-        Logger::debug("Open chart cancelled");
-        return;
-    }
-    if (d->chartController->loadChart(fileName)) {
-        Settings::instance().setLastOpenPath(QFileInfo(fileName).path());
-        QString audioPath = QFileInfo(fileName).absolutePath() + "/" + d->chartController->chart()->meta().audioFile;
-        if (QFile::exists(audioPath)) {
-            d->playbackController->audioPlayer()->load(audioPath);
-            Logger::info("Audio loaded: " + audioPath);
-        } else {
-            Logger::warn("Audio file not found: " + audioPath);
+    try {
+        QString fileName = QFileDialog::getOpenFileName(this, tr("Open Chart"), Settings::instance().lastOpenPath(),
+                                                        tr("Malody Charts (*.mc *.mcz);;Malody Catch Chart (*.mc);;Malody Catch Pack (*.mcz);;All Files (*.*)"));
+        if (fileName.isEmpty()) {
+            Logger::debug("Open chart cancelled");
+            return;
         }
-        d->canvas->update();
-        Logger::info("Chart loaded: " + fileName);
-    } else {
-        Logger::error("Failed to load chart: " + fileName);
-        QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
+        
+        Logger::info(QString("MainWindow::openChart - Opening file: %1").arg(fileName));
+        
+        QString chartFileToLoad = fileName;
+        QFileInfo fileInfo(fileName);
+        QString suffix = fileInfo.suffix().toLower();
+        
+        // Handle MCZ files
+        if (suffix == "mcz") {
+            if (d->mczTempDir) {
+                delete d->mczTempDir;
+                d->mczTempDir = nullptr;
+            }
+            
+            d->mczTempDir = new QTemporaryDir();
+            if (!d->mczTempDir->isValid()) {
+                Logger::error("MainWindow::openChart - Failed to create temporary directory for MCZ");
+                QMessageBox::critical(this, tr("Error"), tr("Failed to create temporary directory for MCZ."));
+                return;
+            }
+            
+            QString importDir = d->mczTempDir->path() + "/" + fileInfo.baseName();
+            QString extractedChart;
+            
+            if (!ProjectIO::importMcz(fileName, importDir, extractedChart)) {
+                Logger::error(QString("MainWindow::openChart - Failed to import MCZ: %1").arg(fileName));
+                QMessageBox::critical(this, tr("Error"), tr("Failed to import MCZ file."));
+                return;
+            }
+            
+            // Check if there are multiple .mc files
+            QList<QPair<QString, QString>> charts = ProjectIO::findChartsInMcz(importDir);
+            
+            if (charts.isEmpty()) {
+                Logger::error("MainWindow::openChart - No .mc files found in MCZ");
+                QMessageBox::critical(this, tr("Error"), tr("No chart files found in MCZ."));
+                return;
+            }
+            
+            if (charts.size() > 1) {
+                // Show selection dialog for multiple charts
+                QDialog selectDialog(this);
+                selectDialog.setWindowTitle(tr("Select Chart"));
+                selectDialog.setMinimumWidth(300);
+                
+                QVBoxLayout* layout = new QVBoxLayout(&selectDialog);
+                layout->addWidget(new QLabel(tr("Multiple charts found. Please select one:")));
+                
+                QListWidget* chartList = new QListWidget();
+                int selectedIndex = 0;
+                for (int i = 0; i < charts.size(); ++i) {
+                    const auto& chart = charts[i];
+                    QString displayText = QString("%1 (%2)").arg(QFileInfo(chart.first).baseName(), chart.second);
+                    chartList->addItem(displayText);
+                    if (i == 0) {
+                        chartList->setCurrentRow(0);
+                    }
+                }
+                
+                layout->addWidget(chartList);
+                
+                QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+                connect(buttons, &QDialogButtonBox::accepted, &selectDialog, &QDialog::accept);
+                connect(buttons, &QDialogButtonBox::rejected, &selectDialog, &QDialog::reject);
+                layout->addWidget(buttons);
+                
+                if (selectDialog.exec() != QDialog::Accepted) {
+                    Logger::debug("MainWindow::openChart - Chart selection cancelled");
+                    return;
+                }
+                
+                selectedIndex = chartList->currentRow();
+                if (selectedIndex < 0 || selectedIndex >= charts.size()) {
+                    selectedIndex = 0;
+                }
+                
+                chartFileToLoad = charts[selectedIndex].first;
+                Logger::info(QString("MainWindow::openChart - Selected chart: %1").arg(chartFileToLoad));
+            } else {
+                chartFileToLoad = charts.first().first;
+                Logger::debug(QString("MainWindow::openChart - Only one chart found: %1").arg(chartFileToLoad));
+            }
+        }
+        
+        // Load the chart file
+        if (d->chartController->loadChart(chartFileToLoad)) {
+            Logger::debug("MainWindow::openChart - Chart loaded successfully");
+            d->currentChartPath = chartFileToLoad;
+            Settings::instance().setLastOpenPath(QFileInfo(fileName).path());
+            
+            // Try to load audio file
+            try {
+                QString chartDir = QFileInfo(chartFileToLoad).absolutePath();
+                QString audioFile = d->chartController->chart()->meta().audioFile;
+                
+                Logger::debug(QString("MainWindow::openChart - Audio file from meta: %1").arg(audioFile));
+                
+                if (!audioFile.isEmpty()) {
+                    QString audioPath = chartDir + "/" + audioFile;
+                    Logger::debug(QString("MainWindow::openChart - Full audio path: %1").arg(audioPath));
+                    
+                    if (QFile::exists(audioPath)) {
+                        Logger::info(QString("MainWindow::openChart - Found audio file: %1").arg(audioPath));
+                        if (d->playbackController->audioPlayer()->load(audioPath)) {
+                            Logger::info(QString("MainWindow::openChart - Audio loaded successfully: %1").arg(audioPath));
+                        } else {
+                            Logger::warn(QString("MainWindow::openChart - Failed to load audio file: %1").arg(audioPath));
+                        }
+                    } else {
+                        Logger::warn(QString("MainWindow::openChart - Audio file not found: %1").arg(audioPath));
+                    }
+                } else {
+                    Logger::debug("MainWindow::openChart - No audio file specified in chart meta");
+                }
+            } catch (const std::exception& e) {
+                Logger::error(QString("MainWindow::openChart - Exception loading audio: %1").arg(e.what()));
+            } catch (...) {
+                Logger::error("MainWindow::openChart - Unknown exception loading audio");
+            }
+            
+            d->canvas->update();
+            Logger::info("Chart loaded: " + chartFileToLoad);
+        } else {
+            Logger::error("Failed to load chart: " + chartFileToLoad);
+            QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
+        }
+    } catch (const std::exception& e) {
+        Logger::error(QString("MainWindow::openChart - Exception: %1").arg(e.what()));
+        QMessageBox::critical(this, tr("Error"), tr("Exception opening chart: %1").arg(e.what()));
+    } catch (...) {
+        Logger::error("MainWindow::openChart - Unknown exception");
+        QMessageBox::critical(this, tr("Error"), tr("Unknown exception opening chart."));
     }
 }
 
@@ -581,14 +732,37 @@ void MainWindow::saveChartAs()
 void MainWindow::exportMcz()
 {
     Logger::info("Export .mcz requested");
+    
+    if (d->currentChartPath.isEmpty()) {
+        QMessageBox::information(this, tr("No Chart"), tr("Please open a chart first before exporting."));
+        return;
+    }
+    
     QString fileName = QFileDialog::getSaveFileName(this, tr("Export .mcz"), Settings::instance().lastOpenPath(),
                                                     tr("Malody Catch Pack (*.mcz);;All Files (*.*)"));
     if (fileName.isEmpty()) {
-        Logger::debug("Export cancelled");
+        Logger::debug("Export .mcz cancelled");
         return;
     }
-    Logger::warn("Export .mcz not implemented yet");
-    QMessageBox::information(this, tr("Not Implemented"), tr("Export .mcz is not yet implemented."));
+    
+    try {
+        Logger::info(QString("MainWindow::exportMcz - Exporting to: %1").arg(fileName));
+        
+        if (ProjectIO::exportToMcz(fileName, d->currentChartPath)) {
+            statusBar()->showMessage(tr("Exported: %1").arg(fileName), 3000);
+            Logger::info(QString("MainWindow::exportMcz - Successfully exported to: %1").arg(fileName));
+            QMessageBox::information(this, tr("Success"), tr("Chart exported successfully to:\n%1").arg(fileName));
+        } else {
+            Logger::error(QString("MainWindow::exportMcz - Failed to export to: %1").arg(fileName));
+            QMessageBox::critical(this, tr("Error"), tr("Failed to export chart to MCZ format."));
+        }
+    } catch (const std::exception& e) {
+        Logger::error(QString("MainWindow::exportMcz - Exception: %1").arg(e.what()));
+        QMessageBox::critical(this, tr("Error"), tr("Exception during export: %1").arg(e.what()));
+    } catch (...) {
+        Logger::error("MainWindow::exportMcz - Unknown exception");
+        QMessageBox::critical(this, tr("Error"), tr("Unknown exception during export."));
+    }
 }
 
 void MainWindow::undo()
@@ -645,4 +819,118 @@ void MainWindow::retranslateUi()
     setWindowTitle(tr("Catch Chart Editor"));
     populateSkinMenu();
     Logger::debug("UI retranslated");
+}
+
+void MainWindow::openLogSettings()
+{
+    Logger::info("Log settings dialog opened");
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Log Settings"));
+    dialog.setMinimumSize(400, 300);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+    // JSON logging enable/disable
+    QCheckBox* jsonLoggingCheck = new QCheckBox(tr("Enable JSON Logging"));
+    jsonLoggingCheck->setChecked(Logger::isJsonLoggingEnabled());
+    layout->addWidget(jsonLoggingCheck);
+
+    // Verbose logging enable/disable
+    QCheckBox* verboseCheck = new QCheckBox(tr("Enable Verbose Logging"));
+    verboseCheck->setChecked(Logger::isVerbose());
+    layout->addWidget(verboseCheck);
+
+    // Log file location display
+    QHBoxLayout* logPathLayout = new QHBoxLayout;
+    QLabel* pathLabel = new QLabel(tr("Log File:"));
+    QLineEdit* pathEdit = new QLineEdit;
+    pathEdit->setText(Logger::logFilePath());
+    pathEdit->setReadOnly(true);
+    QPushButton* openLogBtn = new QPushButton(tr("Open Log Folder"));
+    connect(openLogBtn, &QPushButton::clicked, [this]() {
+        QString logDir = QFileInfo(Logger::logFilePath()).absolutePath();
+        QDesktopServices::openUrl(QUrl::fromLocalFile(logDir));
+        Logger::debug("Opened log folder");
+    });
+    logPathLayout->addWidget(pathLabel);
+    logPathLayout->addWidget(pathEdit);
+    logPathLayout->addWidget(openLogBtn);
+    layout->addLayout(logPathLayout);
+
+    // JSON log file location display
+    QHBoxLayout* jsonPathLayout = new QHBoxLayout;
+    QLabel* jsonPathLabel = new QLabel(tr("JSON Log File:"));
+    QLineEdit* jsonPathEdit = new QLineEdit;
+    jsonPathEdit->setText(Logger::jsonLogFilePath());
+    jsonPathEdit->setReadOnly(true);
+    jsonPathLayout->addWidget(jsonPathLabel);
+    jsonPathLayout->addWidget(jsonPathEdit);
+    layout->addLayout(jsonPathLayout);
+
+    layout->addStretch();
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        Logger::setJsonLoggingEnabled(jsonLoggingCheck->isChecked());
+        Logger::setVerbose(verboseCheck->isChecked());
+        Logger::info(QString("Log settings changed - JSON logging: %1, Verbose: %2")
+                     .arg(jsonLoggingCheck->isChecked() ? "enabled" : "disabled")
+                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled"));
+        dialog.accept();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    dialog.exec();
+}
+
+void MainWindow::exportDiagnosticsReport()
+{
+    Logger::info("Diagnostics report export requested");
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Diagnostics Report"),
+                                                    Settings::instance().lastOpenPath(),
+                                                    tr("Text Files (*.txt);;JSON Files (*.json);;All Files (*.*)"));
+    if (fileName.isEmpty()) {
+        Logger::debug("Export diagnostics cancelled");
+        return;
+    }
+
+    try {
+        // Get diagnostics report from DiagnosticCollector
+        DiagnosticCollector& collector = DiagnosticCollector::instance();
+        DiagnosticCollector::DiagnosticReport report = collector.generateReport();
+
+        // Export based on file extension
+        if (fileName.endsWith(".json")) {
+            // Export as JSON
+            QJsonDocument doc = collector.toJsonDocument();
+            QFile file(fileName);
+            if (file.open(QIODevice::WriteOnly)) {
+                file.write(doc.toJson());
+                file.close();
+                Logger::info("Diagnostics report exported to JSON: " + fileName);
+                QMessageBox::information(this, tr("Export Successful"), 
+                                       tr("Diagnostics report exported to:\n%1").arg(fileName));
+            } else {
+                Logger::error("Failed to open file for writing: " + fileName);
+                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
+            }
+        } else {
+            // Export as formatted text
+            QFile file(fileName);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream stream(&file);
+                stream << report.toFormattedString();
+                file.close();
+                Logger::info("Diagnostics report exported to text: " + fileName);
+                QMessageBox::information(this, tr("Export Successful"), 
+                                       tr("Diagnostics report exported to:\n%1").arg(fileName));
+            } else {
+                Logger::error("Failed to open file for writing: " + fileName);
+                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
+            }
+        }
+    } catch (const std::exception& e) {
+        Logger::error(QString("Exception during diagnostics export: %1").arg(e.what()));
+        QMessageBox::critical(this, tr("Error"), tr("Exception during export:\n%1").arg(e.what()));
+    }
 }
