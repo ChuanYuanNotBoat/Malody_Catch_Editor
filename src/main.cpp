@@ -1,22 +1,37 @@
 #include "app/Application.h"
+#include "utils/Logger.h"
 #include <QDebug>
 #include <iostream>
 
 int main(int argc, char *argv[])
 {
     try {
+        // 设置应用名称和版本
+        QCoreApplication::setApplicationName("Malody Catch Chart Editor");
+        QCoreApplication::setApplicationVersion("0.1.0");
+
         Application app(argc, argv);
+
         if (!app.initialize()) {
-            qCritical() << "Failed to initialize application.";
+            Logger::error("Failed to initialize application.");
+            Logger::shutdown();
             return 1;
         }
-        return app.exec();
+
+        int result = app.exec();
+        
+        Logger::info("Application exiting with code: " + QString::number(result));
+        Logger::shutdown();
+        
+        return result;
     } catch (const std::exception& e) {
-        qCritical() << "Exception:" << e.what();
+        Logger::error("Exception: " + QString::fromStdString(std::string(e.what())));
+        Logger::shutdown();
         std::cerr << "Exception: " << e.what() << std::endl;
         return 2;
     } catch (...) {
-        qCritical() << "Unknown exception occurred";
+        Logger::error("Unknown exception occurred");
+        Logger::shutdown();
         std::cerr << "Unknown exception occurred" << std::endl;
         return 3;
     }

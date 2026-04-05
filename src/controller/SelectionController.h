@@ -18,6 +18,7 @@ public:
 
     QSet<int> selectedIndices() const;
 
+    void setNotes(const QVector<Note>* notes) { m_notes = notes; }
     void select(int index);
     void select(const QSet<int>& indices);
     void addToSelection(int index);
@@ -28,14 +29,17 @@ public:
                       std::function<QPointF(const Note&)> noteToPos);
 
     void copySelected(const QVector<Note>& notes);   // 复制当前选中的音符到剪贴板
-    void copySelected(const QVector<Note>& notes, const QVector<int>& indices); // 指定列表复制
     QVector<Note> getClipboard() const;
     void clearClipboard();
+
+    // 当音符列表变化时调用，根据存储的 ID 重新计算选中的索引
+    void updateSelectionFromNotes();
 
 signals:
     void selectionChanged(const QSet<int>& selectedIndices);
 
 private:
-    QSet<int> m_selectedIndices;
+    QSet<QString> m_selectedIds;           // 存储选中音符的 ID
+    const QVector<Note>* m_notes = nullptr; // 指向当前音符列表，用于转换
     QVector<Note> m_clipboard;
 };

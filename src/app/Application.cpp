@@ -32,8 +32,10 @@ Application::~Application()
 bool Application::initialize()
 {
     try {
-        Logger::init(QDir::home().filePath(".catch_editor.log"));
+        // 初始化日志系统
+        Logger::init("logs");
         Logger::info("========== Application Starting ==========");
+        Logger::info(QString("Log file: %1").arg(Logger::logFilePath()));
 
         Settings::instance();
         Logger::info("Settings loaded.");
@@ -49,7 +51,7 @@ bool Application::initialize()
         // 加载皮肤
         m_skin = new Skin();
         QString skinName = Settings::instance().currentSkin();
-        QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/skins";
+        QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/resources/default_skin";
         Logger::info(QString("Looking for skins in: %1").arg(skinsBaseDir));
 
         // 扫描所有皮肤目录
@@ -65,6 +67,7 @@ bool Application::initialize()
                 Logger::info(QString("Trying to load skin '%1' from %2").arg(skinName).arg(skinPath));
                 if (SkinIO::loadSkin(skinPath, *m_skin)) {
                     loaded = true;
+                    Logger::info(QString("Skin '%1' loaded successfully").arg(skinName));
                 } else {
                     Logger::error(QString("Failed to load skin '%1', will try first available").arg(skinName));
                 }
@@ -76,6 +79,7 @@ bool Application::initialize()
                 Logger::info(QString("Loading first skin: %1 from %2").arg(firstSkin).arg(skinPath));
                 if (SkinIO::loadSkin(skinPath, *m_skin)) {
                     loaded = true;
+                    Logger::info(QString("Skin '%1' loaded successfully").arg(firstSkin));
                     // 保存为新默认皮肤
                     Settings::instance().setCurrentSkin(firstSkin);
                     Logger::info(QString("Set default skin to %1").arg(firstSkin));
@@ -88,7 +92,7 @@ bool Application::initialize()
 
         m_mainWindow = new MainWindow(m_chartController, m_selectionController, m_playbackController, m_skin);
         m_mainWindow->show();
-        Logger::info("Main window created.");
+        Logger::info("Main window created and shown.");
 
         m_pluginManager = new PluginManager(this);
         QString pluginsDir = QCoreApplication::applicationDirPath() + "/plugins";

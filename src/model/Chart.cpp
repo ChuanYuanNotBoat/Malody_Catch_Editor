@@ -62,10 +62,19 @@ const MetaData& Chart::meta() const { return m_meta; }
 void Chart::sortNotes() {
     std::sort(m_notes.begin(), m_notes.end(),
         [](const Note& a, const Note& b) {
+            // 首先按拍号排序
             if (a.beatNum != b.beatNum) return a.beatNum < b.beatNum;
+            
+            // 同一拍内，按分数位置排序
             double aPos = static_cast<double>(a.numerator) / a.denominator;
             double bPos = static_cast<double>(b.numerator) / b.denominator;
             if (aPos != bPos) return aPos < bPos;
+            
+            // 同一时间位置，按类型排序：普通/rain < 音效
+            if (a.type == 1 && b.type != 1) return false; // 音效排在后面
+            if (a.type != 1 && b.type == 1) return true;  // 非音效排在前面
+            
+            // 都是音效或都不是音效，则按x坐标排序（音效的x=-1被自动排在最后）
             return a.x < b.x;
         });
 }

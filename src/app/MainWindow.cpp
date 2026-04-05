@@ -83,6 +83,11 @@ MainWindow::MainWindow(ChartController* chartCtrl,
         d->canvas->update();
         d->undoAction->setEnabled(d->chartController->canUndo());
         d->redoAction->setEnabled(d->chartController->canRedo());
+        // 更新选择控制器的音符列表引用并重新计算选中索引
+        if (d->selectionController) {
+            d->selectionController->setNotes(&(d->chartController->chart()->notes()));
+            d->selectionController->updateSelectionFromNotes();
+        }
     });
     connect(d->chartController, &ChartController::errorOccurred, this, [this](const QString& msg) {
         statusBar()->showMessage(msg, 3000);
