@@ -191,16 +191,46 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     
     Logger::debug("ChartCanvas::paintEvent - Chart controller exists");
 
-    drawGrid(painter);
+    try {
+        Logger::debug("ChartCanvas::paintEvent - Checking chart pointer");
+        const Chart* chart = m_chartController->chart();
+        if (!chart) {
+            Logger::error("ChartCanvas::paintEvent - Chart pointer is null");
+            return;
+        }
+        Logger::debug("ChartCanvas::paintEvent - Chart pointer valid, starting drawGrid");
+        
+        drawGrid(painter);
+        Logger::debug("ChartCanvas::paintEvent - drawGrid completed successfully");
+    } catch (const std::exception& e) {
+        Logger::error(QString("ChartCanvas::paintEvent - Exception in drawGrid: %1").arg(e.what()));
+        return;
+    } catch (...) {
+        Logger::error("ChartCanvas::paintEvent - Unknown exception in drawGrid");
+        return;
+    }
 
     double startTime = m_scrollPos;
     double endTime = startTime + m_visibleRange;
 
+    try {
+        Logger::debug("ChartCanvas::paintEvent - Getting notes and BPM list");
+        const auto& notes = m_chartController->chart()->notes();
+        const auto& bpmList = m_chartController->chart()->bpmList();
+        int offset = m_chartController->chart()->meta().offset;
+        
+        Logger::debug(QString("ChartCanvas::paintEvent - Chart has %1 notes, %2 BPM entries").arg(notes.size()).arg(bpmList.size()));
+    } catch (const std::exception& e) {
+        Logger::error(QString("ChartCanvas::paintEvent - Exception getting chart data: %1").arg(e.what()));
+        return;
+    } catch (...) {
+        Logger::error("ChartCanvas::paintEvent - Unknown exception getting chart data");
+        return;
+    }
+    
     const auto& notes = m_chartController->chart()->notes();
     const auto& bpmList = m_chartController->chart()->bpmList();
     int offset = m_chartController->chart()->meta().offset;
-    
-    Logger::debug(QString("ChartCanvas::paintEvent - Chart has %1 notes, %2 BPM entries").arg(notes.size()).arg(bpmList.size()));
 
     if (m_hyperfruitEnabled && !bpmList.isEmpty()) {
         QSet<int> hyperSet = m_hyperfruitDetector->detect(notes);
@@ -282,12 +312,30 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
 
 void ChartCanvas::drawGrid(QPainter& painter)
 {
-    QRect rect = this->rect();
-    const auto& bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
-    m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
-                             m_scrollPos, m_scrollPos + m_visibleRange,
-                             m_timeDivision, bpmList, offset);
+    try {
+        Logger::debug("ChartCanvas::drawGrid - Starting");
+        
+        QRect rect = this->rect();
+        Logger::debug("ChartCanvas::drawGrid - Got rect");
+        
+        const auto& bpmList = m_chartController->chart()->bpmList();
+        Logger::debug(QString("ChartCanvas::drawGrid - Got BPM list with %1 entries").arg(bpmList.size()));
+        
+        int offset = m_chartController->chart()->meta().offset;
+        Logger::debug(QString("ChartCanvas::drawGrid - Got offset: %1").arg(offset));
+        
+        Logger::debug("ChartCanvas::drawGrid - Calling m_gridRenderer->drawGrid");
+        m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
+                                 m_scrollPos, m_scrollPos + m_visibleRange,
+                                 m_timeDivision, bpmList, offset);
+        Logger::debug("ChartCanvas::drawGrid - m_gridRenderer->drawGrid completed");
+    } catch (const std::exception& e) {
+        Logger::error(QString("ChartCanvas::drawGrid - Exception: %1").arg(e.what()));
+        throw;
+    } catch (...) {
+        Logger::error("ChartCanvas::drawGrid - Unknown exception");
+        throw;
+    }
 }
 
 double ChartCanvas::yPosFromTime(double timeMs) const

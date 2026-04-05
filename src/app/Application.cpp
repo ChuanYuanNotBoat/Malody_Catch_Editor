@@ -51,7 +51,12 @@ bool Application::initialize()
         // 加载皮肤
         m_skin = new Skin();
         QString skinName = Settings::instance().currentSkin();
-        QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/resources/default_skin";
+        
+        // 首先尝试 skins 目录（开发目录），然后尝试 resources/default_skin（发布目录）
+        QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/skins";
+        if (!QDir(skinsBaseDir).exists()) {
+            skinsBaseDir = QCoreApplication::applicationDirPath() + "/resources/default_skin";
+        }
         Logger::info(QString("Looking for skins in: %1").arg(skinsBaseDir));
 
         // 扫描所有皮肤目录

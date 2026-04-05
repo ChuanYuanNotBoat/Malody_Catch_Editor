@@ -1,5 +1,6 @@
 // src/utils/MathUtils.cpp
 #include "MathUtils.h"
+#include "Logger.h"
 #include <cmath>
 #include <numeric>   // for std::gcd
 #include <QDebug>
@@ -7,35 +8,65 @@
 double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
                            const QVector<BpmEntry>& bpmList, int offsetMs)
 {
-    if (bpmList.isEmpty())
-        return offsetMs;
+    try {
+        if (bpmList.isEmpty())
+            return offsetMs;
 
-    double targetBeat = beatNum + static_cast<double>(numerator) / denominator;
+        double targetBeat = beatNum + static_cast<double>(numerator) / denominator;
 
-    // 找到第一个 BPM 变化点之前的 BPM
-    int idx = 0;
-    while (idx + 1 < bpmList.size()) {
-        double nextBeat = bpmList[idx+1].beatNum +
-                          static_cast<double>(bpmList[idx+1].numerator) / bpmList[idx+1].denominator;
-        if (targetBeat < nextBeat)
-            break;
-        idx++;
-    }
+        // 找到第一个 BPM 变化点之前的 BPM
+        int idx = 0;
+        while (idx + 1 < bpmList.size()) {
+            double nextBeat = bpmList[idx+1].beatNum +
+                              static_cast<double>(bpmList[idx+1].numerator) / bpmList[idx+1].denominator;
+            if (targetBeat < nextBeat)
+                break;
+            idx++;
+        }
 
-    const BpmEntry& cur = bpmList[idx];
-    double curBeat = cur.beatNum + static_cast<double>(cur.numerator) / cur.denominator;
+        const BpmEntry& cur = bpmList[idx];
+        double curBeat = cur.beatNum + static_cast<double>(cur.numerator) / cur.denominator;
 
-    // 计算从 curBeat 到 targetBeat 的毫秒数
-    double beatDelta = targetBeat - curBeat;
-    // 每分钟 cur.bpm 拍，所以每拍时长 = 60000 / cur.bpm 毫秒
-    double ms = beatDelta * (60000.0 / cur.bpm);
+        // 计算从 curBeat 到 targetBeat 的毫秒数
+        double beatDelta = targetBeat - curBeat;
+        if (cur.bpm <= 0) {
+            Logger::error(QString("MathUtils::beatToMs - Invalid BPM: %1").arg(cur.bpm));
+            return offsetMs;
+        }
+        // 每分钟 cur.bpm 拍，所以每拍时长 = 60000 / cur.bpm 毫秒
+        double ms = beatDelta * (60000.0 / cur.bpm);
 
-    // 递归计算之前的部分
-    if (idx > 0) {
-        double prevMs = beatToMs(cur.beatNum, cur.numerator, cur.denominator, bpmList, offsetMs);
+        // 计算之前所有段的累计时间
+        double prevMs = offsetMs;
+        for (int i = 0; i < idx; ++i) {
+            const BpmEntry& prev = bpmList[i];
+            double prevBeat = prev.beatNum + static_cast<double>(prev.numerator) / prev.denominator;
+            
+            // 下一段的开始beat
+            double nextBeat;
+            if (i + 1 < bpmList.size()) {
+                const BpmEntry& next = bpmList[i+1];
+                nextBeat = next.beatNum + static_cast<double>(next.numerator) / next.denominator;
+            } else {
+                nextBeat = prevBeat; // 不应该发生
+            }
+            
+            double beatLen = nextBeat - prevBeat;
+            if (prev.bpm <= 0) {
+                Logger::warn(QString("MathUtils::beatToMs - Invalid BPM at index %1: %2").arg(i).arg(prev.bpm));
+                continue;
+            }
+            double segmentMs = beatLen * (60000.0 / prev.bpm);
+            prevMs += segmentMs;
+        }
+
         return prevMs + ms;
-    } else {
-        return offsetMs + ms;
+    } catch (const std::exception& e) {
+        Logger::error(QString("MathUtils::beatToMs - Exception: %1").arg(e.what()));
+        return offsetMs;
+    } catch (...) {
+        Logger::error("MathUtils::beatToMs - Unknown exception");
+        return offsetMs;
     }
 }
 
