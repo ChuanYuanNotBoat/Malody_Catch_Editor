@@ -613,6 +613,7 @@ void MainWindow::openChart()
             if (charts.size() > 1) {
                 // Show selection dialog for multiple charts
                 Logger::debug("MainWindow::openChart - Multiple charts detected, showing selection dialog");
+                QDialog selectDialog(this);
                 selectDialog.setWindowTitle(tr("Select Chart"));
                 selectDialog.setMinimumWidth(300);
                 
@@ -704,6 +705,7 @@ void MainWindow::openChart()
             QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
             Logger::error(QString("MainWindow::openChart - Exiting with error"));
             return;
+        }
     } catch (const std::exception& e) {
         Logger::error(QString("MainWindow::openChart - Exception: %1").arg(e.what()));
         QMessageBox::critical(this, tr("Error"), tr("Exception opening chart: %1").arg(e.what()));
