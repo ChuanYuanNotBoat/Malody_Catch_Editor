@@ -15,7 +15,7 @@ class Skin;
 class ChartCanvas : public QWidget {
     Q_OBJECT
 public:
-    enum Mode { PlaceNote, PlaceRain, Select, Delete };
+    enum Mode { PlaceNote, PlaceRain, Delete, Select };
     explicit ChartCanvas(QWidget* parent = nullptr);
     ~ChartCanvas();
 
@@ -29,8 +29,8 @@ public:
     void setGridSnap(bool snap);
     void setScrollPos(double timeMs);
     void setNoteSize(int size);
-    void setMode(Mode mode);           // 新增，供外部切换模式
-    void paste();                      // 粘贴预览
+    void setMode(Mode mode);
+    void paste();
 
 public slots:
     void showGridSettings();
@@ -41,12 +41,13 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;  // 添加
 
 private:
     void drawGrid(QPainter& painter);
     QPointF noteToPos(const Note& note) const;
     Note posToNote(const QPointF& pos) const;
-    void updateSelectionRect(const QRectF& rect);  // 辅助矩形选择
+    double yPosFromTime(double timeMs) const;  // 添加辅助函数
 
     ChartController* m_chartController;
     SelectionController* m_selectionController;
@@ -63,7 +64,6 @@ private:
     double m_scrollPos;
     double m_visibleRange;
 
-    // 交互状态
     bool m_isSelecting;
     QPointF m_selectionStart;
     QPointF m_selectionEnd;
@@ -71,7 +71,6 @@ private:
     QPointF m_dragStart;
     QSet<int> m_draggedNotes;
 
-    // 粘贴预览
     bool m_isPasting;
     QVector<Note> m_pasteNotes;
     QPointF m_pasteOffset;
