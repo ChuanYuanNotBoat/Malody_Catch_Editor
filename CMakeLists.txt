@@ -25,6 +25,8 @@ set(SOURCES
     src/utils/Settings.cpp
     src/utils/Logger.cpp
     src/utils/Translator.cpp
+    src/utils/PerformanceTimer.cpp
+    src/utils/DiagnosticCollector.cpp
     src/file/ChartIO.cpp
     src/file/SkinIO.cpp
     src/file/ProjectIO.cpp
@@ -49,6 +51,7 @@ set(SOURCES
     src/ui/DensityCurve.cpp
     src/ui/NoteItem.cpp
     src/ui/CustomWidgets/ChartCanvas.cpp
+    src/ui/dialogs/LogSettingsDialog.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

@@ -6,6 +6,8 @@
 #include "render/HyperfruitDetector.h"
 #include "utils/MathUtils.h"
 #include "utils/Settings.h"
+#include "utils/Logger.h"
+#include "utils/DiagnosticCollector.h"
 #include "model/Chart.h"
 #include <QPainter>
 #include <QMouseEvent>
@@ -20,7 +22,7 @@
 #include <QMimeData>
 #include <QMessageBox>
 #include <QDebug>
-#include "utils/Logger.h"
+#include <chrono>
 
 ChartCanvas::ChartCanvas(QWidget* parent)
     : QWidget(parent),
@@ -175,6 +177,8 @@ void ChartCanvas::showGridSettings()
 void ChartCanvas::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
+    auto frameStartTime = std::chrono::high_resolution_clock::now();
+    
     QPainter painter(this);
     painter.fillRect(rect(), Qt::white);
 
@@ -195,9 +199,13 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     }
 
     // 绘制音符
+    int renderedNotesCount = 0;
     for (int i = 0; i < notes.size(); ++i) {
         const Note& note = notes[i];
         double noteTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+        
+        // 跳过音效音符（type=1），它们不应该在画布上显示
+        if (note.type == 1) continue;
         
         if (note.isRain) {
             double endNoteTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
@@ -212,11 +220,13 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
             QRectF rainRect(0, yStart, width(), heightPx);
             bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
             m_noteRenderer->drawRain(painter, note, rainRect, selected);
+            renderedNotesCount++;
         } else {
             if (noteTime < startTime - 100 || noteTime > endTime + 100) continue;
             bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
             QPointF pos = noteToPos(note);
             m_noteRenderer->drawNote(painter, note, pos, selected);
+            renderedNotesCount++;
         }
     }
 
@@ -224,6 +234,8 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     if (m_isPasting && !m_pasteNotes.isEmpty()) {
         painter.setOpacity(0.5);
         for (const Note& note : m_pasteNotes) {
+            // 跳过音效音符
+            if (note.type == 1) continue;
             QPointF pos = noteToPos(note) + m_pasteOffset;
             m_noteRenderer->drawNote(painter, note, pos, false);
         }
@@ -240,6 +252,16 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         painter.setPen(Qt::red);
         painter.setBrush(QColor(255, 255, 0, 80));
         painter.drawRect(rect);
+    }
+
+    // 记录渲染性能指标
+    auto frameEndTime = std::chrono::high_resolution_clock::now();
+    qint64 frameTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(frameEndTime - frameStartTime).count();
+    DiagnosticCollector::instance().recordRenderMetrics(frameTimeMs, renderedNotesCount);
+    
+    // 避免过度日志记录，只在詳細模式下记录
+    if (Logger::isVerbose() && frameTimeMs > 16) {  // 超过16ms（60fps的一帧）时记录
+        Logger::debug(QString("ChartCanvas::paintEvent: Rendered %1 notes in %2ms").arg(renderedNotesCount).arg(frameTimeMs));
     }
 }
 

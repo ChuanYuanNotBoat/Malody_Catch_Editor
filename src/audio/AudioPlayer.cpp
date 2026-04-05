@@ -1,4 +1,6 @@
 #include "AudioPlayer.h"
+#include "utils/Logger.h"
+#include "utils/PerformanceTimer.h"
 #include <QAudioOutput>
 #include <QMediaPlayer>
 #include <QDebug>
@@ -20,8 +22,31 @@ AudioPlayer::~AudioPlayer()
 
 bool AudioPlayer::load(const QString& filePath)
 {
-    m_player->setSource(QUrl::fromLocalFile(filePath));
-    return m_player->error() == QMediaPlayer::NoError;
+    PerformanceTimer loadTimer("AudioPlayer::load", "audio");
+    
+    Logger::info(QString("AudioPlayer::load - Loading audio from: %1").arg(filePath));
+    try {
+        QUrl url = QUrl::fromLocalFile(filePath);
+        Logger::debug(QString("AudioPlayer::load - URL: %1").arg(url.toString()));
+        
+        m_player->setSource(url);
+        
+        QMediaPlayer::Error err = m_player->error();
+        if (err != QMediaPlayer::NoError) {
+            Logger::error(QString("AudioPlayer::load - Media error: %1 (%2)").arg(int(err)).arg(m_player->errorString()));
+            emit errorOccurred(m_player->errorString());
+            return false;
+        }
+        
+        Logger::info(QString("AudioPlayer::load - Audio loaded successfully"));
+        return true;
+    } catch (const std::exception& e) {
+        Logger::error(QString("AudioPlayer::load - Exception: %1").arg(e.what()));
+        return false;
+    } catch (...) {
+        Logger::error("AudioPlayer::load - Unknown exception");
+        return false;
+    }
 }
 
 void AudioPlayer::play()

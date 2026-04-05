@@ -1,6 +1,7 @@
 #include "ChartController.h"
 #include "file/ChartIO.h"
 #include "utils/Logger.h"
+#include "utils/PerformanceTimer.h"
 #include <QUndoCommand>
 #include <QDebug>
 #include <QList>
@@ -218,12 +219,15 @@ bool ChartController::canRedo() const
 
 bool ChartController::loadChart(const QString& path)
 {
+    PerformanceTimer loadTimer("ChartController::loadChart", "ui_operations");
+    
     Logger::info(QString("ChartController::loadChart: Loading chart from %1").arg(path));
     try {
         Chart newChart;
         Logger::debug("ChartController::loadChart: Created new Chart object");
         
-        if (ChartIO::load(path, newChart)) {
+        // 导入模式下禁用详细日志，仅显示统计信息
+        if (ChartIO::load(path, newChart, false)) {
             Logger::debug("ChartController::loadChart: ChartIO::load completed successfully");
             Logger::debug(QString("ChartController::loadChart: Chart has %1 notes").arg(newChart.notes().size()));
             
@@ -256,6 +260,8 @@ bool ChartController::loadChart(const QString& path)
 
 bool ChartController::saveChart(const QString& path)
 {
+    PerformanceTimer saveTimer("ChartController::saveChart", "ui_operations");
+    
     Logger::info(QString("ChartController::saveChart: Saving chart to %1").arg(path));
     Logger::debug(QString("ChartController::saveChart: Chart has %1 notes").arg(m_chart.notes().size()));
     

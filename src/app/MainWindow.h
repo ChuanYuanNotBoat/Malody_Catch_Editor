@@ -39,6 +39,8 @@ private slots:
     void adjustNoteSize();                       // 改为打开对话框
     void calibrateSkin();                        // 新增：皮肤校准
     void configureOutline();                     // 新增：描边设置
+    void openLogSettings();                      // 新增：打开日志设置
+    void exportDiagnosticsReport();              // 新增：导出诊断报告
 
 private:
     void setupUi();
