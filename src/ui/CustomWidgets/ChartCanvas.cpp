@@ -39,7 +39,9 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_visibleRange(5000),
       m_isSelecting(false),
       m_isDragging(false),
-      m_isPasting(false)
+      m_isPasting(false),
+      m_isMovingSelection(false),
+      m_rainFirst(true)   // 新增：Rain 放置状态
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -122,6 +124,10 @@ void ChartCanvas::setNoteSize(int size)
 
 void ChartCanvas::setMode(Mode mode)
 {
+    // 切换模式时重置 Rain 放置状态
+    if (mode != PlaceRain) {
+        m_rainFirst = true;
+    }
     m_currentMode = mode;
     Logger::debug(QString("ChartCanvas mode set to %1").arg(mode));
     update();
@@ -195,20 +201,15 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         
         if (note.isRain) {
             double endNoteTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
-            // 如果整个 rain 块完全在屏幕外，则跳过
             if (endNoteTime < startTime || noteTime > endTime) continue;
-            
-            // 计算可见部分的矩形
             double visibleStart = qMax(noteTime, startTime);
             double visibleEnd = qMin(endNoteTime, endTime);
             if (visibleEnd <= visibleStart) continue;
-            
             double yStart = yPosFromTime(visibleStart);
             double yEnd = yPosFromTime(visibleEnd);
             double heightPx = yEnd - yStart;
             if (heightPx <= 0) continue;
-            
-            QRectF rainRect(0, yStart, width(), heightPx); // x 始终为 0-512 全宽
+            QRectF rainRect(0, yStart, width(), heightPx);
             bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
             m_noteRenderer->drawRain(painter, note, rainRect, selected);
         } else {
@@ -252,7 +253,6 @@ void ChartCanvas::drawGrid(QPainter& painter)
                              m_timeDivision, bpmList, offset);
 }
 
-// 根据时间获取 Y 坐标（下落式，早期时间 y 小，晚期 y 大）
 double ChartCanvas::yPosFromTime(double timeMs) const
 {
     return (timeMs - m_scrollPos) / m_visibleRange * height();
@@ -283,14 +283,123 @@ Note ChartCanvas::posToNote(const QPointF& pos) const
     return note;
 }
 
+int ChartCanvas::hitTestNote(const QPointF& pos) const
+{
+    const auto& notes = m_chartController->chart()->notes();
+    int noteSize = m_noteRenderer->getNoteSize();
+    double minDist = noteSize * 0.6;
+    int hit = -1;
+    for (int i = 0; i < notes.size(); ++i) {
+        QPointF notePos = noteToPos(notes[i]);
+        double dist = QLineF(notePos, pos).length();
+        if (dist < minDist) {
+            minDist = dist;
+            hit = i;
+        }
+    }
+    return hit;
+}
+
+void ChartCanvas::prepareMoveChanges()
+{
+    m_moveChanges.clear();
+    const auto& notes = m_chartController->chart()->notes();
+    for (int idx : m_originalSelectedIndices) {
+        if (idx >= 0 && idx < notes.size())
+            m_moveChanges.append(qMakePair(notes[idx], notes[idx]));
+    }
+}
+
+void ChartCanvas::beginMoveSelection(const QPointF& startPos)
+{
+    m_isMovingSelection = true;
+    m_moveStartPos = startPos;
+    m_originalSelectedIndices = m_selectionController->selectedIndices();
+    prepareMoveChanges();
+}
+
+void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
+{
+    QPointF delta = currentPos - m_moveStartPos;
+    double deltaTime = delta.y() / height() * m_visibleRange;
+    int deltaX = static_cast<int>(delta.x() / width() * 512);
+
+    for (auto& change : m_moveChanges) {
+        const Note& original = change.first;
+        Note& newNote = change.second;
+        // 计算新位置
+        double oldTime = MathUtils::beatToMs(original.beatNum, original.numerator, original.denominator,
+                                             m_chartController->chart()->bpmList(),
+                                             m_chartController->chart()->meta().offset);
+        double newTime = oldTime + deltaTime;
+        int beat, num, den;
+        MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
+                            m_chartController->chart()->meta().offset, beat, num, den);
+        newNote.beatNum = beat;
+        newNote.numerator = num;
+        newNote.denominator = den;
+        if (m_timeDivision > 0)
+            newNote = MathUtils::snapNoteToTime(newNote, m_timeDivision);
+
+        newNote.x = original.x + deltaX;
+        // X 轴不吸附
+
+        if (original.isRain) {
+            double oldEndTime = MathUtils::beatToMs(original.endBeatNum, original.endNumerator, original.endDenominator,
+                                                    m_chartController->chart()->bpmList(),
+                                                    m_chartController->chart()->meta().offset);
+            double newEndTime = oldEndTime + deltaTime;
+            int endBeat, endNum, endDen;
+            MathUtils::msToBeat(newEndTime, m_chartController->chart()->bpmList(),
+                                m_chartController->chart()->meta().offset, endBeat, endNum, endDen);
+            newNote.endBeatNum = endBeat;
+            newNote.endNumerator = endNum;
+            newNote.endDenominator = endDen;
+            if (m_timeDivision > 0) {
+                Note temp = MathUtils::snapNoteToTime(newNote, m_timeDivision);
+                newNote.endBeatNum = temp.endBeatNum;
+                newNote.endNumerator = temp.endNumerator;
+                newNote.endDenominator = temp.endDenominator;
+            }
+        }
+    }
+
+    // 临时更新模型
+    QVector<Note>& notes = const_cast<QVector<Note>&>(m_chartController->chart()->notes());
+    QList<int> selectedList = m_originalSelectedIndices.values();
+    for (int i = 0; i < m_moveChanges.size(); ++i) {
+        int idx = selectedList[i];
+        if (idx >= 0 && idx < notes.size()) {
+            notes[idx] = m_moveChanges[i].second;
+        }
+    }
+    update();
+}
+
+void ChartCanvas::endMoveSelection()
+{
+    if (!m_isMovingSelection) return;
+    m_isMovingSelection = false;
+
+    QList<QPair<Note, Note>> finalChanges;
+    for (const auto& change : m_moveChanges) {
+        if (!(change.first == change.second))
+            finalChanges.append(change);
+    }
+    if (!finalChanges.isEmpty()) {
+        m_chartController->moveNotes(finalChanges);
+    }
+    m_moveChanges.clear();
+    m_originalSelectedIndices.clear();
+}
+
 void ChartCanvas::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        // 1. 优先处理粘贴预览
+        // 1. 粘贴预览处理
         if (m_isPasting) {
-            // 粘贴预览按钮区域（屏幕坐标）
+            // 确认粘贴区域
             if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40) {
-                // 确认粘贴
                 for (const Note& note : m_pasteNotes) {
                     Note newNote = note;
                     newNote.x += static_cast<int>(m_pasteOffset.x() / width() * 512);
@@ -318,15 +427,12 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 }
                 m_isPasting = false;
                 update();
-                Logger::debug("Paste confirmed");
                 return;
             } else if (event->pos().x() >= 120 && event->pos().x() <= 220 && event->pos().y() >= 10 && event->pos().y() <= 40) {
                 m_isPasting = false;
                 update();
-                Logger::debug("Paste cancelled");
                 return;
             } else {
-                // 拖动预览偏移
                 m_isDragging = true;
                 m_dragStart = event->pos();
                 m_draggedNotes.clear();
@@ -334,32 +440,24 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
             }
         }
 
-        // 2. Ctrl+左键：框选（在任何模式下都优先）
+        // 2. Ctrl+左键：框选（最高优先级）
         if (event->modifiers() & Qt::ControlModifier) {
             m_isSelecting = true;
             m_selectionStart = event->pos();
             m_selectionEnd = event->pos();
-            Logger::debug("Rect selection started (Ctrl+click)");
             return;
         }
 
-        // 3. 根据当前模式处理
-        if (m_currentMode == PlaceNote) {
-            Note note = posToNote(event->pos());
-            m_chartController->addNote(note);
-            Logger::debug("Note placed at beat " + QString::number(note.beatNum));
-        } 
-        else if (m_currentMode == PlaceRain) {
-            static bool rainFirst = true;
-            static QPointF startPos;
-            if (rainFirst) {
-                startPos = event->pos();
-                rainFirst = false;
-                Logger::debug("Rain start position set");
+        // 3. Rain 放置：两次点击
+        if (m_currentMode == PlaceRain) {
+            if (m_rainFirst) {
+                m_rainStartPos = event->pos();
+                m_rainFirst = false;
+                return;
             } else {
                 QPointF endPos = event->pos();
-                rainFirst = true;
-                Note startNote = posToNote(startPos);
+                m_rainFirst = true;
+                Note startNote = posToNote(m_rainStartPos);
                 Note endNote = posToNote(endPos);
                 double startTime = MathUtils::beatToMs(startNote.beatNum, startNote.numerator, startNote.denominator,
                                                        m_chartController->chart()->bpmList(),
@@ -370,55 +468,50 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 if (endTime > startTime) {
                     Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
                                   endNote.beatNum, endNote.numerator, endNote.denominator,
-                                  startNote.x); // x 坐标在 rain 中无用，但保存到文件
+                                  startNote.x);
                     m_chartController->addNote(rainNote);
-                    Logger::debug("Rain note added");
                 } else {
-                    Logger::warn("Rain note end time before start, ignored");
+                    // 可选：提示用户结束时间不能早于开始时间
                 }
-            }
-        } 
-        else if (m_currentMode == Select) {
-            // 单选：点击音符切换选中状态
-            const auto& notes = m_chartController->chart()->notes();
-            int noteSize = m_noteRenderer->getNoteSize();
-            double minDist = noteSize * 0.6; // 基于音符大小的一半
-            int hitIndex = -1;
-            for (int i = 0; i < notes.size(); ++i) {
-                QPointF pos = noteToPos(notes[i]);
-                double dist = QLineF(pos, event->pos()).length();
-                if (dist < minDist) {
-                    minDist = dist;
-                    hitIndex = i;
-                }
-            }
-            if (hitIndex >= 0) {
-                if (m_selectionController->selectedIndices().contains(hitIndex))
-                    m_selectionController->removeFromSelection(hitIndex);
-                else
-                    m_selectionController->addToSelection(hitIndex);
-                Logger::debug(QString("Note %1 toggled selection").arg(hitIndex));
-            } else {
-                m_selectionController->clearSelection();
-                Logger::debug("Selection cleared");
-            }
-        } 
-        else if (m_currentMode == Delete) {
-            // 删除模式：点击音符删除
-            const auto& notes = m_chartController->chart()->notes();
-            int noteSize = m_noteRenderer->getNoteSize();
-            for (int i = 0; i < notes.size(); ++i) {
-                QPointF pos = noteToPos(notes[i]);
-                if (QRectF(pos.x() - noteSize/2, pos.y() - noteSize/2, noteSize, noteSize).contains(event->pos())) {
-                    m_chartController->removeNote(notes[i]);
-                    Logger::debug(QString("Note %1 deleted").arg(i));
-                    break;
-                }
+                return;
             }
         }
-    } 
-    else if (event->button() == Qt::RightButton) {
-        // 右键菜单（可扩展）
+
+        // 4. 检查是否点击了音符
+        int hitIndex = hitTestNote(event->pos());
+        if (hitIndex != -1) {
+            // 处理选中/取消选中
+            if (m_selectionController->selectedIndices().contains(hitIndex))
+                m_selectionController->removeFromSelection(hitIndex);
+            else
+                m_selectionController->addToSelection(hitIndex);
+
+            // 删除模式：点击音符即删除该音符
+            if (m_currentMode == Delete) {
+                const auto& notes = m_chartController->chart()->notes();
+                if (hitIndex >= 0 && hitIndex < notes.size())
+                    m_chartController->removeNote(notes[hitIndex]);
+            }
+            return;
+        }
+
+        // 5. 点击空白：清除所有选中
+        m_selectionController->clearSelection();
+
+        // 6. 根据模式执行操作（仅在未点击音符时）
+        if (m_currentMode == PlaceNote) {
+            Note note = posToNote(event->pos());
+            m_chartController->addNote(note);
+        }
+        // Select/Delete 模式在空白处无操作
+
+        // 7. 移动选中的音符（如果有选中的音符且模式允许移动）
+        // 注意：PlaceNote 已经在上面添加音符，不会到这里；PlaceRain 和 Delete 已经 return
+        if (!m_selectionController->selectedIndices().isEmpty() && m_currentMode == Select) {
+            beginMoveSelection(event->pos());
+        }
+    } else if (event->button() == Qt::RightButton) {
+        // 右键菜单预留
     }
 }
 
@@ -427,66 +520,15 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event)
     if (m_isSelecting) {
         m_selectionEnd = event->pos();
         update();
-    } 
-    else if (m_isDragging) {
+    } else if (m_isMovingSelection) {
+        updateMoveSelection(event->pos());
+        m_moveStartPos = event->pos();
+    } else if (m_isDragging) {
         if (m_isPasting) {
             QPointF delta = event->pos() - m_dragStart;
             m_pasteOffset += delta;
             m_dragStart = event->pos();
             update();
-        } else {
-            // 拖动选中的音符移动
-            QPointF delta = event->pos() - m_dragStart;
-            m_dragStart = event->pos();
-            QSet<int> selected = m_selectionController->selectedIndices();
-            if (selected.isEmpty()) return;
-            const auto& notes = m_chartController->chart()->notes();
-            for (int idx : selected) {
-                if (idx >= 0 && idx < notes.size()) {
-                    Note original = notes[idx];
-                    Note newNote = original;
-                    // 水平移动：不吸附到网格（需求：无视x轴吸附）
-                    int deltaX = static_cast<int>(delta.x() / width() * 512);
-                    newNote.x += deltaX;
-                    // 注意：不要调用snapXToGrid，保持原始移动
-                    
-                    // 垂直移动：时间轴吸附（根据当前时间分度）
-                    double deltaTime = delta.y() / height() * m_visibleRange;
-                    double oldTime = MathUtils::beatToMs(original.beatNum, original.numerator, original.denominator,
-                                                         m_chartController->chart()->bpmList(),
-                                                         m_chartController->chart()->meta().offset);
-                    double newTime = oldTime + deltaTime;
-                    int beat, num, den;
-                    MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
-                                        m_chartController->chart()->meta().offset, beat, num, den);
-                    newNote.beatNum = beat;
-                    newNote.numerator = num;
-                    newNote.denominator = den;
-                    if (m_timeDivision > 0)
-                        newNote = MathUtils::snapNoteToTime(newNote, m_timeDivision);
-                    
-                    // 处理 rain 结束时间
-                    if (original.isRain) {
-                        double oldEndTime = MathUtils::beatToMs(original.endBeatNum, original.endNumerator, original.endDenominator,
-                                                                 m_chartController->chart()->bpmList(),
-                                                                 m_chartController->chart()->meta().offset);
-                        double newEndTime = oldEndTime + deltaTime;
-                        int endBeat, endNum, endDen;
-                        MathUtils::msToBeat(newEndTime, m_chartController->chart()->bpmList(),
-                                            m_chartController->chart()->meta().offset, endBeat, endNum, endDen);
-                        newNote.endBeatNum = endBeat;
-                        newNote.endNumerator = endNum;
-                        newNote.endDenominator = endDen;
-                        if (m_timeDivision > 0) {
-                            Note temp = MathUtils::snapNoteToTime(newNote, m_timeDivision);
-                            newNote.endBeatNum = temp.endBeatNum;
-                            newNote.endNumerator = temp.endNumerator;
-                            newNote.endDenominator = temp.endDenominator;
-                        }
-                    }
-                    m_chartController->moveNote(original, newNote);
-                }
-            }
         }
     }
 }
@@ -499,9 +541,9 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event)
             [this](const Note& note) { return noteToPos(note); });
         m_isSelecting = false;
         update();
-        Logger::debug("Rect selection completed");
-    } 
-    else if (m_isDragging) {
+    } else if (m_isMovingSelection) {
+        endMoveSelection();
+    } else if (m_isDragging) {
         m_isDragging = false;
         m_draggedNotes.clear();
     }
@@ -531,11 +573,9 @@ void ChartCanvas::wheelEvent(QWheelEvent* event)
 void ChartCanvas::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Delete) {
-        // 删除选中的音符
         if (m_selectionController && !m_selectionController->selectedIndices().isEmpty()) {
             QSet<int> selected = m_selectionController->selectedIndices();
             const auto& notes = m_chartController->chart()->notes();
-            // 注意：删除时需从大到小索引，避免索引变化
             QList<int> sorted = selected.values();
             std::sort(sorted.begin(), sorted.end(), std::greater<int>());
             for (int idx : sorted) {
@@ -544,7 +584,6 @@ void ChartCanvas::keyPressEvent(QKeyEvent* event)
                 }
             }
             m_selectionController->clearSelection();
-            Logger::debug("Deleted selected notes via Delete key");
         }
     }
     QWidget::keyPressEvent(event);

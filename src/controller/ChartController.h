@@ -24,6 +24,7 @@ public:
     void addNote(const Note& note);
     void removeNote(const Note& note);
     void moveNote(const Note& original, const Note& newNote);
+    void moveNotes(const QList<QPair<Note, Note>>& changes); // 批量移动，复合命令
     void addBpm(const BpmEntry& bpm);
     void removeBpm(int index);
     void updateBpm(int index, const BpmEntry& bpm);
@@ -49,6 +50,7 @@ private:
     class AddNoteCommand;
     class RemoveNoteCommand;
     class MoveNoteCommand;
+    class MoveNotesCommand;   // 新增复合移动命令
     class AddBpmCommand;
     class RemoveBpmCommand;
     class UpdateBpmCommand;

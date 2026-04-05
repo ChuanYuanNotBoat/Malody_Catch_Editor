@@ -10,39 +10,53 @@ SelectionController::SelectionController(QObject* parent) : QObject(parent)
 
 QSet<int> SelectionController::selectedIndices() const
 {
-    return m_selectedIndices;
+    QSet<int> indices;
+    if (!m_notes) return indices;
+    for (int i = 0; i < m_notes->size(); ++i) {
+        if (m_selectedIds.contains((*m_notes)[i].id))
+            indices.insert(i);
+    }
+    return indices;
 }
 
 void SelectionController::select(int index)
 {
-    m_selectedIndices.clear();
-    m_selectedIndices.insert(index);
-    emit selectionChanged(m_selectedIndices);
+    if (!m_notes || index < 0 || index >= m_notes->size()) return;
+    m_selectedIds.clear();
+    m_selectedIds.insert((*m_notes)[index].id);
+    emit selectionChanged(selectedIndices());
 }
 
 void SelectionController::select(const QSet<int>& indices)
 {
-    m_selectedIndices = indices;
-    emit selectionChanged(m_selectedIndices);
+    if (!m_notes) return;
+    m_selectedIds.clear();
+    for (int idx : indices) {
+        if (idx >= 0 && idx < m_notes->size())
+            m_selectedIds.insert((*m_notes)[idx].id);
+    }
+    emit selectionChanged(selectedIndices());
 }
 
 void SelectionController::addToSelection(int index)
 {
-    m_selectedIndices.insert(index);
-    emit selectionChanged(m_selectedIndices);
+    if (!m_notes || index < 0 || index >= m_notes->size()) return;
+    m_selectedIds.insert((*m_notes)[index].id);
+    emit selectionChanged(selectedIndices());
 }
 
 void SelectionController::removeFromSelection(int index)
 {
-    m_selectedIndices.remove(index);
-    emit selectionChanged(m_selectedIndices);
+    if (!m_notes || index < 0 || index >= m_notes->size()) return;
+    m_selectedIds.remove((*m_notes)[index].id);
+    emit selectionChanged(selectedIndices());
 }
 
 void SelectionController::clearSelection()
 {
-    if (!m_selectedIndices.isEmpty()) {
-        m_selectedIndices.clear();
-        emit selectionChanged(m_selectedIndices);
+    if (!m_selectedIds.isEmpty()) {
+        m_selectedIds.clear();
+        emit selectionChanged(selectedIndices());
     }
 }
 
@@ -62,10 +76,17 @@ void SelectionController::selectInRect(const QRectF& rect, const QVector<Note>& 
 void SelectionController::copySelected(const QVector<Note>& notes)
 {
     m_clipboard.clear();
-    for (int idx : m_selectedIndices) {
+    QSet<int> indices = selectedIndices();
+    for (int idx : indices) {
         if (idx >= 0 && idx < notes.size())
             m_clipboard.append(notes[idx]);
     }
+}
+
+void SelectionController::updateSelectionFromNotes()
+{
+    // 音符列表变化后，重新计算选中索引并发出信号（画布依赖索引）
+    emit selectionChanged(selectedIndices());
 }
 
 QVector<Note> SelectionController::getClipboard() const
