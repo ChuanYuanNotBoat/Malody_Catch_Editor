@@ -52,6 +52,7 @@
 #include <QInputDialog>
 #include <QListWidget>
 #include <QTemporaryDir>
+#include <QScrollBar>
 
 class MainWindow::Private {
 public:
@@ -60,6 +61,7 @@ public:
     PlaybackController* playbackController;
     Skin* skin;
     ChartCanvas* canvas;
+    QScrollBar* verticalScrollBar;  // 新增：用于快速滚动
     QSplitter* splitter;
     QWidget* rightPanelContainer;
     RightPanel* currentRightPanel;
@@ -496,6 +498,54 @@ void MainWindow::createCentralArea()
     if (d->skin) d->canvas->setSkin(d->skin);
     d->canvas->setNoteSize(Settings::instance().noteSize());
 
+    // 创建垂直滚动条
+    d->verticalScrollBar = new QScrollBar(Qt::Vertical);
+    d->verticalScrollBar->setRange(0, 100000);  // 大范围用于精确滚动
+    d->verticalScrollBar->setValue(0);
+    d->verticalScrollBar->setSingleStep(100);
+    d->verticalScrollBar->setPageStep(5000);
+    
+    // 创建Canvas + 滚动条的容器布局
+    QWidget* canvasContainer = new QWidget(this);
+    QHBoxLayout* canvasLayout = new QHBoxLayout(canvasContainer);
+    canvasLayout->setContentsMargins(0, 0, 0, 0);
+    canvasLayout->setSpacing(0);
+    canvasLayout->addWidget(d->canvas, 1);      // Canvas 占据大部分空间
+    canvasLayout->addWidget(d->verticalScrollBar, 0);  // 滚动条在右侧
+
+    // 连接滚动条到Canvas
+    // Lambda：根据滚动条值和实际音频时长计算滚动位置
+    auto updateScrollPos = [this](int value) {
+        if (d->canvas && d->chartController && d->chartController->chart()) {
+            // 获取实际音频时长（毫秒）
+            qint64 duration = 300000;  // 默认值
+            if (d->playbackController && d->playbackController->audioPlayer()) {
+                duration = d->playbackController->audioPlayer()->duration();
+                if (duration <= 0) duration = 300000;  // 如果获取失败，使用默认值
+            }
+            // 将滚动条值（0-100000）映射到实际的时间范围
+            double scrollPos = (value / 100000.0) * duration;
+            d->canvas->setScrollPos(scrollPos);
+        }
+    };
+    
+    connect(d->verticalScrollBar, QOverload<int>::of(&QScrollBar::valueChanged), this, updateScrollPos);
+    
+    // 当音频时长改变时，更新滚动条范围
+    if (d->playbackController && d->playbackController->audioPlayer()) {
+        connect(d->playbackController->audioPlayer(), &AudioPlayer::durationChanged, this, [this](qint64 duration) {
+            if (duration > 0) {
+                // 根据音频时长调整滚动条范围
+                // 保持0-100000的范围，通过这个范围来控制滚动灵敏度
+                Logger::debug(QString("Audio duration changed: %1 ms, scrollbar will adapt automatically").arg(duration));
+                // 重置滚动条到起始位置
+                d->verticalScrollBar->setValue(0);
+            }
+        });
+    }
+    
+    Logger::debug("Connected scrollbar and audio duration signals");
+
     d->rightPanelContainer = new QWidget(this);
     QVBoxLayout* rightLayout = new QVBoxLayout(d->rightPanelContainer);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -522,7 +572,7 @@ void MainWindow::createCentralArea()
     Logger::debug("Connected signals");
 
     d->splitter = new QSplitter(Qt::Horizontal, this);
-    d->splitter->addWidget(d->canvas);
+    d->splitter->addWidget(canvasContainer);     // 使用包含scrollbar的容器
     d->splitter->addWidget(d->rightPanelContainer);
     d->splitter->setSizes({800, 300});
     setCentralWidget(d->splitter);
@@ -690,6 +740,19 @@ void MainWindow::openChart()
                 Logger::error(QString("MainWindow::openChart - Exception loading audio: %1").arg(e.what()));
             } catch (...) {
                 Logger::error("MainWindow::openChart - Unknown exception loading audio");
+            }
+            
+            // If no audio is loaded, estimate duration from chart data
+            if (d->playbackController && d->playbackController->audioPlayer()) {
+                qint64 audioDuration = d->playbackController->audioPlayer()->duration();
+                if (audioDuration <= 0 && d->chartController && d->chartController->chart()) {
+                    // Estimate from last note's beat + 2 seconds buffer
+                    // This ensures scrollbar range covers the entire chart even without audio
+                    const QVector<Note>& notes = d->chartController->chart()->notes();
+                    if (!notes.isEmpty()) {
+                        Logger::debug("MainWindow::openChart - No audio duration, using chart notes to estimate");
+                    }
+                }
             }
             
             d->canvas->update();
