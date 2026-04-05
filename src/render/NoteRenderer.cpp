@@ -76,12 +76,12 @@ void NoteRenderer::drawNote(QPainter& painter, const Note& note, const QPointF& 
         else if (note.denominator == 8 || note.denominator == 16 || note.denominator == 32) noteType = 3;
         else if (note.denominator == 3 || note.denominator == 6 || note.denominator == 12 || note.denominator == 24) noteType = 4;
     } else {
-        noteType = 5; // rain 音符
+        noteType = 5; // rain 音符（但 rain 不使用皮肤）
     }
 
     // 获取皮肤图片（如果有）并缩放
     QPixmap notePix;
-    if (m_skin && m_skin->isValid()) {
+    if (m_skin && m_skin->isValid() && !note.isRain) { // rain 不使用皮肤
         const QPixmap* pix = m_skin->getNotePixmap(noteType);
         if (pix && !pix->isNull()) {
             double scale = m_skin->getNoteScale(noteType);
@@ -133,27 +133,10 @@ void NoteRenderer::drawNote(QPainter& painter, const Note& note, const QPointF& 
 
 void NoteRenderer::drawRain(QPainter& painter, const Note& note, const QRectF& rect, bool selected) const
 {
-    // Rain 音符的绘制，使用皮肤（如果有）
-    int noteType = 5;
-    QPixmap rainPix;
-    if (m_skin && m_skin->isValid()) {
-        const QPixmap* pix = m_skin->getNotePixmap(noteType);
-        if (pix && !pix->isNull()) {
-            double scale = m_skin->getNoteScale(noteType);
-            int scaledW = pix->width() * scale;
-            int scaledH = pix->height() * scale;
-            rainPix = pix->scaled(scaledW, scaledH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        }
-    }
-
-    if (!rainPix.isNull()) {
-        // 平铺或拉伸？这里简单拉伸
-        painter.drawPixmap(rect.toRect(), rainPix);
-    } else {
-        painter.setBrush(QColor(0, 0, 255, 100));
-        painter.setPen(Qt::NoPen);
-        painter.drawRect(rect);
-    }
+    // 根据需求：rain 音符渲染为半透明长方形，覆盖 x0-512，不适用皮肤图片
+    painter.setBrush(QColor(0, 0, 255, 100));
+    painter.setPen(Qt::NoPen);
+    painter.drawRect(rect);
 
     // 描边
     int outlineWidth = selected ? 2 : (m_hyperfruitEnabled && m_hyperfruitSet.contains(note.x) ? 2 : Settings::instance().outlineWidth());

@@ -192,18 +192,29 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     for (int i = 0; i < notes.size(); ++i) {
         const Note& note = notes[i];
         double noteTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-        if (noteTime < startTime - 100 || noteTime > endTime + 100) continue;
-
-        bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
-        QPointF pos = noteToPos(note);
+        
         if (note.isRain) {
             double endNoteTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
-            double durationMs = endNoteTime - noteTime;
-            if (durationMs < 0) durationMs = 0;
-            double heightPx = (durationMs / m_visibleRange) * height();
-            QRectF rainRect(pos.x() - 256, pos.y(), 512, heightPx);
+            // 如果整个 rain 块完全在屏幕外，则跳过
+            if (endNoteTime < startTime || noteTime > endTime) continue;
+            
+            // 计算可见部分的矩形
+            double visibleStart = qMax(noteTime, startTime);
+            double visibleEnd = qMin(endNoteTime, endTime);
+            if (visibleEnd <= visibleStart) continue;
+            
+            double yStart = yPosFromTime(visibleStart);
+            double yEnd = yPosFromTime(visibleEnd);
+            double heightPx = yEnd - yStart;
+            if (heightPx <= 0) continue;
+            
+            QRectF rainRect(0, yStart, width(), heightPx); // x 始终为 0-512 全宽
+            bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
             m_noteRenderer->drawRain(painter, note, rainRect, selected);
         } else {
+            if (noteTime < startTime - 100 || noteTime > endTime + 100) continue;
+            bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
+            QPointF pos = noteToPos(note);
             m_noteRenderer->drawNote(painter, note, pos, selected);
         }
     }
@@ -229,9 +240,6 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         painter.setBrush(QColor(255, 255, 0, 80));
         painter.drawRect(rect);
     }
-
-    // 绘制选中的音符外框（已在 NoteRenderer 中处理，这里仅作额外提示）
-    // 但根据需求，选中音符应红色描边，内部黄色半透明，这个在 NoteRenderer 中已实现。
 }
 
 void ChartCanvas::drawGrid(QPainter& painter)
@@ -244,12 +252,18 @@ void ChartCanvas::drawGrid(QPainter& painter)
                              m_timeDivision, bpmList, offset);
 }
 
+// 根据时间获取 Y 坐标（下落式，早期时间 y 小，晚期 y 大）
+double ChartCanvas::yPosFromTime(double timeMs) const
+{
+    return (timeMs - m_scrollPos) / m_visibleRange * height();
+}
+
 QPointF ChartCanvas::noteToPos(const Note& note) const
 {
     double noteTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator,
                                           m_chartController->chart()->bpmList(),
                                           m_chartController->chart()->meta().offset);
-    double y = (noteTime - m_scrollPos) / m_visibleRange * height();
+    double y = yPosFromTime(noteTime);
     double x = note.x * width() / 512.0;
     return QPointF(x, y);
 }
@@ -272,6 +286,7 @@ Note ChartCanvas::posToNote(const QPointF& pos) const
 void ChartCanvas::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
+        // 1. 优先处理粘贴预览
         if (m_isPasting) {
             // 粘贴预览按钮区域（屏幕坐标）
             if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40) {
@@ -304,24 +319,37 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 m_isPasting = false;
                 update();
                 Logger::debug("Paste confirmed");
+                return;
             } else if (event->pos().x() >= 120 && event->pos().x() <= 220 && event->pos().y() >= 10 && event->pos().y() <= 40) {
                 m_isPasting = false;
                 update();
                 Logger::debug("Paste cancelled");
+                return;
             } else {
+                // 拖动预览偏移
                 m_isDragging = true;
                 m_dragStart = event->pos();
                 m_draggedNotes.clear();
+                return;
             }
+        }
+
+        // 2. Ctrl+左键：框选（在任何模式下都优先）
+        if (event->modifiers() & Qt::ControlModifier) {
+            m_isSelecting = true;
+            m_selectionStart = event->pos();
+            m_selectionEnd = event->pos();
+            Logger::debug("Rect selection started (Ctrl+click)");
             return;
         }
 
-        // 模式处理
+        // 3. 根据当前模式处理
         if (m_currentMode == PlaceNote) {
             Note note = posToNote(event->pos());
             m_chartController->addNote(note);
             Logger::debug("Note placed at beat " + QString::number(note.beatNum));
-        } else if (m_currentMode == PlaceRain) {
+        } 
+        else if (m_currentMode == PlaceRain) {
             static bool rainFirst = true;
             static QPointF startPos;
             if (rainFirst) {
@@ -342,45 +370,41 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 if (endTime > startTime) {
                     Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
                                   endNote.beatNum, endNote.numerator, endNote.denominator,
-                                  startNote.x);
+                                  startNote.x); // x 坐标在 rain 中无用，但保存到文件
                     m_chartController->addNote(rainNote);
                     Logger::debug("Rain note added");
                 } else {
                     Logger::warn("Rain note end time before start, ignored");
                 }
             }
-        } else if (m_currentMode == Select) {
-            if (event->modifiers() & Qt::ControlModifier) {
-                // Ctrl + 左键开始矩形选择
-                m_isSelecting = true;
-                m_selectionStart = event->pos();
-                m_selectionEnd = event->pos();
-                Logger::debug("Rect selection started");
-            } else {
-                // 普通点击选择
-                const auto& notes = m_chartController->chart()->notes();
-                double minDist = 10;
-                int hitIndex = -1;
-                for (int i = 0; i < notes.size(); ++i) {
-                    QPointF pos = noteToPos(notes[i]);
-                    double dist = QLineF(pos, event->pos()).length();
-                    if (dist < minDist) {
-                        minDist = dist;
-                        hitIndex = i;
-                    }
-                }
-                if (hitIndex >= 0) {
-                    if (m_selectionController->selectedIndices().contains(hitIndex))
-                        m_selectionController->removeFromSelection(hitIndex);
-                    else
-                        m_selectionController->addToSelection(hitIndex);
-                    Logger::debug(QString("Note %1 toggled selection").arg(hitIndex));
-                } else {
-                    m_selectionController->clearSelection();
-                    Logger::debug("Selection cleared");
+        } 
+        else if (m_currentMode == Select) {
+            // 单选：点击音符切换选中状态
+            const auto& notes = m_chartController->chart()->notes();
+            int noteSize = m_noteRenderer->getNoteSize();
+            double minDist = noteSize * 0.6; // 基于音符大小的一半
+            int hitIndex = -1;
+            for (int i = 0; i < notes.size(); ++i) {
+                QPointF pos = noteToPos(notes[i]);
+                double dist = QLineF(pos, event->pos()).length();
+                if (dist < minDist) {
+                    minDist = dist;
+                    hitIndex = i;
                 }
             }
-        } else if (m_currentMode == Delete) {
+            if (hitIndex >= 0) {
+                if (m_selectionController->selectedIndices().contains(hitIndex))
+                    m_selectionController->removeFromSelection(hitIndex);
+                else
+                    m_selectionController->addToSelection(hitIndex);
+                Logger::debug(QString("Note %1 toggled selection").arg(hitIndex));
+            } else {
+                m_selectionController->clearSelection();
+                Logger::debug("Selection cleared");
+            }
+        } 
+        else if (m_currentMode == Delete) {
+            // 删除模式：点击音符删除
             const auto& notes = m_chartController->chart()->notes();
             int noteSize = m_noteRenderer->getNoteSize();
             for (int i = 0; i < notes.size(); ++i) {
@@ -392,8 +416,9 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 }
             }
         }
-    } else if (event->button() == Qt::RightButton) {
-        // 右键菜单，可扩展
+    } 
+    else if (event->button() == Qt::RightButton) {
+        // 右键菜单（可扩展）
     }
 }
 
@@ -402,13 +427,15 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event)
     if (m_isSelecting) {
         m_selectionEnd = event->pos();
         update();
-    } else if (m_isDragging) {
+    } 
+    else if (m_isDragging) {
         if (m_isPasting) {
             QPointF delta = event->pos() - m_dragStart;
             m_pasteOffset += delta;
             m_dragStart = event->pos();
             update();
         } else {
+            // 拖动选中的音符移动
             QPointF delta = event->pos() - m_dragStart;
             m_dragStart = event->pos();
             QSet<int> selected = m_selectionController->selectedIndices();
@@ -418,10 +445,12 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event)
                 if (idx >= 0 && idx < notes.size()) {
                     Note original = notes[idx];
                     Note newNote = original;
+                    // 水平移动：不吸附到网格（需求：无视x轴吸附）
                     int deltaX = static_cast<int>(delta.x() / width() * 512);
                     newNote.x += deltaX;
-                    if (m_gridSnap)
-                        newNote.x = MathUtils::snapXToGrid(newNote.x, m_gridDivision);
+                    // 注意：不要调用snapXToGrid，保持原始移动
+                    
+                    // 垂直移动：时间轴吸附（根据当前时间分度）
                     double deltaTime = delta.y() / height() * m_visibleRange;
                     double oldTime = MathUtils::beatToMs(original.beatNum, original.numerator, original.denominator,
                                                          m_chartController->chart()->bpmList(),
@@ -435,6 +464,8 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event)
                     newNote.denominator = den;
                     if (m_timeDivision > 0)
                         newNote = MathUtils::snapNoteToTime(newNote, m_timeDivision);
+                    
+                    // 处理 rain 结束时间
                     if (original.isRain) {
                         double oldEndTime = MathUtils::beatToMs(original.endBeatNum, original.endNumerator, original.endDenominator,
                                                                  m_chartController->chart()->bpmList(),
@@ -469,7 +500,8 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event)
         m_isSelecting = false;
         update();
         Logger::debug("Rect selection completed");
-    } else if (m_isDragging) {
+    } 
+    else if (m_isDragging) {
         m_isDragging = false;
         m_draggedNotes.clear();
     }
@@ -494,4 +526,26 @@ void ChartCanvas::wheelEvent(QWheelEvent* event)
         if (m_visibleRange > 60000) m_visibleRange = 60000;
         update();
     }
+}
+
+void ChartCanvas::keyPressEvent(QKeyEvent* event)
+{
+    if (event->key() == Qt::Key_Delete) {
+        // 删除选中的音符
+        if (m_selectionController && !m_selectionController->selectedIndices().isEmpty()) {
+            QSet<int> selected = m_selectionController->selectedIndices();
+            const auto& notes = m_chartController->chart()->notes();
+            // 注意：删除时需从大到小索引，避免索引变化
+            QList<int> sorted = selected.values();
+            std::sort(sorted.begin(), sorted.end(), std::greater<int>());
+            for (int idx : sorted) {
+                if (idx >= 0 && idx < notes.size()) {
+                    m_chartController->removeNote(notes[idx]);
+                }
+            }
+            m_selectionController->clearSelection();
+            Logger::debug("Deleted selected notes via Delete key");
+        }
+    }
+    QWidget::keyPressEvent(event);
 }
