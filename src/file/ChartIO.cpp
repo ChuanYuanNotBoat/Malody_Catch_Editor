@@ -183,8 +183,8 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
         
         Logger::info(QString("ChartIO::load - Loaded %1 normal notes, %2 rain notes, %3 sound notes")
                     .arg(normalNoteCount).arg(rainNoteCount).arg(soundNoteCount));
-        Logger::info(QString("ChartIO::load - Note Summary: %1 / %2 notes loaded (%.1f%% success rate)")
-                    .arg(totalLoadedNotes).arg(totalNoteCount).arg(successRate));
+        Logger::info(QString("ChartIO::load - Note Summary: %1 / %2 notes loaded (%3%% success rate)")
+                    .arg(totalLoadedNotes).arg(totalNoteCount).arg(QString::number(successRate, 'f', 1)));
         
         if (skippedNoteCount > 0) {
             Logger::warn(QString("ChartIO::load - Skipped %1 notes with missing/invalid fields").arg(skippedNoteCount));
