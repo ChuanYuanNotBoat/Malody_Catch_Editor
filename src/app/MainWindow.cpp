@@ -572,7 +572,10 @@ void MainWindow::openChart()
         
         // Handle MCZ files
         if (suffix == "mcz") {
+            Logger::debug("MainWindow::openChart - Detected MCZ file format");
+            
             if (d->mczTempDir) {
+                Logger::debug("MainWindow::openChart - Cleaning up previous MCZ temp directory");
                 delete d->mczTempDir;
                 d->mczTempDir = nullptr;
             }
@@ -584,6 +587,8 @@ void MainWindow::openChart()
                 return;
             }
             
+            Logger::debug(QString("MainWindow::openChart - Created temp directory: %1").arg(d->mczTempDir->path()));
+            
             QString importDir = d->mczTempDir->path() + "/" + fileInfo.baseName();
             QString extractedChart;
             
@@ -593,8 +598,11 @@ void MainWindow::openChart()
                 return;
             }
             
+            Logger::debug("MainWindow::openChart - MCZ imported successfully");
+            
             // Check if there are multiple .mc files
             QList<QPair<QString, QString>> charts = ProjectIO::findChartsInMcz(importDir);
+            Logger::debug(QString("MainWindow::openChart - Found %1 charts in MCZ").arg(charts.size()));
             
             if (charts.isEmpty()) {
                 Logger::error("MainWindow::openChart - No .mc files found in MCZ");
@@ -604,7 +612,7 @@ void MainWindow::openChart()
             
             if (charts.size() > 1) {
                 // Show selection dialog for multiple charts
-                QDialog selectDialog(this);
+                Logger::debug("MainWindow::openChart - Multiple charts detected, showing selection dialog");
                 selectDialog.setWindowTitle(tr("Select Chart"));
                 selectDialog.setMinimumWidth(300);
                 
@@ -684,11 +692,18 @@ void MainWindow::openChart()
             }
             
             d->canvas->update();
+            Logger::info(QString("MainWindow::openChart - Canvas update called for: %1").arg(chartFileToLoad));
+            
+            // Force process events to ensure paint happens
+            QApplication::processEvents();
+            Logger::info(QString("MainWindow::openChart - Events processed successfully"));
+            
             Logger::info("Chart loaded: " + chartFileToLoad);
         } else {
             Logger::error("Failed to load chart: " + chartFileToLoad);
             QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
-        }
+            Logger::error(QString("MainWindow::openChart - Exiting with error"));
+            return;
     } catch (const std::exception& e) {
         Logger::error(QString("MainWindow::openChart - Exception: %1").arg(e.what()));
         QMessageBox::critical(this, tr("Error"), tr("Exception opening chart: %1").arg(e.what()));

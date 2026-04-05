@@ -31,10 +31,20 @@ bool ProjectIO::importMcz(const QString& mczPath, const QString& outputDir, QStr
         process.setWorkingDirectory(outputDir);
 
         #ifdef Q_OS_WIN
+            // PowerShell doesn't recognize .mcz extension, need to convert to .zip
+            QString tempZipPath = outputDir + "/temp_extract.zip";
+            Logger::debug(QString("ProjectIO::importMcz - Creating temporary .zip copy"));
+            
+            // Copy .mcz to temporary .zip file
+            if (!QFile::copy(mczPath, tempZipPath)) {
+                Logger::error(QString("ProjectIO::importMcz - Failed to copy MCZ file to temporary ZIP"));
+                return false;
+            }
+            
             QStringList args;
             args << "-NoProfile" << "-NonInteractive" << "-Command"
-                 << QString("Expand-Archive -Path '%1' -DestinationPath '%2' -Force")
-                    .arg(QFileInfo(mczPath).absoluteFilePath(), outputDir);
+                 << QString("Expand-Archive -Path '%1' -DestinationPath '%2' -Force; Remove-Item '%1'")
+                    .arg(tempZipPath, outputDir);
             process.start("powershell.exe", args);
         #else
             process.start("unzip", QStringList() << "-o" << mczPath << "-d" << outputDir);
@@ -43,12 +53,18 @@ bool ProjectIO::importMcz(const QString& mczPath, const QString& outputDir, QStr
         if (!process.waitForFinished(30000)) {
             Logger::error(QString("ProjectIO::importMcz - Unzip process timeout"));
             process.kill();
+            #ifdef Q_OS_WIN
+                QFile::remove(outputDir + "/temp_extract.zip");
+            #endif
             return false;
         }
 
         if (process.exitCode() != 0) {
             QString errMsg = QString::fromLocal8Bit(process.readAllStandardError());
             Logger::error(QString("ProjectIO::importMcz - Unzip failed: %1").arg(errMsg));
+            #ifdef Q_OS_WIN
+                QFile::remove(outputDir + "/temp_extract.zip");
+            #endif
             return false;
         }
 
@@ -119,18 +135,20 @@ bool ProjectIO::exportToMcz(const QString& outputMczPath, const QString& sourceC
         Logger::debug("ProjectIO::exportToMcz - Copied chart directory to pack directory");
 
         // 创建MCZ文件（ZIP格式）
+        // 先创建为.zip，然后重新命名为.mcz
+        QString tempZipPath = tempDir.path() + "/output.zip";
         QProcess process;
 
         #ifdef Q_OS_WIN
             QStringList args;
             args << "-NoProfile" << "-NonInteractive" << "-Command"
                  << QString("Compress-Archive -Path '%1\\*' -DestinationPath '%2' -CompressionLevel Optimal -Force")
-                    .arg(packDir, QFileInfo(outputMczPath).absoluteFilePath());
+                    .arg(packDir, tempZipPath);
             process.start("powershell.exe", args);
         #else
             process.setWorkingDirectory(packDir);
             process.start("zip", QStringList() << "-r" << "-q" 
-                         << QFileInfo(outputMczPath).absoluteFilePath() << ".");
+                         << tempZipPath << ".");
         #endif
 
         if (!process.waitForFinished(60000)) {
@@ -145,7 +163,23 @@ bool ProjectIO::exportToMcz(const QString& outputMczPath, const QString& sourceC
             return false;
         }
 
-        Logger::info(QString("ProjectIO::exportToMcz - Successfully exported to: %1").arg(outputMczPath));
+        Logger::debug("ProjectIO::exportToMcz - ZIP archive created, renaming to .mcz");
+
+        // 重新命名为.mcz
+        QString mczAbsPath = QFileInfo(outputMczPath).absoluteFilePath();
+        if (QFile::exists(mczAbsPath)) {
+            if (!QFile::remove(mczAbsPath)) {
+                Logger::warn(QString("ProjectIO::exportToMcz - Failed to remove existing file: %1").arg(mczAbsPath));
+                return false;
+            }
+        }
+
+        if (!QFile::rename(tempZipPath, mczAbsPath)) {
+            Logger::error(QString("ProjectIO::exportToMcz - Failed to rename zip to mcz: %1 -> %2").arg(tempZipPath, mczAbsPath));
+            return false;
+        }
+
+        Logger::info(QString("ProjectIO::exportToMcz - Successfully exported to: %1").arg(mczAbsPath));
         return true;
 
     } catch (const std::exception& e) {

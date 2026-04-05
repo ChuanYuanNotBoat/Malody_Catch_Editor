@@ -179,10 +179,17 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
     auto frameStartTime = std::chrono::high_resolution_clock::now();
     
+    Logger::debug("ChartCanvas::paintEvent - Starting paint event");
+    
     QPainter painter(this);
     painter.fillRect(rect(), Qt::white);
 
-    if (!m_chartController) return;
+    if (!m_chartController) {
+        Logger::warn("ChartCanvas::paintEvent - No chart controller available");
+        return;
+    }
+    
+    Logger::debug("ChartCanvas::paintEvent - Chart controller exists");
 
     drawGrid(painter);
 
@@ -192,42 +199,53 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     const auto& notes = m_chartController->chart()->notes();
     const auto& bpmList = m_chartController->chart()->bpmList();
     int offset = m_chartController->chart()->meta().offset;
+    
+    Logger::debug(QString("ChartCanvas::paintEvent - Chart has %1 notes, %2 BPM entries").arg(notes.size()).arg(bpmList.size()));
 
-    if (m_hyperfruitEnabled) {
+    if (m_hyperfruitEnabled && !bpmList.isEmpty()) {
         QSet<int> hyperSet = m_hyperfruitDetector->detect(notes);
         m_noteRenderer->setHyperfruitSet(hyperSet);
     }
 
     // 绘制音符
     int renderedNotesCount = 0;
-    for (int i = 0; i < notes.size(); ++i) {
-        const Note& note = notes[i];
-        double noteTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-        
-        // 跳过音效音符（type=1），它们不应该在画布上显示
-        if (note.type == 1) continue;
-        
-        if (note.isRain) {
-            double endNoteTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
-            if (endNoteTime < startTime || noteTime > endTime) continue;
-            double visibleStart = qMax(noteTime, startTime);
-            double visibleEnd = qMin(endNoteTime, endTime);
-            if (visibleEnd <= visibleStart) continue;
-            double yStart = yPosFromTime(visibleStart);
-            double yEnd = yPosFromTime(visibleEnd);
-            double heightPx = yEnd - yStart;
-            if (heightPx <= 0) continue;
-            QRectF rainRect(0, yStart, width(), heightPx);
-            bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
-            m_noteRenderer->drawRain(painter, note, rainRect, selected);
-            renderedNotesCount++;
-        } else {
-            if (noteTime < startTime - 100 || noteTime > endTime + 100) continue;
-            bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
-            QPointF pos = noteToPos(note);
-            m_noteRenderer->drawNote(painter, note, pos, selected);
-            renderedNotesCount++;
+    try {
+        for (int i = 0; i < notes.size(); ++i) {
+            const Note& note = notes[i];
+            double noteTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+            
+            // 跳过音效音符（type=1），它们不应该在画布上显示
+            if (note.type == 1) continue;
+            
+            if (note.isRain) {
+                double endNoteTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
+                if (endNoteTime < startTime || noteTime > endTime) continue;
+                double visibleStart = qMax(noteTime, startTime);
+                double visibleEnd = qMin(endNoteTime, endTime);
+                if (visibleEnd <= visibleStart) continue;
+                double yStart = yPosFromTime(visibleStart);
+                double yEnd = yPosFromTime(visibleEnd);
+                double heightPx = yEnd - yStart;
+                if (heightPx <= 0) continue;
+                QRectF rainRect(0, yStart, width(), heightPx);
+                bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
+                m_noteRenderer->drawRain(painter, note, rainRect, selected);
+                renderedNotesCount++;
+            } else {
+                if (noteTime < startTime - 100 || noteTime > endTime + 100) continue;
+                bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
+                QPointF pos = noteToPos(note);
+                m_noteRenderer->drawNote(painter, note, pos, selected);
+                renderedNotesCount++;
+            }
         }
+        Logger::debug(QString("ChartCanvas::paintEvent - Rendered %1 notes successfully").arg(renderedNotesCount));
+    } catch (const std::exception& e) {
+        Logger::error(QString("ChartCanvas::paintEvent - Exception during note rendering: %1").arg(e.what()));
+        return;
+    } catch (...) {
+        Logger::error("ChartCanvas::paintEvent - Unknown exception during note rendering");
+        return;
     }
 
     // 粘贴预览
@@ -259,10 +277,7 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     qint64 frameTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(frameEndTime - frameStartTime).count();
     DiagnosticCollector::instance().recordRenderMetrics(frameTimeMs, renderedNotesCount);
     
-    // 避免过度日志记录，只在詳細模式下记录
-    if (Logger::isVerbose() && frameTimeMs > 16) {  // 超过16ms（60fps的一帧）时记录
-        Logger::debug(QString("ChartCanvas::paintEvent: Rendered %1 notes in %2ms").arg(renderedNotesCount).arg(frameTimeMs));
-    }
+    Logger::debug(QString("ChartCanvas::paintEvent - Paint event completed in %1ms").arg(frameTimeMs));
 }
 
 void ChartCanvas::drawGrid(QPainter& painter)
