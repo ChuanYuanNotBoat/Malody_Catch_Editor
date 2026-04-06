@@ -245,9 +245,9 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
             double noteTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
             
             // 跳过音效音符（type=1），它们不应该在画布上显示
-            if (note.type == 1) continue;
+            if (note.type == NoteType::SOUND) continue;
             
-            if (note.isRain) {
+            if (note.type == NoteType::RAIN) {
                 double endNoteTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
                 if (endNoteTime < startTime || noteTime > endTime) continue;
                 double visibleStart = qMax(noteTime, startTime);
@@ -283,7 +283,7 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         painter.setOpacity(0.5);
         for (const Note& note : m_pasteNotes) {
             // 跳过音效音符
-            if (note.type == 1) continue;
+            if (note.type == NoteType::SOUND) continue;
             QPointF pos = noteToPos(note) + m_pasteOffset;
             m_noteRenderer->drawNote(painter, note, pos, false);
         }
@@ -368,20 +368,67 @@ Note ChartCanvas::posToNote(const QPointF& pos) const
     return note;
 }
 
+QRectF ChartCanvas::getRainNoteRect(const Note& note) const
+{
+    if (!m_chartController || !m_chartController->chart()) {
+        return QRectF();
+    }
+    
+    const auto& bpmList = m_chartController->chart()->bpmList();
+    int offset = m_chartController->chart()->meta().offset;
+    
+    // 计算起始时间和结束时间
+    double startTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+    double endTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
+    
+    // 计算Y坐标
+    double yStart = yPosFromTime(startTime);
+    double yEnd = yPosFromTime(endTime);
+    
+    // rain音符覆盖整个画布宽度（从x=0到width()）
+    double rainWidth = width();
+    
+    // 创建矩形（从x=0到width()，覆盖整个宽度）
+    return QRectF(0, yStart, rainWidth, yEnd - yStart);
+}
+
 int ChartCanvas::hitTestNote(const QPointF& pos) const
 {
+    if (!m_chartController || !m_chartController->chart()) {
+        return -1;
+    }
+    
     const auto& notes = m_chartController->chart()->notes();
     int noteSize = m_noteRenderer->getNoteSize();
     double minDist = noteSize * 0.6;
     int hit = -1;
+    
     for (int i = 0; i < notes.size(); ++i) {
-        QPointF notePos = noteToPos(notes[i]);
-        double dist = QLineF(notePos, pos).length();
-        if (dist < minDist) {
-            minDist = dist;
-            hit = i;
+        const Note& note = notes[i];
+        
+        // 跳过音效音符
+        if (note.type == NoteType::SOUND) {
+            continue;
+        }
+        
+        // 对于rain音符，检查点击位置是否在矩形区域内
+        if (note.type == NoteType::RAIN) {
+            QRectF rainRect = getRainNoteRect(note);
+            if (rainRect.contains(pos)) {
+                // 对于rain音符，我们直接返回命中（不需要距离比较）
+                return i;
+            }
+        } else {
+            // 对于普通音符，使用原有的距离检测逻辑
+            QPointF notePos = noteToPos(note);
+            double dist = QLineF(notePos, pos).length();
+            if (dist < minDist) {
+                minDist = dist;
+                hit = i;
+            }
         }
     }
+    
     return hit;
 }
 
@@ -429,7 +476,7 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
         newNote.x = original.x + deltaX;
         // X 轴不吸附
 
-        if (original.isRain) {
+        if (original.type == NoteType::RAIN) {
             double oldEndTime = MathUtils::beatToMs(original.endBeatNum, original.endNumerator, original.endDenominator,
                                                     m_chartController->chart()->bpmList(),
                                                     m_chartController->chart()->meta().offset);
@@ -554,9 +601,34 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                     Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
                                   endNote.beatNum, endNote.numerator, endNote.denominator,
                                   startNote.x);
-                    m_chartController->addNote(rainNote);
+                    
+                    // 加强时间有效性检查：调用完整的Note::isValidRain()验证
+                    if (rainNote.isValidRain()) {
+                        m_chartController->addNote(rainNote);
+                    } else {
+                        // 显示错误提示
+                        QString errorMsg = tr("Invalid rain note: ");
+                        if (rainNote.endBeatNum < rainNote.beatNum) {
+                            errorMsg += tr("End time is earlier than start time");
+                        } else if (rainNote.endBeatNum == rainNote.beatNum) {
+                            double start = static_cast<double>(rainNote.numerator) / rainNote.denominator;
+                            double end = static_cast<double>(rainNote.endNumerator) / rainNote.endDenominator;
+                            if (end < start) {
+                                errorMsg += tr("End fraction is smaller than start fraction");
+                            }
+                        } else if (rainNote.x < 0 || rainNote.x > 512) {
+                            errorMsg += tr("X coordinate out of range (0-512)");
+                        } else {
+                            errorMsg += tr("Invalid parameters");
+                        }
+                        
+                        // 使用状态栏消息或QMessageBox显示错误
+                        QMessageBox::warning(this, tr("Invalid Rain Note"), errorMsg);
+                    }
                 } else {
-                    // 可选：提示用户结束时间不能早于开始时间
+                    // 提示用户结束时间不能早于开始时间
+                    QMessageBox::warning(this, tr("Invalid Rain Note"),
+                                        tr("End time must be later than start time"));
                 }
                 return;
             }

@@ -23,6 +23,16 @@ public:
     void drawRain(QPainter& painter, const Note& note, const QRectF& rect, bool selected) const;
 
 private:
+    // 计算描边宽度和颜色
+    void calculateOutline(const Note& note, bool selected, int& outlineWidth, QColor& outlineColor) const;
+    
+    // 绘制选中状态高亮
+    void drawSelectionHighlight(QPainter& painter, const QRectF& rect) const;
+    
+    // 验证矩形有效性
+    bool validateRect(const QRectF& rect) const;
+
+private:
     const Skin* m_skin;
     bool m_showColors;
     bool m_hyperfruitEnabled;

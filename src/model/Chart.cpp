@@ -71,8 +71,8 @@ void Chart::sortNotes() {
             if (aPos != bPos) return aPos < bPos;
             
             // 同一时间位置，按类型排序：普通/rain < 音效
-            if (a.type == 1 && b.type != 1) return false; // 音效排在后面
-            if (a.type != 1 && b.type == 1) return true;  // 非音效排在前面
+            if (a.type == NoteType::SOUND && b.type != NoteType::SOUND) return false; // 音效排在后面
+            if (a.type != NoteType::SOUND && b.type == NoteType::SOUND) return true;  // 非音效排在前面
             
             // 都是音效或都不是音效，则按x坐标排序（音效的x=-1被自动排在最后）
             return a.x < b.x;
