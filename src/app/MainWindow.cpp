@@ -184,11 +184,20 @@ void MainWindow::createMenus()
             const auto& notes = d->chartController->chart()->notes();
             QList<int> sorted = selected.values();
             std::sort(sorted.begin(), sorted.end(), std::greater<int>());
+            
+            // 收集要删除的音符
+            QVector<Note> notesToDelete;
             for (int idx : sorted) {
                 if (idx >= 0 && idx < notes.size()) {
-                    d->chartController->removeNote(notes[idx]);
+                    notesToDelete.append(notes[idx]);
                 }
             }
+            
+            // 使用批量删除命令
+            if (!notesToDelete.isEmpty()) {
+                d->chartController->removeNotes(notesToDelete);
+            }
+            
             d->selectionController->clearSelection();
             Logger::debug("Deleted selected notes via menu");
         }

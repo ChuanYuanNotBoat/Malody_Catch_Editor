@@ -1,6 +1,7 @@
 #include "MetaEditPanel.h"
 #include "controller/ChartController.h"
 #include "model/MetaData.h"
+#include "utils/Logger.h"
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QDoubleSpinBox>
@@ -85,8 +86,11 @@ void MetaEditPanel::setupUi()
 
 void MetaEditPanel::refreshMeta()
 {
+    Logger::info("MetaEditPanel::refreshMeta called");
     if (!m_chartController) return;
     const MetaData& meta = m_chartController->chart()->meta();
+    Logger::info(QString("MetaEditPanel::refreshMeta - title='%1', artist='%2', difficulty='%3', speed=%4")
+                  .arg(meta.title).arg(meta.artist).arg(meta.difficulty).arg(meta.speed));
     m_titleEdit->setText(meta.title);
     m_titleOrgEdit->setText(meta.titleOrg);
     m_artistEdit->setText(meta.artist);
@@ -124,6 +128,7 @@ void MetaEditPanel::setChartController(ChartController* controller)
 {
     m_chartController = controller;
     connect(m_chartController, &ChartController::chartChanged, this, &MetaEditPanel::refreshMeta);
+    connect(m_chartController, &ChartController::chartLoaded, this, &MetaEditPanel::refreshMeta);
     refreshMeta();
 }
 

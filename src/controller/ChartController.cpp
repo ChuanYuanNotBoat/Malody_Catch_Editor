@@ -35,6 +35,30 @@ private:
     Note m_note;
 };
 
+// 复合删除多个音符命令
+class ChartController::RemoveNotesCommand : public ChartController::ChartCommand {
+public:
+    RemoveNotesCommand(ChartController* controller, const QVector<Note>& notes)
+        : ChartCommand(controller, QString("Remove %1 Notes").arg(notes.size())), m_notes(notes) {}
+    
+    void undo() override {
+        for (const Note& note : m_notes) {
+            m_controller->m_chart.addNote(note);
+        }
+        m_controller->chartChanged();
+    }
+    
+    void redo() override {
+        for (const Note& note : m_notes) {
+            m_controller->m_chart.removeNote(note);
+        }
+        m_controller->chartChanged();
+    }
+    
+private:
+    QVector<Note> m_notes;
+};
+
 // 移动单个音符命令
 class ChartController::MoveNoteCommand : public ChartController::ChartCommand {
 public:
@@ -153,6 +177,13 @@ void ChartController::moveNotes(const QList<QPair<Note, Note>>& changes)
     m_undoStack->push(new MoveNotesCommand(this, changes));
 }
 
+void ChartController::removeNotes(const QVector<Note>& notes)
+{
+    if (notes.isEmpty()) return;
+    qDebug() << "[ChartController] removeNotes: pushing command for" << notes.size() << "notes";
+    m_undoStack->push(new RemoveNotesCommand(this, notes));
+}
+
 void ChartController::addBpm(const BpmEntry& bpm)
 {
     m_undoStack->push(new AddBpmCommand(this, bpm));
@@ -239,7 +270,7 @@ bool ChartController::loadChart(const QString& path)
             
             emit chartChanged();
             emit chartLoaded();
-            Logger::debug("ChartController::loadChart: Signals emitted");
+            Logger::info("ChartController::loadChart: Signals emitted");
             
             Logger::info(QString("ChartController::loadChart: Successfully loaded chart with %1 notes").arg(newChart.notes().size()));
             return true;
