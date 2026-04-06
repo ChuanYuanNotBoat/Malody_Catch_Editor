@@ -36,13 +36,15 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_hyperfruitEnabled(true),
       m_timeDivision(16),
       m_gridDivision(20),
-      m_gridSnap(true),
+      m_gridSnap(true),  // 恢复默认值，但拖动过程中不使用棚格吸附
       m_scrollPos(0),
       m_visibleRange(5000),
       m_isSelecting(false),
       m_isDragging(false),
       m_isPasting(false),
       m_isMovingSelection(false),
+      m_gridSnapBackup(false),
+      m_wasGridSnapEnabled(false),
       m_rainFirst(true)   // 新增：Rain 放置状态
 {
     setFocusPolicy(Qt::StrongFocus);
@@ -73,6 +75,7 @@ void ChartCanvas::setSelectionController(SelectionController* controller)
 {
     m_selectionController = controller;
     connect(controller, &SelectionController::selectionChanged, this, QOverload<>::of(&ChartCanvas::update));
+    connect(controller, &SelectionController::selectionChanged, this, &ChartCanvas::onSelectionChanged);
 }
 
 void ChartCanvas::setSkin(Skin* skin)
@@ -360,11 +363,27 @@ Note ChartCanvas::posToNote(const QPointF& pos) const
     MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
                         m_chartController->chart()->meta().offset, beat, num, den);
     int x = static_cast<int>(pos.x() / width() * 512);
-    if (m_gridSnap)
+    
+    // 创建新音符时可以使用棚格吸附
+    if (m_gridSnap) {
+        Logger::info(QString("[grid] before snap x = %1, gridDivision = %2").arg(x).arg(m_gridDivision));
         x = MathUtils::snapXToGrid(x, m_gridDivision);
+        Logger::info(QString("[grid] after snap x = %1").arg(x));
+    }
+    
+    // X轴边界限制（无吸附）
+    x = qBound(0, x, 512);
+    
     Note note(beat, num, den, x);
-    if (m_timeDivision > 0)
-        note = MathUtils::snapNoteToTime(note, m_timeDivision);
+    
+    // 应用时间分度吸附和边界检查
+    if (m_timeDivision > 0) {
+        note = MathUtils::snapNoteToTimeWithBoundary(note, m_timeDivision);
+    } else {
+        // 即使没有时间分度，也需要进行边界检查
+        note = MathUtils::snapNoteToTimeWithBoundary(note, 1);
+    }
+    
     return note;
 }
 
@@ -447,6 +466,12 @@ void ChartCanvas::beginMoveSelection(const QPointF& startPos)
     m_isMovingSelection = true;
     m_moveStartPos = startPos;
     m_originalSelectedIndices = m_selectionController->selectedIndices();
+    
+    // 保存并禁用棚格吸附
+    m_gridSnapBackup = m_gridSnap;
+    m_wasGridSnapEnabled = m_gridSnap;
+    m_gridSnap = false;
+    
     prepareMoveChanges();
 }
 
@@ -454,7 +479,7 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
 {
     QPointF delta = currentPos - m_moveStartPos;
     double deltaTime = delta.y() / height() * m_visibleRange;
-    int deltaX = static_cast<int>(delta.x() / width() * 512);
+    double deltaX = delta.x() / width() * 512;
 
     for (auto& change : m_moveChanges) {
         const Note& original = change.first;
@@ -470,11 +495,17 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
         newNote.beatNum = beat;
         newNote.numerator = num;
         newNote.denominator = den;
-        if (m_timeDivision > 0)
-            newNote = MathUtils::snapNoteToTime(newNote, m_timeDivision);
+        
+        // 应用时间分度吸附和边界检查
+        if (m_timeDivision > 0) {
+            newNote = MathUtils::snapNoteToTimeWithBoundary(newNote, m_timeDivision);
+        } else {
+            // 即使没有时间分度，也需要进行边界检查
+            newNote = MathUtils::snapNoteToTimeWithBoundary(newNote, 1); // 使用最小分度
+        }
 
-        newNote.x = original.x + deltaX;
-        // X 轴不吸附
+        // X轴边界限制（拖拽时无吸附）
+        newNote.x = qBound(0, qRound(original.x + deltaX), 512);
 
         if (original.type == NoteType::RAIN) {
             double oldEndTime = MathUtils::beatToMs(original.endBeatNum, original.endNumerator, original.endDenominator,
@@ -487,8 +518,10 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
             newNote.endBeatNum = endBeat;
             newNote.endNumerator = endNum;
             newNote.endDenominator = endDen;
+            
+            // 对Rain音符的结束时间也应用时间分度吸附和边界检查
             if (m_timeDivision > 0) {
-                Note temp = MathUtils::snapNoteToTime(newNote, m_timeDivision);
+                Note temp = MathUtils::snapNoteToTimeWithBoundary(newNote, m_timeDivision);
                 newNote.endBeatNum = temp.endBeatNum;
                 newNote.endNumerator = temp.endNumerator;
                 newNote.endDenominator = temp.endDenominator;
@@ -512,6 +545,11 @@ void ChartCanvas::endMoveSelection()
 {
     if (!m_isMovingSelection) return;
     m_isMovingSelection = false;
+
+    // 恢复棚格吸附状态
+    if (m_wasGridSnapEnabled) {
+        m_gridSnap = m_gridSnapBackup;
+    }
 
     QList<QPair<Note, Note>> finalChanges;
     for (const auto& change : m_moveChanges) {
@@ -637,36 +675,64 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
         // 4. 检查是否点击了音符
         int hitIndex = hitTestNote(event->pos());
         if (hitIndex != -1) {
-            // 处理选中/取消选中
-            if (m_selectionController->selectedIndices().contains(hitIndex))
-                m_selectionController->removeFromSelection(hitIndex);
-            else
-                m_selectionController->addToSelection(hitIndex);
-
-            // 删除模式：点击音符即删除该音符
+            // 删除模式：点击音符即删除该音符（最高优先级）
             if (m_currentMode == Delete) {
                 const auto& notes = m_chartController->chart()->notes();
                 if (hitIndex >= 0 && hitIndex < notes.size())
                     m_chartController->removeNote(notes[hitIndex]);
+                return;
             }
+            
+            // Ctrl+左键：多选
+            if (event->modifiers() & Qt::ControlModifier) {
+                // 处理选中/取消选中
+                if (m_selectionController->selectedIndices().contains(hitIndex))
+                    m_selectionController->removeFromSelection(hitIndex);
+                else
+                    m_selectionController->addToSelection(hitIndex);
+                return;
+            }
+            
+            // Shift+左键：整体移动选中的音符
+            if ((event->modifiers() & Qt::ShiftModifier) &&
+                m_selectionController &&
+                !m_selectionController->selectedIndices().isEmpty()) {
+                beginMoveSelection(event->pos());
+                return;
+            }
+            
+            // 普通左键：直接拖动
+            // 如果点击的音符未被选中，先选中它（并清除其他选中）
+            if (!m_selectionController->selectedIndices().contains(hitIndex)) {
+                m_selectionController->clearSelection();
+                m_selectionController->addToSelection(hitIndex);
+            }
+            
+            // 立即开始拖动
+            beginMoveSelection(event->pos());
             return;
         }
 
-        // 5. 点击空白：清除所有选中
+        // 5. Shift+左键：整体移动选中的音符（点击空白区域时）
+        if ((event->modifiers() & Qt::ShiftModifier) &&
+            m_selectionController &&
+            !m_selectionController->selectedIndices().isEmpty()) {
+            beginMoveSelection(event->pos());
+            return;
+        }
+        
+        // 6. 点击空白：清除所有选中
         m_selectionController->clearSelection();
 
-        // 6. 根据模式执行操作（仅在未点击音符时）
+        // 7. 根据模式执行操作（仅在未点击音符时）
         if (m_currentMode == PlaceNote) {
             Note note = posToNote(event->pos());
             m_chartController->addNote(note);
         }
         // Select/Delete 模式在空白处无操作
 
-        // 7. 移动选中的音符（如果有选中的音符且模式允许移动）
-        // 注意：PlaceNote 已经在上面添加音符，不会到这里；PlaceRain 和 Delete 已经 return
-        if (!m_selectionController->selectedIndices().isEmpty() && m_currentMode == Select) {
-            beginMoveSelection(event->pos());
-        }
+        // 8. 移动选中的音符功能已移除：点击空白区域只清除选中，不开始移动操作
+        // 注意：Shift+点击空白区域的功能已在上方实现
     } else if (event->button() == Qt::RightButton) {
         // 右键菜单预留
     }
@@ -679,7 +745,6 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent* event)
         update();
     } else if (m_isMovingSelection) {
         updateMoveSelection(event->pos());
-        m_moveStartPos = event->pos();
     } else if (m_isDragging) {
         if (m_isPasting) {
             QPointF delta = event->pos() - m_dragStart;
@@ -724,6 +789,28 @@ void ChartCanvas::wheelEvent(QWheelEvent* event)
         if (m_visibleRange < 100) m_visibleRange = 100;
         if (m_visibleRange > 60000) m_visibleRange = 60000;
         update();
+    }
+}
+
+void ChartCanvas::onSelectionChanged()
+{
+    if (!m_selectionController) return;
+    
+    QSet<int> selected = m_selectionController->selectedIndices();
+    
+    if (!selected.isEmpty()) {
+        // 有选中音符时，保存并禁用棚格吸附
+        if (!m_isMovingSelection) {
+            m_gridSnapBackup = m_gridSnap;
+            m_wasGridSnapEnabled = true;
+            m_gridSnap = false;
+        }
+    } else {
+        // 没有选中音符时，恢复棚格吸附状态
+        if (!m_isMovingSelection && m_wasGridSnapEnabled) {
+            m_gridSnap = m_gridSnapBackup;
+            m_wasGridSnapEnabled = false;
+        }
     }
 }
 

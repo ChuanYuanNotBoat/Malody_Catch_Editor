@@ -182,9 +182,11 @@ Note MathUtils::snapNoteToTime(const Note& note, int timeDivision)
 int MathUtils::snapXToGrid(int x, int gridDivision)
 {
     // gridDivision 是 X 轴分度，将 0-512 分成 gridDivision 格
-    int step = 512 / gridDivision;
-    int rounded = std::round(static_cast<double>(x) / step) * step;
-    return std::clamp(rounded, 0, 512);
+    double step = 512.0 / gridDivision;
+    double rounded = std::round(static_cast<double>(x) / step) * step;
+    // 四舍五入到最接近的整数，并限制在 0-512 范围内
+    int result = static_cast<int>(std::round(rounded));
+    return std::clamp(result, 0, 512);
 }
 
 bool MathUtils::isSameTime(const Note& a, const Note& b, int timeDivision)
@@ -195,4 +197,86 @@ bool MathUtils::isSameTime(const Note& a, const Note& b, int timeDivision)
     return sa.beatNum == sb.beatNum &&
            sa.numerator == sb.numerator &&
            sa.denominator == sb.denominator;
+}
+
+int MathUtils::snapXToBoundary(int x)
+{
+    // X轴边界吸附：当x接近边界时吸附到0或512
+    const int BOUNDARY_THRESHOLD = 20; // 距离边界的阈值
+    const int MIN_X = 0;
+    const int MAX_X = 512;
+    
+    // 先进行边界限制
+    if (x < MIN_X) return MIN_X;
+    if (x > MAX_X) return MAX_X;
+    
+    // 检查是否接近边界
+    if (x < BOUNDARY_THRESHOLD) {
+        Logger::debug(QString("[MathUtils::snapXToBoundary] x=%1 < threshold %2, snap to 0").arg(x).arg(BOUNDARY_THRESHOLD));
+        return MIN_X;
+    }
+    if (x > MAX_X - BOUNDARY_THRESHOLD) {
+        Logger::debug(QString("[MathUtils::snapXToBoundary] x=%1 > max-threshold %2, snap to 512").arg(x).arg(MAX_X - BOUNDARY_THRESHOLD));
+        return MAX_X;
+    }
+    
+    Logger::debug(QString("[MathUtils::snapXToBoundary] x=%1 not snapped").arg(x));
+    return x; // 不吸附
+}
+
+Note MathUtils::snapNoteToTimeWithBoundary(const Note& note, int timeDivision)
+{
+    // 先进行时间分度吸附
+    Note snapped = snapNoteToTime(note, timeDivision);
+    
+    // 检查时间边界：时间不能为负
+    // 计算总拍数
+    double beatPos = snapped.beatNum + static_cast<double>(snapped.numerator) / snapped.denominator;
+    if (beatPos < 0) {
+        // 吸附到最近的正时间分度
+        double divisionBeat = 1.0 / timeDivision;
+        double rounded = std::ceil(0.0 / divisionBeat) * divisionBeat; // 向上取整到最近的正分度
+        snapped.beatNum = static_cast<int>(rounded);
+        double frac = rounded - snapped.beatNum;
+        int num = static_cast<int>(std::round(frac * timeDivision));
+        int den = timeDivision;
+        int gcd = std::gcd(num, den);
+        if (gcd > 0) {
+            num /= gcd;
+            den /= gcd;
+        }
+        snapped.numerator = num;
+        snapped.denominator = den;
+    }
+    
+    // 对于Rain音符，还需要检查结束时间边界
+    if (note.isRain) {
+        double endBeatPos = snapped.endBeatNum + static_cast<double>(snapped.endNumerator) / snapped.endDenominator;
+        if (endBeatPos < 0) {
+            // 结束时间不能为负，吸附到最近的正时间分度
+            double divisionBeat = 1.0 / timeDivision;
+            double endRounded = std::ceil(0.0 / divisionBeat) * divisionBeat;
+            snapped.endBeatNum = static_cast<int>(endRounded);
+            double endFrac = endRounded - snapped.endBeatNum;
+            int endNum = static_cast<int>(std::round(endFrac * timeDivision));
+            int endDen = timeDivision;
+            int endGcd = std::gcd(endNum, endDen);
+            if (endGcd > 0) {
+                endNum /= endGcd;
+                endDen /= endGcd;
+            }
+            snapped.endNumerator = endNum;
+            snapped.endDenominator = endDen;
+        }
+        
+        // 确保结束时间不小于开始时间
+        if (endBeatPos < beatPos) {
+            // 如果结束时间小于开始时间，将结束时间设置为开始时间
+            snapped.endBeatNum = snapped.beatNum;
+            snapped.endNumerator = snapped.numerator;
+            snapped.endDenominator = snapped.denominator;
+        }
+    }
+    
+    return snapped;
 }
