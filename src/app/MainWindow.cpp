@@ -566,6 +566,11 @@ void MainWindow::createCentralArea()
     d->metaPanel->setChartController(d->chartController);
 
     connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
+    connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
+    connect(d->notePanel, &NoteEditPanel::gridSnapChanged, d->canvas, [this](bool on) {
+        Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));
+        this->d->canvas->setGridSnap(on);
+    });
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode) {
         d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode));
     });

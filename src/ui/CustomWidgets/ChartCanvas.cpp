@@ -106,12 +106,14 @@ void ChartCanvas::setTimeDivision(int division)
 
 void ChartCanvas::setGridDivision(int division)
 {
+    Logger::info(QString("[Grid] Division changed from %1 to %2").arg(m_gridDivision).arg(division));
     m_gridDivision = division;
     update();
 }
 
 void ChartCanvas::setGridSnap(bool snap)
 {
+    Logger::info(QString("[Grid] setGridSnap: %1").arg(snap));
     m_gridSnap = snap;
 }
 
@@ -321,6 +323,13 @@ void ChartCanvas::drawGrid(QPainter& painter)
         QRect rect = this->rect();
         Logger::debug("ChartCanvas::drawGrid - Got rect");
         
+        // 调整矩形以考虑左边距和右边距
+        int lmargin = leftMargin();
+        int rmargin = rightMargin();
+        if (lmargin > 0 || rmargin > 0) {
+            rect.adjust(lmargin, 0, -rmargin, 0);
+        }
+        
         const auto& bpmList = m_chartController->chart()->bpmList();
         Logger::debug(QString("ChartCanvas::drawGrid - Got BPM list with %1 entries").arg(bpmList.size()));
         
@@ -352,7 +361,11 @@ QPointF ChartCanvas::noteToPos(const Note& note) const
                                           m_chartController->chart()->bpmList(),
                                           m_chartController->chart()->meta().offset);
     double y = yPosFromTime(noteTime);
-    double x = note.x * width() / 512.0;
+    int lmargin = leftMargin();
+    int rmargin = rightMargin();
+    int availableWidth = width() - lmargin - rmargin;
+    if (availableWidth <= 0) availableWidth = 1;
+    double x = lmargin + note.x * availableWidth / 512.0;
     return QPointF(x, y);
 }
 
@@ -362,13 +375,21 @@ Note ChartCanvas::posToNote(const QPointF& pos) const
     int beat, num, den;
     MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
                         m_chartController->chart()->meta().offset, beat, num, den);
-    int x = static_cast<int>(pos.x() / width() * 512);
+    int lmargin = leftMargin();
+    int rmargin = rightMargin();
+    int availableWidth = width() - lmargin - rmargin;
+    if (availableWidth <= 0) availableWidth = 1;
+    int x = static_cast<int>((pos.x() - lmargin) / availableWidth * 512);
     
     // 创建新音符时可以使用棚格吸附
+    Logger::info(QString("[Grid] posToNote: m_gridSnap=%1, gridDivision=%2, raw x=%3")
+                 .arg(m_gridSnap).arg(m_gridDivision).arg(x));
     if (m_gridSnap) {
         Logger::info(QString("[grid] before snap x = %1, gridDivision = %2").arg(x).arg(m_gridDivision));
         x = MathUtils::snapXToGrid(x, m_gridDivision);
         Logger::info(QString("[grid] after snap x = %1").arg(x));
+    } else {
+        Logger::info(QString("[Grid] posToNote: 吸附未启用，跳过吸附"));
     }
     
     // X轴边界限制（无吸附）
@@ -468,9 +489,12 @@ void ChartCanvas::beginMoveSelection(const QPointF& startPos)
     m_originalSelectedIndices = m_selectionController->selectedIndices();
     
     // 保存并禁用棚格吸附
+    Logger::info(QString("[Grid] beginMoveSelection: 原始吸附状态=%1, 备份=%2")
+                 .arg(m_gridSnap).arg(m_gridSnapBackup));
     m_gridSnapBackup = m_gridSnap;
     m_wasGridSnapEnabled = m_gridSnap;
     m_gridSnap = false;
+    Logger::info(QString("[Grid] beginMoveSelection: 吸附已禁用，新状态=%1").arg(m_gridSnap));
     
     prepareMoveChanges();
 }
@@ -547,8 +571,14 @@ void ChartCanvas::endMoveSelection()
     m_isMovingSelection = false;
 
     // 恢复棚格吸附状态
+    Logger::info(QString("[Grid] endMoveSelection: wasGridSnapEnabled=%1, backup=%2")
+                 .arg(m_wasGridSnapEnabled).arg(m_gridSnapBackup));
     if (m_wasGridSnapEnabled) {
         m_gridSnap = m_gridSnapBackup;
+        m_wasGridSnapEnabled = false; // 重置标志，防止onSelectionChanged再次禁用
+        Logger::info(QString("[Grid] endMoveSelection: 吸附已恢复为%1").arg(m_gridSnap));
+    } else {
+        Logger::info("[Grid] endMoveSelection: 吸附未启用，不恢复");
     }
 
     QList<QPair<Note, Note>> finalChanges;
@@ -797,21 +827,9 @@ void ChartCanvas::onSelectionChanged()
     if (!m_selectionController) return;
     
     QSet<int> selected = m_selectionController->selectedIndices();
-    
-    if (!selected.isEmpty()) {
-        // 有选中音符时，保存并禁用棚格吸附
-        if (!m_isMovingSelection) {
-            m_gridSnapBackup = m_gridSnap;
-            m_wasGridSnapEnabled = true;
-            m_gridSnap = false;
-        }
-    } else {
-        // 没有选中音符时，恢复棚格吸附状态
-        if (!m_isMovingSelection && m_wasGridSnapEnabled) {
-            m_gridSnap = m_gridSnapBackup;
-            m_wasGridSnapEnabled = false;
-        }
-    }
+    Logger::info(QString("[Grid] onSelectionChanged: 选中数量=%1, 当前吸附状态=%2, m_isMovingSelection=%3")
+                 .arg(selected.size()).arg(m_gridSnap).arg(m_isMovingSelection));
+    // 不再禁用或恢复吸附状态，仅用于日志记录
 }
 
 void ChartCanvas::keyPressEvent(QKeyEvent* event)
@@ -831,4 +849,18 @@ void ChartCanvas::keyPressEvent(QKeyEvent* event)
         }
     }
     QWidget::keyPressEvent(event);
+}
+
+int ChartCanvas::leftMargin() const
+{
+    // 左边距 = 3个标准网格宽度（基于当前gridDivision）
+    // 标准网格宽度 = width() / m_gridDivision
+    if (m_gridDivision <= 0) return 0;
+    return (3 * width()) / m_gridDivision;
+}
+
+int ChartCanvas::rightMargin() const
+{
+    // 右边距 = 0（暂不预留）
+    return 0;
 }

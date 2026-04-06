@@ -12,7 +12,7 @@ QTextStream Logger::m_stream;
 QMutex Logger::m_mutex;
 QtMessageHandler Logger::m_previousHandler = nullptr;
 bool Logger::s_initialized = false;
-bool Logger::s_verbose = true;  // 默认输出详细日志
+bool Logger::s_verbose = false;  // 默认不输出详细日志，减少日志量
 QString Logger::s_logsDir = "logs";
 
 // JSON日志相关静态成员
@@ -122,6 +122,10 @@ bool Logger::isVerbose() {
 
 void Logger::log(Level level, const QString& message) {
     QMutexLocker locker(&m_mutex);
+    // 若非详细模式且为调试级别，则跳过
+    if (level == Debug && !s_verbose) {
+        return;
+    }
     if (!m_file.isOpen()) {
         qDebug() << message;
         return;
