@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QDebug>
+#include <QDateTime>
 
 bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
 {
@@ -212,19 +213,73 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
             Logger::info(QString("ChartIO::load - meta key '%1' = '%2'").arg(it.key()).arg(it.value().toString()));
         }
         MetaData& meta = outChart.meta();
-        meta.title = metaObj.value("title").toString();
-        meta.titleOrg = metaObj.value("title_org").toString();
-        meta.artist = metaObj.value("artist").toString();
-        meta.artistOrg = metaObj.value("artist_org").toString();
-        meta.difficulty = metaObj.value("difficulty").toString();
-        meta.chartAuthor = metaObj.value("chart_author").toString();
-        meta.audioFile = metaObj.value("audio").toString();
+        
+        // 支持嵌套 song 对象
+        QJsonObject songObj;
+        if (metaObj.contains("song") && metaObj["song"].isObject()) {
+            songObj = metaObj["song"].toObject();
+            meta.title = songObj.value("title").toString();
+            meta.titleOrg = songObj.value("titleorg").toString();
+            meta.artist = songObj.value("artist").toString();
+            // artistOrg 可能不存在，留空
+        } else {
+            // 回退到平面字段
+            meta.title = metaObj.value("title").toString();
+            meta.titleOrg = metaObj.value("title_org").toString();
+            meta.artist = metaObj.value("artist").toString();
+            meta.artistOrg = metaObj.value("artist_org").toString();
+        }
+        
+        meta.chartAuthor = metaObj.value("creator").toString();
+        meta.difficulty = metaObj.value("version").toString();
         meta.backgroundFile = metaObj.value("background").toString();
-        meta.previewTime = metaObj.value("preview_time").toInt();
-        meta.firstBpm = metaObj.value("bpm").toDouble();
+        
+        // 读取 mode_ext.speed
+        if (metaObj.contains("mode_ext") && metaObj["mode_ext"].isObject()) {
+            QJsonObject modeExtObj = metaObj["mode_ext"].toObject();
+            meta.speed = modeExtObj.value("speed").toInt();
+        } else {
+            meta.speed = metaObj.value("speed").toInt();
+        }
+        
+        // 音频文件：优先使用 meta.audio，否则从 note 数组中寻找 sound 字段
+        meta.audioFile = metaObj.value("audio").toString();
+        if (meta.audioFile.isEmpty() && root.contains("note") && root["note"].isArray()) {
+            QJsonArray noteArray = root["note"].toArray();
+            for (const QJsonValue& noteVal : noteArray) {
+                QJsonObject noteObj = noteVal.toObject();
+                if (noteObj.contains("sound") && noteObj["sound"].isString()) {
+                    meta.audioFile = noteObj["sound"].toString();
+                    break;
+                }
+            }
+        }
+        
+        // 预览时间和偏移量
+        meta.previewTime = metaObj.value("preview").toInt(); // 字段名是 preview 不是 preview_time
         meta.offset = metaObj.value("offset").toInt();
-        meta.speed = metaObj.value("speed").toInt();
-        Logger::info(QString("ChartIO::load - Meta loaded: title=%1, artist=%2, difficulty=%3").arg(meta.title).arg(meta.artist).arg(meta.difficulty));
+        
+        // 如果 offset 为0，尝试从 note 数组中的 sound 音符读取 offset 字段
+        if (meta.offset == 0 && root.contains("note") && root["note"].isArray()) {
+            QJsonArray noteArray = root["note"].toArray();
+            for (const QJsonValue& noteVal : noteArray) {
+                QJsonObject noteObj = noteVal.toObject();
+                if (noteObj.contains("type") && noteObj["type"].toInt() == 1 && noteObj.contains("offset")) {
+                    meta.offset = noteObj["offset"].toInt();
+                    break;
+                }
+            }
+        }
+        
+        // 第一个 BPM 从 time 数组读取
+        if (!outChart.bpmList().empty()) {
+            meta.firstBpm = outChart.bpmList()[0].bpm;
+        } else {
+            meta.firstBpm = metaObj.value("bpm").toDouble();
+        }
+        
+        Logger::info(QString("ChartIO::load - Meta loaded: title=%1, artist=%2, difficulty=%3, speed=%4, firstBpm=%5")
+                     .arg(meta.title).arg(meta.artist).arg(meta.difficulty).arg(meta.speed).arg(meta.firstBpm));
     } else {
         Logger::info("ChartIO::load - No 'meta' object found in file");
     }
@@ -244,22 +299,51 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
     
     QJsonObject root;
 
-    // 保存 meta
+    // 保存 meta（使用嵌套结构以匹配示例格式）
     QJsonObject metaObj;
-    metaObj["title"] = chart.meta().title;
-    metaObj["title_org"] = chart.meta().titleOrg;
-    metaObj["artist"] = chart.meta().artist;
-    metaObj["artist_org"] = chart.meta().artistOrg;
-    metaObj["difficulty"] = chart.meta().difficulty;
-    metaObj["chart_author"] = chart.meta().chartAuthor;
-    metaObj["audio"] = chart.meta().audioFile;
+    metaObj["$ver"] = 0;
+    metaObj["creator"] = chart.meta().chartAuthor;
     metaObj["background"] = chart.meta().backgroundFile;
-    metaObj["preview_time"] = chart.meta().previewTime;
-    metaObj["bpm"] = chart.meta().firstBpm;
-    metaObj["offset"] = chart.meta().offset;
-    metaObj["speed"] = chart.meta().speed;
+    metaObj["version"] = chart.meta().difficulty;
+    metaObj["id"] = 0; // 暂未存储歌曲ID，用0代替
+    metaObj["mode"] = 3; // Catch模式
+    metaObj["time"] = QDateTime::currentSecsSinceEpoch(); // 当前时间戳
+    
+    // song 子对象
+    QJsonObject songObj;
+    songObj["title"] = chart.meta().title;
+    songObj["artist"] = chart.meta().artist;
+    songObj["id"] = 0; // 暂未存储歌曲ID
+    songObj["titleorg"] = chart.meta().titleOrg;
+    metaObj["song"] = songObj;
+    
+    // mode_ext 子对象
+    QJsonObject modeExtObj;
+    modeExtObj["speed"] = chart.meta().speed;
+    metaObj["mode_ext"] = modeExtObj;
+    
+    // 注意：示例谱面中没有 audio、preview_time、offset、bpm 字段
+    // 这些信息可能通过其他方式存储（例如 note 数组中的 sound 字段）
+    // 如果需要保留，可以额外添加平面字段，但为了兼容性暂时省略
+    // 如果 chart.meta() 中有这些值，可以选择性添加
+    if (!chart.meta().audioFile.isEmpty()) {
+        metaObj["audio"] = chart.meta().audioFile;
+    }
+    if (chart.meta().previewTime != 0) {
+        metaObj["preview"] = chart.meta().previewTime; // 字段名是 preview
+    }
+    if (chart.meta().offset != 0) {
+        metaObj["offset"] = chart.meta().offset;
+    }
+    // firstBpm 已经通过 time 数组存储，但也可以保存在 meta.bpm 中
+    // 为了兼容性，可以同时保存
+    if (chart.meta().firstBpm > 0) {
+        metaObj["bpm"] = chart.meta().firstBpm;
+    }
+    
     root["meta"] = metaObj;
-    Logger::debug(QString("ChartIO::save - Meta saved: title=%1, difficulty=%2").arg(chart.meta().title).arg(chart.meta().difficulty));
+    Logger::debug(QString("ChartIO::save - Meta saved: title=%1, difficulty=%2, speed=%3")
+                  .arg(chart.meta().title).arg(chart.meta().difficulty).arg(chart.meta().speed));
 
     // 保存 time 数组
     QJsonArray timeArray;
