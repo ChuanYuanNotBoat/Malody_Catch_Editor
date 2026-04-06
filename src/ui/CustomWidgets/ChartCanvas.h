@@ -49,6 +49,7 @@ private:
     Note posToNote(const QPointF& pos) const;
     double yPosFromTime(double timeMs) const;
     int hitTestNote(const QPointF& pos) const;          // 返回音符索引，未命中返回 -1
+    QRectF getRainNoteRect(const Note& note) const;     // 计算rain音符的矩形区域
 
     void beginMoveSelection(const QPointF& startPos);   // 开始移动选中音符
     void updateMoveSelection(const QPointF& currentPos); // 更新移动偏移

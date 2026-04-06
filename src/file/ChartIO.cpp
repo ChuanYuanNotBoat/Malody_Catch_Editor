@@ -282,7 +282,7 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
         beatArr.append(note.denominator);
         obj["beat"] = beatArr;
 
-        if (note.type == 1) {
+        if (note.type == NoteType::SOUND) {
             // 音效音符
             obj["type"] = 1;
             obj["sound"] = note.sound;
@@ -290,7 +290,7 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
             obj["offset"] = note.offset;
             soundNoteCount++;
             Logger::debug(QString("ChartIO::save - Sound note: [%1,%2,%3], sound=%4").arg(note.beatNum).arg(note.numerator).arg(note.denominator).arg(note.sound));
-        } else if (note.type == 3) {
+        } else if (note.type == NoteType::RAIN) {
             // Rain 音符
             obj["type"] = 3;
             obj["x"] = note.x;
