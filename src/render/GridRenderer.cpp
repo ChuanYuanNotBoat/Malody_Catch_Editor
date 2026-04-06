@@ -13,10 +13,10 @@ void GridRenderer::drawGrid(QPainter& painter, const QRect& rect, int xDivisions
         Logger::debug("GridRenderer::drawGrid - Starting");
         
         // X 轴网格
-        int stepX = rect.width() / xDivisions;
+        double stepX = static_cast<double>(rect.width()) / xDivisions;
         painter.setPen(QPen(Qt::lightGray, 1, Qt::DotLine));
         for (int i = 1; i < xDivisions; ++i) {
-            int x = rect.left() + i * stepX;
+            int x = rect.left() + static_cast<int>(std::round(i * stepX));
             painter.drawLine(x, rect.top(), x, rect.bottom());
         }
         Logger::debug("GridRenderer::drawGrid - X axis grid drawn");

@@ -88,7 +88,14 @@ private:
     QList<QPair<Note, Note>> m_moveChanges;    // 原始音符与当前临时音符的映射
     QSet<int> m_originalSelectedIndices;       // 拖动开始时的选中索引集
 
+    // 棚格吸附备份状态
+    bool m_gridSnapBackup;                     // 备份的棚格吸附状态
+    bool m_wasGridSnapEnabled;                 // 移动前棚格吸附是否启用
+
     bool m_rainFirst;
     QPointF m_rainStartPos;
+
+private slots:
+    void onSelectionChanged();                 // 选中状态变化处理
 
 };
