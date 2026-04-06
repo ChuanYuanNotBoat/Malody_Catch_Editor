@@ -1,6 +1,7 @@
 #include "NoteEditPanel.h"
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
+#include "utils/Logger.h"
 #include <QtGlobal>
 #include <QButtonGroup>
 #include <QRadioButton>
@@ -17,7 +18,7 @@
 #include <QDebug>
 
 NoteEditPanel::NoteEditPanel(QWidget* parent)
-    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0)
+    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_gridDivisionSpin(nullptr), m_currentMode(0)
 {
     setupUi();
 }
@@ -109,12 +110,13 @@ void NoteEditPanel::onGridSettingsClicked()
 
 void NoteEditPanel::onGridDivisionChanged(int value)
 {
-    // 可通知画布
+    emit gridDivisionChanged(value);
 }
 
 void NoteEditPanel::onGridSnapToggled(bool on)
 {
-    // 可通知画布
+    Logger::info(QString("[Grid] NoteEditPanel::onGridSnapToggled: %1").arg(on));
+    emit gridSnapChanged(on);
 }
 
 void NoteEditPanel::onTimeDivisionChanged(int index)

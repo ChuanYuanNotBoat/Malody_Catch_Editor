@@ -95,6 +95,9 @@ private:
     bool m_rainFirst;
     QPointF m_rainStartPos;
 
+    int leftMargin() const;
+    int rightMargin() const;
+
 private slots:
     void onSelectionChanged();                 // 选中状态变化处理
 
