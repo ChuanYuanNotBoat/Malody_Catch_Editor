@@ -262,7 +262,11 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
                 double yEnd = yPosFromTime(visibleEnd);
                 double heightPx = yEnd - yStart;
                 if (heightPx <= 0) continue;
-                QRectF rainRect(0, yStart, width(), heightPx);
+                int lmargin = leftMargin();
+                int rmargin = rightMargin();
+                double rainWidth = width() - lmargin - rmargin;
+                if (rainWidth <= 0) rainWidth = 1;
+                QRectF rainRect(lmargin, yStart, rainWidth, heightPx);
                 bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
                 m_noteRenderer->drawRain(painter, note, rainRect, selected);
                 renderedNotesCount++;
@@ -425,11 +429,14 @@ QRectF ChartCanvas::getRainNoteRect(const Note& note) const
     double yStart = yPosFromTime(startTime);
     double yEnd = yPosFromTime(endTime);
     
-    // rain音符覆盖整个画布宽度（从x=0到width()）
-    double rainWidth = width();
-    
-    // 创建矩形（从x=0到width()，覆盖整个宽度）
-    return QRectF(0, yStart, rainWidth, yEnd - yStart);
+    // rain音符覆盖安全区域宽度（从左边界到右边界）
+    int lmargin = leftMargin();
+    int rmargin = rightMargin();
+    double rainWidth = width() - lmargin - rmargin;
+    if (rainWidth <= 0) rainWidth = 1;
+
+    // 创建矩形（从左边界开始，覆盖安全区域宽度）
+    return QRectF(lmargin, yStart, rainWidth, yEnd - yStart);
 }
 
 int ChartCanvas::hitTestNote(const QPointF& pos) const
@@ -602,6 +609,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
             if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40) {
                 for (const Note& note : m_pasteNotes) {
                     Note newNote = note;
+                    newNote.id = Note::generateId();  // 为新粘贴的音符生成唯一ID
                     newNote.x += static_cast<int>(m_pasteOffset.x() / width() * 512);
                     double timeDelta = m_pasteOffset.y() / height() * m_visibleRange;
                     double newTime = MathUtils::beatToMs(newNote.beatNum, newNote.numerator, newNote.denominator,
@@ -708,8 +716,11 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
             // 删除模式：点击音符即删除该音符（最高优先级）
             if (m_currentMode == Delete) {
                 const auto& notes = m_chartController->chart()->notes();
-                if (hitIndex >= 0 && hitIndex < notes.size())
-                    m_chartController->removeNote(notes[hitIndex]);
+                if (hitIndex >= 0 && hitIndex < notes.size()) {
+                    QVector<Note> noteToDelete;
+                    noteToDelete.append(notes[hitIndex]);
+                    m_chartController->removeNotes(noteToDelete);
+                }
                 return;
             }
             
@@ -840,11 +851,20 @@ void ChartCanvas::keyPressEvent(QKeyEvent* event)
             const auto& notes = m_chartController->chart()->notes();
             QList<int> sorted = selected.values();
             std::sort(sorted.begin(), sorted.end(), std::greater<int>());
+            
+            // 收集要删除的音符
+            QVector<Note> notesToDelete;
             for (int idx : sorted) {
                 if (idx >= 0 && idx < notes.size()) {
-                    m_chartController->removeNote(notes[idx]);
+                    notesToDelete.append(notes[idx]);
                 }
             }
+            
+            // 使用批量删除命令
+            if (!notesToDelete.isEmpty()) {
+                m_chartController->removeNotes(notesToDelete);
+            }
+            
             m_selectionController->clearSelection();
         }
     }

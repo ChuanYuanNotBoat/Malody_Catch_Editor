@@ -44,6 +44,8 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
 
     // 读取 time 数组（BPM 表）
     int bpmCount = 0;
+    // 清空现有的 BPM 列表（包括 clear() 添加的默认条目）
+    outChart.bpmList().clear();
     if (root.contains("time") && root["time"].isArray()) {
         QJsonArray timeArray = root["time"].toArray();
         Logger::debug(QString("ChartIO::load - Found 'time' array with %1 entries").arg(timeArray.size()));
@@ -62,6 +64,11 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
         Logger::info(QString("ChartIO::load - Loaded %1 BPM entries").arg(bpmCount));
     } else {
         Logger::debug("ChartIO::load - No 'time' array found in file");
+    }
+    // 如果文件中没有 BPM 条目，确保至少有一个默认 BPM 条目
+    if (bpmCount == 0) {
+        outChart.addBpm(BpmEntry(0, 1, 1, 120.0));
+        Logger::debug("ChartIO::load - Added default BPM entry (120.0)");
     }
 
     // 读取 note 数组
@@ -200,6 +207,10 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
     // 读取 meta（如果有）
     if (root.contains("meta") && root["meta"].isObject()) {
         QJsonObject metaObj = root["meta"].toObject();
+        // 调试：记录所有meta键
+        for (auto it = metaObj.begin(); it != metaObj.end(); ++it) {
+            Logger::info(QString("ChartIO::load - meta key '%1' = '%2'").arg(it.key()).arg(it.value().toString()));
+        }
         MetaData& meta = outChart.meta();
         meta.title = metaObj.value("title").toString();
         meta.titleOrg = metaObj.value("title_org").toString();
@@ -213,9 +224,9 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
         meta.firstBpm = metaObj.value("bpm").toDouble();
         meta.offset = metaObj.value("offset").toInt();
         meta.speed = metaObj.value("speed").toInt();
-        Logger::debug(QString("ChartIO::load - Meta loaded: title=%1, artist=%2, difficulty=%3").arg(meta.title).arg(meta.artist).arg(meta.difficulty));
+        Logger::info(QString("ChartIO::load - Meta loaded: title=%1, artist=%2, difficulty=%3").arg(meta.title).arg(meta.artist).arg(meta.difficulty));
     } else {
-        Logger::debug("ChartIO::load - No 'meta' object found in file");
+        Logger::info("ChartIO::load - No 'meta' object found in file");
     }
 
     outChart.sortNotes();
