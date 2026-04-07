@@ -62,7 +62,7 @@ static QColor getNoteColor(int denominator, int numerator)
     case 16: return QColor(255, 215, 0);     // 金色
     case 24: return QColor(0, 255, 0);       // 绿色
     case 32: return QColor(255, 215, 0);     // 金色
-    default: return QColor(173, 216, 230);   // 默认浅蓝
+    default: return QColor(255, 0, 0);       // 默认红色（非常规分度）
     }
 }
 

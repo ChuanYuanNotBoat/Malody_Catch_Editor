@@ -37,8 +37,8 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_timeDivision(16),
       m_gridDivision(20),
       m_gridSnap(true),  // 恢复默认值，但拖动过程中不使用棚格吸附
-      m_scrollPos(0),
-      m_visibleRange(5000),
+      m_scrollBeat(0),
+      m_visibleBeatRange(10), // 初始可见范围 10 拍
       m_isSelecting(false),
       m_isDragging(false),
       m_isPasting(false),
@@ -120,7 +120,13 @@ void ChartCanvas::setGridSnap(bool snap)
 
 void ChartCanvas::setScrollPos(double timeMs)
 {
-    m_scrollPos = timeMs;
+    // 保留毫秒值用于向后兼容（暂时）
+    // 转换为拍号
+    int beatNum, numerator, denominator;
+    MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
+                        m_chartController->chart()->meta().offset,
+                        beatNum, numerator, denominator);
+    m_scrollBeat = beatNum + static_cast<double>(numerator) / denominator;
     update();
 }
 
@@ -216,27 +222,21 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         return;
     }
 
-    double startTime = m_scrollPos;
-    double endTime = startTime + m_visibleRange;
+    double startBeat = m_scrollBeat;
+    double endBeat = startBeat + m_visibleBeatRange;
 
-    try {
-        Logger::debug("ChartCanvas::paintEvent - Getting notes and BPM list");
-        const auto& notes = m_chartController->chart()->notes();
-        const auto& bpmList = m_chartController->chart()->bpmList();
-        int offset = m_chartController->chart()->meta().offset;
-        
-        Logger::debug(QString("ChartCanvas::paintEvent - Chart has %1 notes, %2 BPM entries").arg(notes.size()).arg(bpmList.size()));
-    } catch (const std::exception& e) {
-        Logger::error(QString("ChartCanvas::paintEvent - Exception getting chart data: %1").arg(e.what()));
-        return;
-    } catch (...) {
-        Logger::error("ChartCanvas::paintEvent - Unknown exception getting chart data");
-        return;
-    }
     
     const auto& notes = m_chartController->chart()->notes();
     const auto& bpmList = m_chartController->chart()->bpmList();
     int offset = m_chartController->chart()->meta().offset;
+
+    // 将可见节拍范围转换为毫秒用于渲染
+    int startBeatNum, startNum, startDen;
+    MathUtils::floatToBeat(startBeat, startBeatNum, startNum, startDen);
+    double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmList, offset);
+    int endBeatNum, endNum, endDen;
+    MathUtils::floatToBeat(endBeat, endBeatNum, endNum, endDen);
+    double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
 
     if (m_hyperfruitEnabled && !bpmList.isEmpty()) {
         QSet<int> hyperSet = m_hyperfruitDetector->detect(notes);
@@ -342,8 +342,15 @@ void ChartCanvas::drawGrid(QPainter& painter)
         Logger::debug(QString("ChartCanvas::drawGrid - Got offset: %1").arg(offset));
         
         Logger::debug("ChartCanvas::drawGrid - Calling m_gridRenderer->drawGrid");
+        // 将节拍转换为毫秒以兼容现有 GridRenderer
+        int startBeatNum, startNum, startDen;
+        MathUtils::floatToBeat(m_scrollBeat, startBeatNum, startNum, startDen);
+        double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmList, offset);
+        int endBeatNum, endNum, endDen;
+        MathUtils::floatToBeat(m_scrollBeat + m_visibleBeatRange, endBeatNum, endNum, endDen);
+        double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
         m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
-                                 m_scrollPos, m_scrollPos + m_visibleRange,
+                                 startTime, endTime,
                                  m_timeDivision, bpmList, offset);
         Logger::debug("ChartCanvas::drawGrid - m_gridRenderer->drawGrid completed");
     } catch (const std::exception& e) {
@@ -357,7 +364,25 @@ void ChartCanvas::drawGrid(QPainter& painter)
 
 double ChartCanvas::yPosFromTime(double timeMs) const
 {
-    return (timeMs - m_scrollPos) / m_visibleRange * height();
+    // 将毫秒转换为拍号，然后调用 beatToY
+    int beatNum, numerator, denominator;
+    MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
+                        m_chartController->chart()->meta().offset,
+                        beatNum, numerator, denominator);
+    double beat = beatNum + static_cast<double>(numerator) / denominator;
+    return beatToY(beat);
+}
+
+double ChartCanvas::beatToY(double beat) const
+{
+    if (m_visibleBeatRange <= 0) return 0;
+    return (beat - m_scrollBeat) / m_visibleBeatRange * height();
+}
+
+double ChartCanvas::yToBeat(double y) const
+{
+    if (height() <= 0) return m_scrollBeat;
+    return m_scrollBeat + (y / height()) * m_visibleBeatRange;
 }
 
 QPointF ChartCanvas::noteToPos(const Note& note) const
@@ -376,10 +401,9 @@ QPointF ChartCanvas::noteToPos(const Note& note) const
 
 Note ChartCanvas::posToNote(const QPointF& pos) const
 {
-    double timeMs = m_scrollPos + (pos.y() / height()) * m_visibleRange;
-    int beat, num, den;
-    MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
-                        m_chartController->chart()->meta().offset, beat, num, den);
+    double beat = yToBeat(pos.y());
+    int beatNum, num, den;
+    MathUtils::floatToBeat(beat, beatNum, num, den);
     int lmargin = leftMargin();
     int rmargin = rightMargin();
     int availableWidth = width() - lmargin - rmargin;
@@ -515,7 +539,8 @@ void ChartCanvas::beginMoveSelection(const QPointF& startPos, int referenceIndex
 void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
 {
     QPointF delta = currentPos - m_moveStartPos;
-    double deltaTime = delta.y() / height() * m_visibleRange;
+    // 直接使用拍号偏移量，避免毫秒转换
+    double deltaBeat = (delta.y() / height()) * m_visibleBeatRange;
     double deltaX = delta.x() / width() * 512;
 
     // 1. 确定参考音符
@@ -530,62 +555,44 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
         }
     }
 
-    // 2. 获取参考音符的原始时间
+    // 2. 获取参考音符的原始拍号
     const Note& refOriginal = m_chartController->chart()->notes()[refIndex];
-    double refOldTime = MathUtils::beatToMs(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator,
-                                            m_chartController->chart()->bpmList(),
-                                            m_chartController->chart()->meta().offset);
-    double refNewTime = refOldTime + deltaTime;
-    // 将新时间转换回拍子表示（用于吸附）
-    int beat, num, den;
-    MathUtils::msToBeat(refNewTime, m_chartController->chart()->bpmList(),
-                        m_chartController->chart()->meta().offset, beat, num, den);
+    double refOriginalBeat = MathUtils::beatToFloat(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator);
+    double refNewBeat = refOriginalBeat + deltaBeat;
+    
+    // 将新拍号转换回Note以便吸附
     Note refNote = refOriginal;
-    refNote.beatNum = beat;
-    refNote.numerator = num;
-    refNote.denominator = den;
+    MathUtils::floatToBeat(refNewBeat, refNote.beatNum, refNote.numerator, refNote.denominator);
+    
     // 吸附参考音符
     if (m_timeDivision > 0) {
         refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, m_timeDivision);
     } else {
         refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, 1);
     }
-    // 计算吸附后的时间
-    double refSnappedTime = MathUtils::beatToMs(refNote.beatNum, refNote.numerator, refNote.denominator,
-                                                m_chartController->chart()->bpmList(),
-                                                m_chartController->chart()->meta().offset);
+    
+    // 计算吸附后的拍号
+    double refSnappedBeat = MathUtils::beatToFloat(refNote.beatNum, refNote.numerator, refNote.denominator);
     // 吸附偏移量（整体偏移）
-    double snapOffsetTime = refSnappedTime - refNewTime;
+    double snapOffsetBeat = refSnappedBeat - refNewBeat;
 
     // 3. 遍历所有选中的音符，应用整体偏移
     for (auto& change : m_moveChanges) {
         const Note& original = change.first;
         Note& newNote = change.second;
         
-        // 计算原始时间
-        double oldTime = MathUtils::beatToMs(original.beatNum, original.numerator, original.denominator,
-                                             m_chartController->chart()->bpmList(),
-                                             m_chartController->chart()->meta().offset);
+        // 计算原始拍号
+        double originalBeat = MathUtils::beatToFloat(original.beatNum, original.numerator, original.denominator);
         // 应用整体偏移
-        double newTime = oldTime + deltaTime + snapOffsetTime;
+        double newBeat = originalBeat + deltaBeat + snapOffsetBeat;
         
         // 转换回拍子
-        int nbeat, nnum, nden;
-        MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
-                            m_chartController->chart()->meta().offset, nbeat, nnum, nden);
-        newNote.beatNum = nbeat;
-        newNote.numerator = nnum;
-        newNote.denominator = nden;
+        MathUtils::floatToBeat(newBeat, newNote.beatNum, newNote.numerator, newNote.denominator);
         
         // 边界检查（只检查时间是否为负，不进行吸附）
-        if (newTime < 0) {
-            // 如果时间为负，将整个组向上移动（实际上这种情况不应发生，因为参考音符已经吸附并保证了边界）
-            // 但为了安全，强制设置为0
-            MathUtils::msToBeat(0, m_chartController->chart()->bpmList(),
-                                m_chartController->chart()->meta().offset, nbeat, nnum, nden);
-            newNote.beatNum = nbeat;
-            newNote.numerator = nnum;
-            newNote.denominator = nden;
+        if (newBeat < 0) {
+            // 如果拍号为负，强制设置为0
+            MathUtils::floatToBeat(0, newNote.beatNum, newNote.numerator, newNote.denominator);
         }
         
         // X轴边界限制（拖拽时无吸附）
@@ -593,18 +600,11 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
         
         // 处理Rain音符的结束时间
         if (original.type == NoteType::RAIN) {
-            double oldEndTime = MathUtils::beatToMs(original.endBeatNum, original.endNumerator, original.endDenominator,
-                                                    m_chartController->chart()->bpmList(),
-                                                    m_chartController->chart()->meta().offset);
-            double newEndTime = oldEndTime + deltaTime + snapOffsetTime;
-            int endBeat, endNum, endDen;
-            MathUtils::msToBeat(newEndTime, m_chartController->chart()->bpmList(),
-                                m_chartController->chart()->meta().offset, endBeat, endNum, endDen);
-            newNote.endBeatNum = endBeat;
-            newNote.endNumerator = endNum;
-            newNote.endDenominator = endDen;
+            double originalEndBeat = MathUtils::beatToFloat(original.endBeatNum, original.endNumerator, original.endDenominator);
+            double newEndBeat = originalEndBeat + deltaBeat + snapOffsetBeat;
+            MathUtils::floatToBeat(newEndBeat, newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
             // 确保结束时间不小于开始时间
-            if (newEndTime < newTime) {
+            if (newEndBeat < newBeat) {
                 newNote.endBeatNum = newNote.beatNum;
                 newNote.endNumerator = newNote.numerator;
                 newNote.endDenominator = newNote.denominator;
@@ -660,11 +660,23 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
         if (m_isPasting) {
             // 确认粘贴区域
             if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40) {
+                // 将节拍范围转换为毫秒以计算时间偏移
+                const auto& bpmList = m_chartController->chart()->bpmList();
+                int offset = m_chartController->chart()->meta().offset;
+                double startBeat = m_scrollBeat;
+                double endBeat = startBeat + m_visibleBeatRange;
+                int startBeatNum, startNum, startDen;
+                MathUtils::floatToBeat(startBeat, startBeatNum, startNum, startDen);
+                double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmList, offset);
+                int endBeatNum, endNum, endDen;
+                MathUtils::floatToBeat(endBeat, endBeatNum, endNum, endDen);
+                double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
+                double visibleRangeMs = endTime - startTime;
                 for (const Note& note : m_pasteNotes) {
                     Note newNote = note;
                     newNote.id = Note::generateId();  // 为新粘贴的音符生成唯一ID
                     newNote.x += static_cast<int>(m_pasteOffset.x() / width() * 512);
-                    double timeDelta = m_pasteOffset.y() / height() * m_visibleRange;
+                    double timeDelta = m_pasteOffset.y() / height() * visibleRangeMs;
                     double newTime = MathUtils::beatToMs(newNote.beatNum, newNote.numerator, newNote.denominator,
                                                          m_chartController->chart()->bpmList(),
                                                          m_chartController->chart()->meta().offset) + timeDelta;
@@ -855,19 +867,19 @@ void ChartCanvas::wheelEvent(QWheelEvent* event)
 {
     double delta = event->angleDelta().y();
     if (delta != 0) {
-        double step = m_visibleRange * 0.1;
-        double newPos = m_scrollPos - (delta / 120.0) * step;
+        double step = m_visibleBeatRange * 0.1;
+        double newPos = m_scrollBeat - (delta / 120.0) * step;
         if (newPos < 0) newPos = 0;
-        m_scrollPos = newPos;
+        m_scrollBeat = newPos;
         update();
     }
     if (event->angleDelta().x() != 0) {
         double deltaX = event->angleDelta().x();
         double factor = 1.0 + deltaX / 1200.0;
         if (factor < 0.1) factor = 0.1;
-        m_visibleRange /= factor;
-        if (m_visibleRange < 100) m_visibleRange = 100;
-        if (m_visibleRange > 60000) m_visibleRange = 60000;
+        m_visibleBeatRange /= factor;
+        if (m_visibleBeatRange < 0.1) m_visibleBeatRange = 0.1;
+        if (m_visibleBeatRange > 1000) m_visibleBeatRange = 1000;
         update();
     }
 }

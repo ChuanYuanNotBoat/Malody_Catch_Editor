@@ -179,6 +179,71 @@ Note MathUtils::snapNoteToTime(const Note& note, int timeDivision)
     return snapped;
 }
 
+double MathUtils::beatToFloat(int beatNum, int numerator, int denominator)
+{
+    if (denominator == 0) return static_cast<double>(beatNum); // 防止除零
+    return static_cast<double>(beatNum) + static_cast<double>(numerator) / denominator;
+}
+
+void MathUtils::floatToBeat(double beat, int& beatNum, int& numerator, int& denominator, int maxDenominator)
+{
+    beatNum = static_cast<int>(beat);
+    double fraction = beat - beatNum;
+    if (fraction == 0.0) {
+        numerator = 0;
+        denominator = 1;
+        return;
+    }
+    // 将分数近似为分母不超过maxDenominator的有理数
+    double bestError = 1.0;
+    int bestNum = 0, bestDen = 1;
+    for (int d = 1; d <= maxDenominator; ++d) {
+        int n = static_cast<int>(std::round(fraction * d));
+        if (n > d) n = d;
+        double err = std::abs(fraction - static_cast<double>(n) / d);
+        if (err < bestError) {
+            bestError = err;
+            bestNum = n;
+            bestDen = d;
+        }
+    }
+    numerator = bestNum;
+    denominator = bestDen;
+    // 化简
+    int gcd = std::gcd(numerator, denominator);
+    if (gcd > 0) {
+        numerator /= gcd;
+        denominator /= gcd;
+    }
+}
+
+bool MathUtils::isSameBeat(const Note& a, const Note& b, int timeDivision)
+{
+    // 将两个音符的时间对齐到 timeDivision 后比较
+    Note sa = snapNoteToTime(a, timeDivision);
+    Note sb = snapNoteToTime(b, timeDivision);
+    return sa.beatNum == sb.beatNum &&
+           sa.numerator == sb.numerator &&
+           sa.denominator == sb.denominator;
+}
+
+Note MathUtils::snapNoteToBeat(const Note& note, int timeDivision)
+{
+    return snapNoteToTime(note, timeDivision);
+}
+
+double MathUtils::beatToPixel(double beat, double scrollBeat, double visibleBeatRange, int height)
+{
+    if (visibleBeatRange <= 0) return 0;
+    return (beat - scrollBeat) / visibleBeatRange * height;
+}
+
+double MathUtils::pixelToBeat(int y, double scrollBeat, double visibleBeatRange, int height)
+{
+    if (height <= 0) return scrollBeat;
+    return scrollBeat + (static_cast<double>(y) / height) * visibleBeatRange;
+}
+
 int MathUtils::snapXToGrid(int x, int gridDivision)
 {
     // gridDivision 是 X 轴分度，将 0-512 分成 gridDivision 格
