@@ -7,7 +7,8 @@
 
 void GridRenderer::drawGrid(QPainter& painter, const QRect& rect, int xDivisions,
                             double startTime, double endTime, double timeDivision,
-                            const QVector<BpmEntry>& bpmList, int offset)
+                            const QVector<BpmEntry>& bpmList, int offset,
+                            bool verticalFlip)
 {
     try {
         Logger::debug("GridRenderer::drawGrid - Starting");
@@ -71,7 +72,12 @@ void GridRenderer::drawGrid(QPainter& painter, const QRect& rect, int xDivisions
                 double ms = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
                 
                 if (ms < startTime || ms > endTime) continue;
-                int y = rect.top() + static_cast<int>((ms - startTime) / totalDuration * rect.height());
+                int y;
+                if (!verticalFlip) {
+                    y = rect.top() + static_cast<int>((ms - startTime) / totalDuration * rect.height());
+                } else {
+                    y = rect.bottom() - static_cast<int>((ms - startTime) / totalDuration * rect.height());
+                }
                 painter.drawLine(rect.left(), y, rect.right(), y);
                 lineCount++;
 
@@ -79,7 +85,11 @@ void GridRenderer::drawGrid(QPainter& painter, const QRect& rect, int xDivisions
                 if (frac < 1e-6) {
                     QString text = QString::number(beatNum);
                     painter.setPen(Qt::darkGray);
-                    painter.drawText(rect.left() + 2, y - 2, text);
+                    if (!verticalFlip) {
+                        painter.drawText(rect.left() + 2, y - 2, text);
+                    } else {
+                        painter.drawText(rect.left() + 2, y + 12, text);
+                    }
                 }
             } catch (const std::exception& e) {
                 Logger::error(QString("GridRenderer::drawGrid - Exception at beat %1: %2").arg(beat).arg(e.what()));
