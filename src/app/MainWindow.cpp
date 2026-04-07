@@ -72,6 +72,7 @@ public:
     QAction* redoAction;
     QAction* colorAction;
     QAction* hyperfruitAction;
+    QAction* verticalFlipAction;
     QAction* playAction;
     QMenu* skinMenu;
     QAction* noteSizeAction;
@@ -213,6 +214,10 @@ void MainWindow::createMenus()
     d->hyperfruitAction->setCheckable(true);
     d->hyperfruitAction->setChecked(Settings::instance().hyperfruitOutlineEnabled());
     connect(d->hyperfruitAction, &QAction::toggled, this, &MainWindow::toggleHyperfruitMode);
+    d->verticalFlipAction = viewMenu->addAction(tr("&Vertical Flip"));
+    d->verticalFlipAction->setCheckable(true);
+    d->verticalFlipAction->setChecked(Settings::instance().verticalFlip());
+    connect(d->verticalFlipAction, &QAction::toggled, this, &MainWindow::toggleVerticalFlip);
 
     // 设置菜单
     QMenu* settingsMenu = menuBar()->addMenu(tr("&Settings"));
@@ -887,6 +892,13 @@ void MainWindow::toggleHyperfruitMode(bool on)
     Logger::info(QString("Hyperfruit mode toggled to %1").arg(on));
     Settings::instance().setHyperfruitOutlineEnabled(on);
     d->canvas->setHyperfruitEnabled(on);
+}
+
+void MainWindow::toggleVerticalFlip(bool flipped)
+{
+    Logger::info(QString("Vertical flip toggled to %1").arg(flipped));
+    Settings::instance().setVerticalFlip(flipped);
+    d->canvas->setVerticalFlip(flipped);
 }
 
 void MainWindow::togglePlayback()

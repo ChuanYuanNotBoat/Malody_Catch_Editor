@@ -35,6 +35,9 @@ public:
     QString language() const;
     void setLanguage(const QString& languageCode);
 
+    bool verticalFlip() const;
+    void setVerticalFlip(bool flipped);
+
     QKeySequence shortcut(const QString& action) const;
     void setShortcut(const QString& action, const QKeySequence& seq);
 

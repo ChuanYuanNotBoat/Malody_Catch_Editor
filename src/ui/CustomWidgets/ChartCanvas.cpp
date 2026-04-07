@@ -34,6 +34,7 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_currentMode(PlaceNote),
       m_colorMode(true),
       m_hyperfruitEnabled(true),
+      m_verticalFlip(true),
       m_timeDivision(16),
       m_gridDivision(20),
       m_gridSnap(true),  // 恢复默认值，但拖动过程中不使用棚格吸附
@@ -96,6 +97,20 @@ void ChartCanvas::setHyperfruitEnabled(bool enabled)
 {
     m_hyperfruitEnabled = enabled;
     m_noteRenderer->setHyperfruitEnabled(enabled);
+    update();
+}
+
+bool ChartCanvas::isVerticalFlip() const
+{
+    return m_verticalFlip;
+}
+
+void ChartCanvas::setVerticalFlip(bool flip)
+{
+    if (m_verticalFlip == flip) return;
+    
+    m_verticalFlip = flip;
+    emit verticalFlipChanged(flip);
     update();
 }
 
@@ -261,13 +276,15 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
                 if (visibleEnd <= visibleStart) continue;
                 double yStart = yPosFromTime(visibleStart);
                 double yEnd = yPosFromTime(visibleEnd);
-                double heightPx = yEnd - yStart;
-                if (heightPx <= 0) continue;
+                // 确保矩形高度为正（考虑垂直翻转）
+                double rectTop = qMin(yStart, yEnd);
+                double rectHeight = qAbs(yEnd - yStart);
+                if (rectHeight <= 0) continue;
                 int lmargin = leftMargin();
                 int rmargin = rightMargin();
                 double rainWidth = width() - lmargin - rmargin;
                 if (rainWidth <= 0) rainWidth = 1;
-                QRectF rainRect(lmargin, yStart, rainWidth, heightPx);
+                QRectF rainRect(lmargin, rectTop, rainWidth, rectHeight);
                 bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
                 m_noteRenderer->drawRain(painter, note, rainRect, selected);
                 renderedNotesCount++;
@@ -351,7 +368,8 @@ void ChartCanvas::drawGrid(QPainter& painter)
         double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
         m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
                                  startTime, endTime,
-                                 m_timeDivision, bpmList, offset);
+                                 m_timeDivision, bpmList, offset,
+                                 m_verticalFlip);
         Logger::debug("ChartCanvas::drawGrid - m_gridRenderer->drawGrid completed");
     } catch (const std::exception& e) {
         Logger::error(QString("ChartCanvas::drawGrid - Exception: %1").arg(e.what()));
@@ -376,12 +394,25 @@ double ChartCanvas::yPosFromTime(double timeMs) const
 double ChartCanvas::beatToY(double beat) const
 {
     if (m_visibleBeatRange <= 0) return 0;
-    return (beat - m_scrollBeat) / m_visibleBeatRange * height();
+    double y = (beat - m_scrollBeat) / m_visibleBeatRange * height();
+    
+    // 应用垂直翻转
+    if (m_verticalFlip) {
+        y = height() - y;
+    }
+    
+    return y;
 }
 
 double ChartCanvas::yToBeat(double y) const
 {
     if (height() <= 0) return m_scrollBeat;
+    
+    // 应用垂直翻转（反向变换）
+    if (m_verticalFlip) {
+        y = height() - y;
+    }
+    
     return m_scrollBeat + (y / height()) * m_visibleBeatRange;
 }
 
@@ -454,6 +485,10 @@ QRectF ChartCanvas::getRainNoteRect(const Note& note) const
     double yStart = yPosFromTime(startTime);
     double yEnd = yPosFromTime(endTime);
     
+    // 确保矩形高度为正（考虑垂直翻转）
+    double rectTop = qMin(yStart, yEnd);
+    double rectHeight = qAbs(yEnd - yStart);
+    
     // rain音符覆盖安全区域宽度（从左边界到右边界）
     int lmargin = leftMargin();
     int rmargin = rightMargin();
@@ -461,7 +496,7 @@ QRectF ChartCanvas::getRainNoteRect(const Note& note) const
     if (rainWidth <= 0) rainWidth = 1;
 
     // 创建矩形（从左边界开始，覆盖安全区域宽度）
-    return QRectF(lmargin, yStart, rainWidth, yEnd - yStart);
+    return QRectF(lmargin, rectTop, rainWidth, rectHeight);
 }
 
 int ChartCanvas::hitTestNote(const QPointF& pos) const
@@ -540,7 +575,11 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
 {
     QPointF delta = currentPos - m_moveStartPos;
     // 直接使用拍号偏移量，避免毫秒转换
-    double deltaBeat = (delta.y() / height()) * m_visibleBeatRange;
+    double deltaY = delta.y();
+    if (m_verticalFlip) {
+        deltaY = -deltaY;
+    }
+    double deltaBeat = (deltaY / height()) * m_visibleBeatRange;
     double deltaX = delta.x() / width() * 512;
 
     // 1. 确定参考音符

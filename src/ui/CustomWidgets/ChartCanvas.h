@@ -31,9 +31,15 @@ public:
     void setNoteSize(int size);
     void setMode(Mode mode);
     void paste();
+    
+    bool isVerticalFlip() const;
+    void setVerticalFlip(bool flip);
 
 public slots:
     void showGridSettings();
+
+signals:
+    void verticalFlipChanged(bool flipped);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -67,6 +73,7 @@ private:
     Mode m_currentMode;
     bool m_colorMode;
     bool m_hyperfruitEnabled;
+    bool m_verticalFlip;
     int m_timeDivision;
     int m_gridDivision;
     bool m_gridSnap;

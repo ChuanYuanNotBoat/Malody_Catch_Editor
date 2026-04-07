@@ -34,6 +34,7 @@ private slots:
     void redo();
     void toggleColorMode(bool on);
     void toggleHyperfruitMode(bool on);
+    void toggleVerticalFlip(bool flipped);
     void togglePlayback();
     void changeSkin(const QString& skinName);
     void adjustNoteSize();                       // 改为打开对话框

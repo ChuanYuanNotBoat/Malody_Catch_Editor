@@ -70,6 +70,16 @@ void Settings::setLanguage(const QString& languageCode) {
     m_settings.setValue("language", languageCode);
 }
 
+bool Settings::verticalFlip() const
+{
+    return m_settings.value("view/verticalFlip", true).toBool();  // 默认开启翻转
+}
+
+void Settings::setVerticalFlip(bool flipped)
+{
+    m_settings.setValue("view/verticalFlip", flipped);
+}
+
 QKeySequence Settings::shortcut(const QString& action) const {
     return QKeySequence(m_settings.value("shortcut/" + action).toString());
 }
