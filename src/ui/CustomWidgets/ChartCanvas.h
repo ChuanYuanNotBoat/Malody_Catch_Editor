@@ -51,7 +51,7 @@ private:
     int hitTestNote(const QPointF& pos) const;          // 返回音符索引，未命中返回 -1
     QRectF getRainNoteRect(const Note& note) const;     // 计算rain音符的矩形区域
 
-    void beginMoveSelection(const QPointF& startPos);   // 开始移动选中音符
+    void beginMoveSelection(const QPointF& startPos, int referenceIndex = -1);   // 开始移动选中音符
     void updateMoveSelection(const QPointF& currentPos); // 更新移动偏移
     void endMoveSelection();                             // 结束移动，压入复合撤销命令
     void prepareMoveChanges();                           // 备份当前选中的音符
@@ -87,6 +87,7 @@ private:
     QPointF m_moveStartPos;                    // 拖动起始点（全局坐标）
     QList<QPair<Note, Note>> m_moveChanges;    // 原始音符与当前临时音符的映射
     QSet<int> m_originalSelectedIndices;       // 拖动开始时的选中索引集
+    int m_dragReferenceIndex;                  // 拖动参考音符索引（-1表示无）
 
     // 棚格吸附备份状态
     bool m_gridSnapBackup;                     // 备份的棚格吸附状态

@@ -45,6 +45,7 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_isMovingSelection(false),
       m_gridSnapBackup(false),
       m_wasGridSnapEnabled(false),
+      m_dragReferenceIndex(-1),
       m_rainFirst(true)   // 新增：Rain 放置状态
 {
     setFocusPolicy(Qt::StrongFocus);
@@ -489,11 +490,16 @@ void ChartCanvas::prepareMoveChanges()
     }
 }
 
-void ChartCanvas::beginMoveSelection(const QPointF& startPos)
+void ChartCanvas::beginMoveSelection(const QPointF& startPos, int referenceIndex)
 {
     m_isMovingSelection = true;
     m_moveStartPos = startPos;
     m_originalSelectedIndices = m_selectionController->selectedIndices();
+    m_dragReferenceIndex = referenceIndex;
+    // 如果参考索引无效，则使用选中集中的第一个索引（如果有）
+    if (m_dragReferenceIndex == -1 && !m_originalSelectedIndices.isEmpty()) {
+        m_dragReferenceIndex = *m_originalSelectedIndices.begin();
+    }
     
     // 保存并禁用棚格吸附
     Logger::info(QString("[Grid] beginMoveSelection: 原始吸附状态=%1, 备份=%2")
@@ -512,50 +518,96 @@ void ChartCanvas::updateMoveSelection(const QPointF& currentPos)
     double deltaTime = delta.y() / height() * m_visibleRange;
     double deltaX = delta.x() / width() * 512;
 
+    // 1. 确定参考音符
+    int refIndex = m_dragReferenceIndex;
+    if (refIndex == -1 || !m_originalSelectedIndices.contains(refIndex)) {
+        // 使用选中集中的第一个索引作为参考
+        if (!m_originalSelectedIndices.isEmpty()) {
+            refIndex = *m_originalSelectedIndices.begin();
+        } else {
+            // 没有选中音符，直接返回
+            return;
+        }
+    }
+
+    // 2. 获取参考音符的原始时间
+    const Note& refOriginal = m_chartController->chart()->notes()[refIndex];
+    double refOldTime = MathUtils::beatToMs(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator,
+                                            m_chartController->chart()->bpmList(),
+                                            m_chartController->chart()->meta().offset);
+    double refNewTime = refOldTime + deltaTime;
+    // 将新时间转换回拍子表示（用于吸附）
+    int beat, num, den;
+    MathUtils::msToBeat(refNewTime, m_chartController->chart()->bpmList(),
+                        m_chartController->chart()->meta().offset, beat, num, den);
+    Note refNote = refOriginal;
+    refNote.beatNum = beat;
+    refNote.numerator = num;
+    refNote.denominator = den;
+    // 吸附参考音符
+    if (m_timeDivision > 0) {
+        refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, m_timeDivision);
+    } else {
+        refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, 1);
+    }
+    // 计算吸附后的时间
+    double refSnappedTime = MathUtils::beatToMs(refNote.beatNum, refNote.numerator, refNote.denominator,
+                                                m_chartController->chart()->bpmList(),
+                                                m_chartController->chart()->meta().offset);
+    // 吸附偏移量（整体偏移）
+    double snapOffsetTime = refSnappedTime - refNewTime;
+
+    // 3. 遍历所有选中的音符，应用整体偏移
     for (auto& change : m_moveChanges) {
         const Note& original = change.first;
         Note& newNote = change.second;
-        // 计算新位置
+        
+        // 计算原始时间
         double oldTime = MathUtils::beatToMs(original.beatNum, original.numerator, original.denominator,
                                              m_chartController->chart()->bpmList(),
                                              m_chartController->chart()->meta().offset);
-        double newTime = oldTime + deltaTime;
-        int beat, num, den;
-        MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
-                            m_chartController->chart()->meta().offset, beat, num, den);
-        newNote.beatNum = beat;
-        newNote.numerator = num;
-        newNote.denominator = den;
+        // 应用整体偏移
+        double newTime = oldTime + deltaTime + snapOffsetTime;
         
-        // 应用时间分度吸附和边界检查
-        if (m_timeDivision > 0) {
-            newNote = MathUtils::snapNoteToTimeWithBoundary(newNote, m_timeDivision);
-        } else {
-            // 即使没有时间分度，也需要进行边界检查
-            newNote = MathUtils::snapNoteToTimeWithBoundary(newNote, 1); // 使用最小分度
+        // 转换回拍子
+        int nbeat, nnum, nden;
+        MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
+                            m_chartController->chart()->meta().offset, nbeat, nnum, nden);
+        newNote.beatNum = nbeat;
+        newNote.numerator = nnum;
+        newNote.denominator = nden;
+        
+        // 边界检查（只检查时间是否为负，不进行吸附）
+        if (newTime < 0) {
+            // 如果时间为负，将整个组向上移动（实际上这种情况不应发生，因为参考音符已经吸附并保证了边界）
+            // 但为了安全，强制设置为0
+            MathUtils::msToBeat(0, m_chartController->chart()->bpmList(),
+                                m_chartController->chart()->meta().offset, nbeat, nnum, nden);
+            newNote.beatNum = nbeat;
+            newNote.numerator = nnum;
+            newNote.denominator = nden;
         }
-
+        
         // X轴边界限制（拖拽时无吸附）
         newNote.x = qBound(0, qRound(original.x + deltaX), 512);
-
+        
+        // 处理Rain音符的结束时间
         if (original.type == NoteType::RAIN) {
             double oldEndTime = MathUtils::beatToMs(original.endBeatNum, original.endNumerator, original.endDenominator,
                                                     m_chartController->chart()->bpmList(),
                                                     m_chartController->chart()->meta().offset);
-            double newEndTime = oldEndTime + deltaTime;
+            double newEndTime = oldEndTime + deltaTime + snapOffsetTime;
             int endBeat, endNum, endDen;
             MathUtils::msToBeat(newEndTime, m_chartController->chart()->bpmList(),
                                 m_chartController->chart()->meta().offset, endBeat, endNum, endDen);
             newNote.endBeatNum = endBeat;
             newNote.endNumerator = endNum;
             newNote.endDenominator = endDen;
-            
-            // 对Rain音符的结束时间也应用时间分度吸附和边界检查
-            if (m_timeDivision > 0) {
-                Note temp = MathUtils::snapNoteToTimeWithBoundary(newNote, m_timeDivision);
-                newNote.endBeatNum = temp.endBeatNum;
-                newNote.endNumerator = temp.endNumerator;
-                newNote.endDenominator = temp.endDenominator;
+            // 确保结束时间不小于开始时间
+            if (newEndTime < newTime) {
+                newNote.endBeatNum = newNote.beatNum;
+                newNote.endNumerator = newNote.numerator;
+                newNote.endDenominator = newNote.denominator;
             }
         }
     }
@@ -598,6 +650,7 @@ void ChartCanvas::endMoveSelection()
     }
     m_moveChanges.clear();
     m_originalSelectedIndices.clear();
+    m_dragReferenceIndex = -1;
 }
 
 void ChartCanvas::mousePressEvent(QMouseEvent* event)
@@ -734,13 +787,6 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
                 return;
             }
             
-            // Shift+左键：整体移动选中的音符
-            if ((event->modifiers() & Qt::ShiftModifier) &&
-                m_selectionController &&
-                !m_selectionController->selectedIndices().isEmpty()) {
-                beginMoveSelection(event->pos());
-                return;
-            }
             
             // 普通左键：直接拖动
             // 如果点击的音符未被选中，先选中它（并清除其他选中）
@@ -750,17 +796,10 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
             }
             
             // 立即开始拖动
-            beginMoveSelection(event->pos());
+            beginMoveSelection(event->pos(), hitIndex);
             return;
         }
 
-        // 5. Shift+左键：整体移动选中的音符（点击空白区域时）
-        if ((event->modifiers() & Qt::ShiftModifier) &&
-            m_selectionController &&
-            !m_selectionController->selectedIndices().isEmpty()) {
-            beginMoveSelection(event->pos());
-            return;
-        }
         
         // 6. 点击空白：清除所有选中
         m_selectionController->clearSelection();
