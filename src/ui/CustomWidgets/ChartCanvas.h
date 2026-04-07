@@ -48,6 +48,8 @@ private:
     QPointF noteToPos(const Note& note) const;
     Note posToNote(const QPointF& pos) const;
     double yPosFromTime(double timeMs) const;
+    double beatToY(double beat) const;
+    double yToBeat(double y) const;
     int hitTestNote(const QPointF& pos) const;          // 返回音符索引，未命中返回 -1
     QRectF getRainNoteRect(const Note& note) const;     // 计算rain音符的矩形区域
 
@@ -68,8 +70,8 @@ private:
     int m_timeDivision;
     int m_gridDivision;
     bool m_gridSnap;
-    double m_scrollPos;
-    double m_visibleRange;
+    double m_scrollBeat;          // 滚动位置（拍）
+    double m_visibleBeatRange;    // 可见范围（拍）
 
     bool m_isSelecting;
     QPointF m_selectionStart;
@@ -92,6 +94,9 @@ private:
     // 棚格吸附备份状态
     bool m_gridSnapBackup;                     // 备份的棚格吸附状态
     bool m_wasGridSnapEnabled;                 // 移动前棚格吸附是否启用
+
+    // 超果检测备份状态
+    bool m_hyperfruitEnabledBackup;            // 移动前超果检测是否启用
 
     bool m_rainFirst;
     QPointF m_rainStartPos;
