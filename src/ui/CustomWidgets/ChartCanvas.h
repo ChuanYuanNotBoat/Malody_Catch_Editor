@@ -11,6 +11,7 @@ class NoteRenderer;
 class GridRenderer;
 class HyperfruitDetector;
 class Skin;
+class PlaybackController;
 
 class ChartCanvas : public QWidget {
     Q_OBJECT
@@ -22,6 +23,7 @@ public:
     void setChartController(ChartController* controller);
     void setSelectionController(SelectionController* controller);
     void setSkin(Skin* skin);
+    void setPlaybackController(PlaybackController* controller);
     void setColorMode(bool enabled);
     void setHyperfruitEnabled(bool enabled);
     void setTimeDivision(int division);
@@ -37,9 +39,11 @@ public:
 
 public slots:
     void showGridSettings();
+    void playbackPositionChanged(double timeMs);
 
 signals:
     void verticalFlipChanged(bool flipped);
+    void scrollPositionChanged(double beat);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -66,6 +70,7 @@ private:
 
     ChartController* m_chartController;
     SelectionController* m_selectionController;
+    PlaybackController* m_playbackController;
     NoteRenderer* m_noteRenderer;
     GridRenderer* m_gridRenderer;
     HyperfruitDetector* m_hyperfruitDetector;
@@ -79,6 +84,8 @@ private:
     bool m_gridSnap;
     double m_scrollBeat;          // 滚动位置（拍）
     double m_visibleBeatRange;    // 可见范围（拍）
+    double m_currentPlayTime;     // 当前播放时间（毫秒）
+    bool m_autoScrollEnabled;     // 自动滚动是否启用（用户手动滚动后禁用）
 
     bool m_isSelecting;
     QPointF m_selectionStart;
