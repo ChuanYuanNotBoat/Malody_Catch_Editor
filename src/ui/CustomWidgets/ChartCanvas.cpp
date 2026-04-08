@@ -1,6 +1,7 @@
 #include "ChartCanvas.h"
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
+#include "controller/PlaybackController.h"
 #include "render/NoteRenderer.h"
 #include "render/GridRenderer.h"
 #include "render/HyperfruitDetector.h"
@@ -28,6 +29,7 @@ ChartCanvas::ChartCanvas(QWidget* parent)
     : QWidget(parent),
       m_chartController(nullptr),
       m_selectionController(nullptr),
+      m_playbackController(nullptr),
       m_noteRenderer(new NoteRenderer),
       m_gridRenderer(new GridRenderer),
       m_hyperfruitDetector(new HyperfruitDetector),
@@ -40,6 +42,8 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_gridSnap(true),  // 恢复默认值，但拖动过程中不使用棚格吸附
       m_scrollBeat(0),
       m_visibleBeatRange(10), // 初始可见范围 10 拍
+      m_currentPlayTime(0),
+      m_autoScrollEnabled(true),
       m_isSelecting(false),
       m_isDragging(false),
       m_isPasting(false),
@@ -70,6 +74,29 @@ void ChartCanvas::setChartController(ChartController* controller)
         m_hyperfruitDetector->setCS(3.2);
         m_noteRenderer->setHyperfruitDetector(m_hyperfruitDetector);
     }
+    update();
+}
+
+void ChartCanvas::setPlaybackController(PlaybackController* controller)
+{
+    if (m_playbackController == controller)
+        return;
+    
+    // 断开旧的连接
+    if (m_playbackController) {
+        disconnect(m_playbackController, &PlaybackController::positionChanged, this, &ChartCanvas::playbackPositionChanged);
+    }
+    
+    m_playbackController = controller;
+    m_currentPlayTime = 0;
+    
+    // 连接新的信号
+    if (m_playbackController) {
+        connect(m_playbackController, &PlaybackController::positionChanged, this, &ChartCanvas::playbackPositionChanged);
+        // 初始化当前时间
+        m_currentPlayTime = m_playbackController->currentTime();
+    }
+    
     update();
 }
 
@@ -143,6 +170,7 @@ void ChartCanvas::setScrollPos(double timeMs)
                         beatNum, numerator, denominator);
     m_scrollBeat = beatNum + static_cast<double>(numerator) / denominator;
     update();
+    emit scrollPositionChanged(m_scrollBeat);
 }
 
 void ChartCanvas::setNoteSize(int size)
@@ -319,6 +347,19 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         painter.drawText(QRect(10,10,100,30), Qt::AlignCenter, tr("Confirm"));
         painter.fillRect(QRect(120,10,100,30), QColor(200,200,200));
         painter.drawText(QRect(120,10,100,30), Qt::AlignCenter, tr("Cancel"));
+    }
+
+    // 绘制播放基准线（固定于屏幕80%高度，表示当前时间点）
+    int canvasHeight = height();
+    double baselineY = canvasHeight * 0.8; // 屏幕80%下侧
+    painter.setPen(QPen(QColor(0, 0, 255), 3)); // 加粗深蓝色线
+    painter.drawLine(leftMargin(), baselineY, width() - rightMargin(), baselineY);
+    
+    // 显示当前播放时间（如果有）
+    if (m_playbackController && m_currentPlayTime > 0) {
+        painter.setPen(Qt::black);
+        painter.drawText(width() - rightMargin() - 50, baselineY - 5,
+                       QString::number(m_currentPlayTime, 'f', 0) + "ms");
     }
 
     // 矩形选择区域
@@ -910,7 +951,9 @@ void ChartCanvas::wheelEvent(QWheelEvent* event)
         double newPos = m_scrollBeat - (delta / 120.0) * step;
         if (newPos < 0) newPos = 0;
         m_scrollBeat = newPos;
+        m_autoScrollEnabled = false; // 用户手动滚动后禁用自动滚动
         update();
+        emit scrollPositionChanged(m_scrollBeat);
     }
     if (event->angleDelta().x() != 0) {
         double deltaX = event->angleDelta().x();
@@ -921,6 +964,51 @@ void ChartCanvas::wheelEvent(QWheelEvent* event)
         if (m_visibleBeatRange > 1000) m_visibleBeatRange = 1000;
         update();
     }
+}
+
+void ChartCanvas::playbackPositionChanged(double timeMs)
+{
+    m_currentPlayTime = timeMs;
+    
+    // 自动滚动到当前播放位置（跟随播放）
+    if (m_playbackController && m_playbackController->state() == PlaybackController::Playing && m_autoScrollEnabled) {
+        // 将时间转换为拍号
+        if (m_chartController && m_chartController->chart()) {
+            const auto& bpmList = m_chartController->chart()->bpmList();
+            int offset = m_chartController->chart()->meta().offset;
+            int beatNum, numerator, denominator;
+            MathUtils::msToBeat(timeMs, bpmList, offset, beatNum, numerator, denominator);
+            double beat = beatNum + static_cast<double>(numerator) / denominator;
+            
+            // 计算使当前拍号对齐到基准线（屏幕80%高度）所需的滚动位置
+            double baselineRatio = 0.8; // 屏幕80%下侧
+            double targetScrollBeat;
+            if (m_verticalFlip) {
+                // 垂直滚动时，基准线对应画布顶部附近？需要根据实际坐标系调整
+                // 从beatToY公式：y = height() - (beat - m_scrollBeat) / m_visibleBeatRange * height()
+                // 设y = baselineY = height() * baselineRatio
+                // 解得：beat - m_scrollBeat = (height() - baselineY) / height() * m_visibleBeatRange
+                // 即：beat - m_scrollBeat = (1 - baselineRatio) * m_visibleBeatRange
+                targetScrollBeat = beat - (1.0 - baselineRatio) * m_visibleBeatRange;
+            } else {
+                // 无垂直翻转：y = (beat - m_scrollBeat) / m_visibleBeatRange * height()
+                // 设y = baselineY = height() * baselineRatio
+                // 解得：beat - m_scrollBeat = baselineRatio * m_visibleBeatRange
+                targetScrollBeat = beat - baselineRatio * m_visibleBeatRange;
+            }
+            
+            // 更新滚动位置
+            m_scrollBeat = targetScrollBeat;
+            // 确保滚动位置合理
+            if (m_scrollBeat < 0) m_scrollBeat = 0;
+            // 触发重绘
+            update();
+            // 发射滚动位置变化信号，用于同步滑条
+            emit scrollPositionChanged(m_scrollBeat);
+        }
+    }
+    
+    update(); // 重绘画布以更新基准线
 }
 
 void ChartCanvas::onSelectionChanged()

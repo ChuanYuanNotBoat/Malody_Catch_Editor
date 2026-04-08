@@ -8,7 +8,7 @@
 
 /**
  * @brief 封装音频播放，支持播放、暂停、定位、变速。
- * 
+ *
  * 线程安全：方法调用应在主线程（Qt 信号槽机制）。
  */
 class AudioPlayer : public QObject {
@@ -29,6 +29,9 @@ public:
 
     bool isPlaying() const;
     bool isPaused() const;
+    bool isLoaded() const;
+    bool canPlay() const;
+    QString lastError() const;
 
 signals:
     void positionChanged(qint64 position);
@@ -39,4 +42,9 @@ signals:
 private:
     QMediaPlayer* m_player;
     QAudioOutput* m_audioOutput;
+    bool m_loaded;
+    QString m_lastError;
+    QStringList m_tempAudioFiles; ///< 临时音频文件列表，用于清理
+
+    QString normalizeAudioPath(const QString& originalPath);
 };

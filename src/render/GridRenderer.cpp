@@ -61,10 +61,19 @@ void GridRenderer::drawGrid(QPainter& painter, const QRect& rect, int xDivisions
         painter.setFont(font);
         
         Logger::debug("GridRenderer::drawGrid - Starting beat loop");
+        Logger::debug(QString("GridRenderer::drawGrid - startBeatPos=%1, endBeatPos=%2, beatStep=%3, timeDivision=%4")
+                      .arg(startBeatPos).arg(endBeatPos).arg(beatStep).arg(timeDivision));
         int lineCount = 0;
-        for (double beat = startBeatPos; beat <= endBeatPos; beat += beatStep) {
+        // 计算第一条网格线的拍号（对齐到beatStep的整数倍）
+        double firstBeat = std::ceil(startBeatPos / beatStep) * beatStep;
+        // 避免浮点误差，确保firstBeat >= startBeatPos
+        if (firstBeat - startBeatPos < -1e-10) firstBeat += beatStep;
+        for (double beat = firstBeat; beat <= endBeatPos + beatStep * 0.5; beat += beatStep) {
+            if (beat > endBeatPos) break;
             int beatNum = static_cast<int>(beat);
             double frac = beat - beatNum;
+            // 使用更宽松的整数拍检测容差
+            bool isInteger = frac < 1e-4;
             int numerator = static_cast<int>(frac * 1000000 + 0.5);
             int denominator = 1000000;
             
@@ -81,15 +90,19 @@ void GridRenderer::drawGrid(QPainter& painter, const QRect& rect, int xDivisions
                 painter.drawLine(rect.left(), y, rect.right(), y);
                 lineCount++;
 
-                // 如果是整数拍（frac < 1e-6），在左端显示拍数
-                if (frac < 1e-6) {
+                // 如果是整数拍（frac < 1e-4），在左端显示拍数
+                if (isInteger) {
                     QString text = QString::number(beatNum);
                     painter.setPen(Qt::darkGray);
-                    if (!verticalFlip) {
-                        painter.drawText(rect.left() + 2, y - 2, text);
+                    int textY = y;
+                    if (verticalFlip) {
+                        textY = y + 12;
+                        if (textY > rect.bottom()) textY = y - 12;
                     } else {
-                        painter.drawText(rect.left() + 2, y + 12, text);
+                        textY = y - 2;
+                        if (textY < rect.top()) textY = y + 12;
                     }
+                    painter.drawText(rect.left() + 2, textY, text);
                 }
             } catch (const std::exception& e) {
                 Logger::error(QString("GridRenderer::drawGrid - Exception at beat %1: %2").arg(beat).arg(e.what()));

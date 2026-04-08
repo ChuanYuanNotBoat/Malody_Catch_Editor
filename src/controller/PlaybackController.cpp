@@ -8,6 +8,7 @@ PlaybackController::PlaybackController(AudioPlayer* audioPlayer, QObject* parent
     : QObject(parent), m_audioPlayer(audioPlayer), m_state(Stopped), m_speed(1.0), m_noteSoundEnabled(true)
 {
     connect(m_audioPlayer, &AudioPlayer::positionChanged, this, &PlaybackController::onAudioPositionChanged);
+    connect(m_audioPlayer, &AudioPlayer::errorOccurred, this, &PlaybackController::onAudioError);
 }
 
 PlaybackController::State PlaybackController::state() const
@@ -18,10 +19,20 @@ PlaybackController::State PlaybackController::state() const
 void PlaybackController::play()
 {
     if (m_state == Stopped || m_state == Paused) {
+        // 检查音频是否可播放
+        if (!m_audioPlayer->canPlay()) {
+            QString errorMsg = QString("Cannot play audio: %1").arg(m_audioPlayer->lastError());
+            Logger::error(QString("PlaybackController::play - %1").arg(errorMsg));
+            // 发出错误信号以便UI显示用户提示
+            emit errorOccurred(errorMsg);
+            return;
+        }
         m_audioPlayer->play();
         m_state = Playing;
         Logger::debug(QString("PlaybackController::play - Playing from position %1ms").arg(m_audioPlayer->position()));
         emit stateChanged(m_state);
+    } else {
+        Logger::debug(QString("PlaybackController::play - Ignored, already in state %1").arg(m_state));
     }
 }
 
@@ -85,4 +96,16 @@ void PlaybackController::setNoteSoundEnabled(bool enabled)
 void PlaybackController::onAudioPositionChanged(qint64 position)
 {
     emit positionChanged(static_cast<double>(position));
+}
+
+void PlaybackController::onAudioError(const QString& error)
+{
+    Logger::error(QString("PlaybackController::onAudioError - Audio error: %1").arg(error));
+    // 可以选择停止播放并更新状态
+    if (m_state != Stopped) {
+        m_state = Stopped;
+        emit stateChanged(m_state);
+    }
+    // 将错误信号转发给UI
+    emit errorOccurred(error);
 }

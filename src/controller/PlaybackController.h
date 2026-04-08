@@ -30,9 +30,11 @@ signals:
     void positionChanged(double timeMs);
     void speedChanged(double speed);
     void beatReached(int beatNum, int num, int den);
-
+    void errorOccurred(const QString& error);
 private slots:
     void onAudioPositionChanged(qint64 position);
+    void onAudioError(const QString& error);
+
 
 private:
     AudioPlayer* m_audioPlayer;

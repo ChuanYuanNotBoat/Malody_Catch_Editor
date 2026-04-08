@@ -16,6 +16,7 @@
 #include "file/ChartIO.h"
 #include "model/Skin.h"
 #include "utils/Logger.h"
+#include "utils/MathUtils.h"
 #include <QMenuBar>
 #include <QToolBar>
 #include <QSplitter>
@@ -119,8 +120,9 @@ MainWindow::MainWindow(ChartController* chartCtrl,
         statusBar()->showMessage(msg, 3000);
         Logger::error("ChartController error: " + msg);
     });
-    connect(d->playbackController, &PlaybackController::positionChanged, this, [this](double time) {
-        d->canvas->setScrollPos(time);
+    connect(d->playbackController, &PlaybackController::errorOccurred, this, [this](const QString& msg) {
+        statusBar()->showMessage(msg, 3000);
+        Logger::error("PlaybackController error: " + msg);
     });
 
     Logger::info("MainWindow constructor finished");
@@ -507,6 +509,7 @@ void MainWindow::createCentralArea()
     d->canvas = new ChartCanvas(this);
     d->canvas->setChartController(d->chartController);
     d->canvas->setSelectionController(d->selectionController);
+    d->canvas->setPlaybackController(d->playbackController);
     d->canvas->setColorMode(Settings::instance().colorNoteEnabled());
     d->canvas->setHyperfruitEnabled(Settings::instance().hyperfruitOutlineEnabled());
     if (d->skin) d->canvas->setSkin(d->skin);
@@ -544,6 +547,26 @@ void MainWindow::createCentralArea()
     };
     
     connect(d->verticalScrollBar, QOverload<int>::of(&QScrollBar::valueChanged), this, updateScrollPos);
+    
+    // 双向同步：将Canvas滚动位置变化同步到滑条
+    connect(d->canvas, &ChartCanvas::scrollPositionChanged, this, [this](double beat) {
+        // 将beat转换为滚动条值
+        if (d->playbackController && d->playbackController->audioPlayer()) {
+            qint64 duration = d->playbackController->audioPlayer()->duration();
+            if (duration > 0 && d->chartController && d->chartController->chart()) {
+                const auto& bpmList = d->chartController->chart()->bpmList();
+                int offset = d->chartController->chart()->meta().offset;
+                int beatNum, numerator, denominator;
+                MathUtils::floatToBeat(beat, beatNum, numerator, denominator);
+                double timeMs = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
+                int value = static_cast<int>((timeMs / duration) * 100000);
+                // 阻塞信号避免循环
+                d->verticalScrollBar->blockSignals(true);
+                d->verticalScrollBar->setValue(value);
+                d->verticalScrollBar->blockSignals(false);
+            }
+        }
+    });
     
     // 当音频时长改变时，更新滚动条范围
     if (d->playbackController && d->playbackController->audioPlayer()) {
