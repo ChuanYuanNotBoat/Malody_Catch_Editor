@@ -931,7 +931,17 @@ void MainWindow::togglePlayback()
         d->playbackController->pause();
     } else {
         Logger::debug("Playback started");
-        d->playbackController->play();
+        // 获取当前参考线位置（使用当前音频位置）
+        double startTime = d->playbackController->currentTime();
+        // 对齐到网格（如果谱面存在）
+        const Chart* chart = d->chartController->chart();
+        if (chart) {
+            const QVector<BpmEntry>& bpmList = chart->bpmList();
+            int offset = chart->meta().offset;
+            int timeDivision = 4; // 默认网格分度（1/4拍）
+            startTime = MathUtils::snapTimeToGrid(startTime, bpmList, offset, timeDivision);
+        }
+        d->playbackController->playFromTime(startTime);
     }
 }
 
