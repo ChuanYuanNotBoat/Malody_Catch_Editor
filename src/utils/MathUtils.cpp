@@ -111,21 +111,8 @@ void MathUtils::msToBeat(double ms, const QVector<BpmEntry>& bpmList, int offset
             double beatOffset = remainMs * (cur.bpm / 60000.0);
             double totalBeat = curBeat + beatOffset;
 
-            outBeatNum = static_cast<int>(totalBeat);
-            double fraction = totalBeat - outBeatNum;
-            // 化简分数？暂时用分母 1
-            outNumerator = static_cast<int>(std::round(fraction * 1e6));
-            outDenominator = 1000000;
-            // 简化分子分母
-            int gcd = std::gcd(outNumerator, outDenominator);
-            if (gcd > 0) {
-                outNumerator /= gcd;
-                outDenominator /= gcd;
-            }
-            // 确保分母为正
-            if (outDenominator < 0) { outDenominator = -outDenominator; outNumerator = -outNumerator; }
-            // 如果分子为 0，分母设为 1
-            if (outNumerator == 0) outDenominator = 1;
+            // 使用高精度分数近似，最大分母 65536 以保证精度
+            floatToBeat(totalBeat, outBeatNum, outNumerator, outDenominator, 65536);
             return;
         }
 

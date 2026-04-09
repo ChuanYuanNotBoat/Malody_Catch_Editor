@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <QPointF>
 #include <QSet>
+#include <QTimer>
 #include "model/Note.h"
 
 class ChartController;
@@ -36,10 +37,12 @@ public:
     
     bool isVerticalFlip() const;
     void setVerticalFlip(bool flip);
+    double currentPlayTime() const;
 
 public slots:
     void showGridSettings();
     void playbackPositionChanged(double timeMs);
+    void playFromReferenceLine();
 
 signals:
     void verticalFlipChanged(bool flipped);
@@ -53,6 +56,7 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void timerEvent(QTimerEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private:
     void drawGrid(QPainter& painter);
@@ -63,6 +67,8 @@ private:
     double yToBeat(double y) const;
     int hitTestNote(const QPointF& pos) const;          // 返回音符索引，未命中返回 -1
     QRectF getRainNoteRect(const Note& note) const;     // 计算rain音符的矩形区域
+    void updateNotePosCacheIfNeeded();                  // 更新音符位置缓存（如果需要）
+    void invalidateCache();                             // 使缓存失效
 
     void beginMoveSelection(const QPointF& startPos, int referenceIndex = -1);   // 开始移动选中音符
     void updateMoveSelection(const QPointF& currentPos); // 更新移动偏移
@@ -124,10 +130,26 @@ private:
     int m_snapTimerId;               // 滚动结束对齐定时器ID
     bool m_isScrolling;              // 是否正在滚动
 
+    // 重绘节流控制
+    QTimer* m_repaintTimer;
+    bool m_repaintPending;
+    bool m_forceRepaint;             // 强制立即重绘（用于用户交互等）
+    qint64 m_lastRepaintTime;        // 上次重绘的时间戳（毫秒）
+
+    // 渲染缓存
+    QVector<QPointF> m_notePosCache;      // 音符位置缓存
+    bool m_cacheValid;                    // 缓存是否有效
+    double m_cachedScrollBeat;            // 缓存时的滚动位置
+    double m_cachedVisibleBeatRange;      // 缓存时的可见范围
+    int m_cachedWidth;                    // 缓存时的画布宽度
+    int m_cachedHeight;                   // 缓存时的画布高度
+    bool m_cachedVerticalFlip;            // 缓存时的垂直翻转状态
+
     int leftMargin() const;
     int rightMargin() const;
 
 private slots:
     void onSelectionChanged();                 // 选中状态变化处理
+    void performDelayedRepaint();              // 延迟重绘执行
 
 };

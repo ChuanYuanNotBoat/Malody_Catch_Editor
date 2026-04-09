@@ -35,6 +35,19 @@ void Settings::setPlaybackSpeed(double speed) {
     m_settings.setValue("playbackSpeed", speed);
 }
 
+int Settings::audioLatency() const {
+    return m_settings.value("audio/latency", 0).toInt();
+}
+void Settings::setAudioLatency(int latency) {
+    m_settings.setValue("audio/latency", latency);
+}
+int Settings::globalAudioOffset() const {
+    return m_settings.value("audio/globalOffset", 0).toInt();
+}
+void Settings::setGlobalAudioOffset(int offset) {
+    m_settings.setValue("audio/globalOffset", offset);
+}
+
 QString Settings::currentSkin() const {
     return m_settings.value("currentSkin", "default").toString();
 }

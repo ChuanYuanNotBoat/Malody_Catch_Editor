@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QMediaPlayer>
 #include <QAudioOutput>
+#include <QTimer>
 
 /**
  * @brief 封装音频播放，支持播放、暂停、定位、变速。
@@ -33,18 +34,44 @@ public:
     bool canPlay() const;
     QString lastError() const;
 
+    enum class LoadingState {
+        Idle,
+        Loading,
+        Loaded,
+        Error
+    };
+    Q_ENUM(LoadingState)
+
+    LoadingState loadingState() const;
+    void setLoadingState(LoadingState state);
+
+    // 音频延迟补偿
+    void setAudioLatency(int latency);
+    int audioLatency() const;
+    void setUserOffset(int offset);
+    int userOffset() const;
+    qint64 adjustedPosition() const;
+    void setAdjustedPosition(qint64 adjustedMs);
+
 signals:
     void positionChanged(qint64 position);
     void durationChanged(qint64 duration);
     void stateChanged(QMediaPlayer::PlaybackState state);
     void errorOccurred(const QString& error);
+    void loadingStateChanged(LoadingState state);
 
 private:
     QMediaPlayer* m_player;
     QAudioOutput* m_audioOutput;
+    LoadingState m_loadingState;
+    QTimer* m_loadTimeoutTimer;
+    QString m_currentLoadPath;
     bool m_loaded;
     QString m_lastError;
     QStringList m_tempAudioFiles; ///< 临时音频文件列表，用于清理
+
+    int m_audioLatency; ///< 音频延迟补偿（毫秒）
+    int m_userOffset;   ///< 用户全局偏移（毫秒）
 
     QString normalizeAudioPath(const QString& originalPath);
 };

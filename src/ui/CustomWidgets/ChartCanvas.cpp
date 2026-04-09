@@ -22,6 +22,8 @@
 #include <QClipboard>
 #include <QMimeData>
 #include <QMessageBox>
+#include <QMenu>
+#include <QAction>
 #include <QDebug>
 #include <chrono>
 
@@ -39,7 +41,7 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_verticalFlip(true),
       m_timeDivision(16),
       m_gridDivision(20),
-      m_gridSnap(true),  // 恢复默认值，但拖动过程中不使用棚格吸附
+      m_gridSnap(true),
       m_scrollBeat(0),
       m_visibleBeatRange(10), // 初始可见范围 10 拍
       m_currentPlayTime(0),
@@ -54,12 +56,27 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_rainFirst(true),   // 新增：Rain 放置状态
       m_snapToGrid(true),
       m_snapTimerId(0),
-      m_isScrolling(false)
+      m_isScrolling(false),
+      m_repaintTimer(nullptr),
+      m_repaintPending(false),
+      m_forceRepaint(false),
+      m_lastRepaintTime(0),
+      m_cacheValid(false),
+      m_cachedScrollBeat(0),
+      m_cachedVisibleBeatRange(0),
+      m_cachedWidth(0),
+      m_cachedHeight(0),
+      m_cachedVerticalFlip(true)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setMinimumSize(800, 400);
     m_noteRenderer->setNoteSize(Settings::instance().noteSize());
+    
+    // 创建重绘节流定时器
+    m_repaintTimer = new QTimer(this);
+    m_repaintTimer->setSingleShot(true);
+    connect(m_repaintTimer, &QTimer::timeout, this, &ChartCanvas::performDelayedRepaint);
 }
 
 ChartCanvas::~ChartCanvas()
@@ -101,6 +118,10 @@ void ChartCanvas::setPlaybackController(PlaybackController* controller)
                 this, [this](PlaybackController::State state) {
             if (state == PlaybackController::Stopped || state == PlaybackController::Paused) {
                 snapPlayheadToGrid();
+            }
+            // 播放开始时恢复自动滚动
+            if (state == PlaybackController::Playing) {
+                m_autoScrollEnabled = true;
             }
         });
         // 初始化当前时间
@@ -148,6 +169,7 @@ void ChartCanvas::setVerticalFlip(bool flip)
     
     m_verticalFlip = flip;
     emit verticalFlipChanged(flip);
+    invalidateCache();
     update();
 }
 
@@ -182,6 +204,7 @@ void ChartCanvas::setScrollPos(double timeMs)
                         m_chartController->chart()->meta().offset,
                         beatNum, numerator, denominator);
     m_scrollBeat = beatNum + static_cast<double>(numerator) / denominator;
+    invalidateCache();
     update();
     emit scrollPositionChanged(m_scrollBeat);
 }
@@ -247,8 +270,6 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
     auto frameStartTime = std::chrono::high_resolution_clock::now();
     
-    Logger::debug("ChartCanvas::paintEvent - Starting paint event");
-    
     QPainter painter(this);
     painter.fillRect(rect(), Qt::white);
 
@@ -256,20 +277,15 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         Logger::warn("ChartCanvas::paintEvent - No chart controller available");
         return;
     }
-    
-    Logger::debug("ChartCanvas::paintEvent - Chart controller exists");
 
     try {
-        Logger::debug("ChartCanvas::paintEvent - Checking chart pointer");
         const Chart* chart = m_chartController->chart();
         if (!chart) {
             Logger::error("ChartCanvas::paintEvent - Chart pointer is null");
             return;
         }
-        Logger::debug("ChartCanvas::paintEvent - Chart pointer valid, starting drawGrid");
         
         drawGrid(painter);
-        Logger::debug("ChartCanvas::paintEvent - drawGrid completed successfully");
     } catch (const std::exception& e) {
         Logger::error(QString("ChartCanvas::paintEvent - Exception in drawGrid: %1").arg(e.what()));
         return;
@@ -337,7 +353,6 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
                 renderedNotesCount++;
             }
         }
-        Logger::debug(QString("ChartCanvas::paintEvent - Rendered %1 notes successfully").arg(renderedNotesCount));
     } catch (const std::exception& e) {
         Logger::error(QString("ChartCanvas::paintEvent - Exception during note rendering: %1").arg(e.what()));
         return;
@@ -373,6 +388,9 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
         painter.setPen(Qt::black);
         painter.drawText(width() - rightMargin() - 50, baselineY - 5,
                        QString::number(m_currentPlayTime, 'f', 0) + "ms");
+        // 显示自动滚动状态
+        QString autoScrollText = m_autoScrollEnabled ? tr("AutoScroll: ON") : tr("AutoScroll: OFF");
+        painter.drawText(width() - rightMargin() - 200, baselineY - 5, autoScrollText);
     }
 
     // 矩形选择区域
@@ -387,17 +405,12 @@ void ChartCanvas::paintEvent(QPaintEvent* event)
     auto frameEndTime = std::chrono::high_resolution_clock::now();
     qint64 frameTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(frameEndTime - frameStartTime).count();
     DiagnosticCollector::instance().recordRenderMetrics(frameTimeMs, renderedNotesCount);
-    
-    Logger::debug(QString("ChartCanvas::paintEvent - Paint event completed in %1ms").arg(frameTimeMs));
 }
 
 void ChartCanvas::drawGrid(QPainter& painter)
 {
     try {
-        Logger::debug("ChartCanvas::drawGrid - Starting");
-        
         QRect rect = this->rect();
-        Logger::debug("ChartCanvas::drawGrid - Got rect");
         
         // 调整矩形以考虑左边距和右边距
         int lmargin = leftMargin();
@@ -407,12 +420,8 @@ void ChartCanvas::drawGrid(QPainter& painter)
         }
         
         const auto& bpmList = m_chartController->chart()->bpmList();
-        Logger::debug(QString("ChartCanvas::drawGrid - Got BPM list with %1 entries").arg(bpmList.size()));
-        
         int offset = m_chartController->chart()->meta().offset;
-        Logger::debug(QString("ChartCanvas::drawGrid - Got offset: %1").arg(offset));
         
-        Logger::debug("ChartCanvas::drawGrid - Calling m_gridRenderer->drawGrid");
         // 将节拍转换为毫秒以兼容现有 GridRenderer
         int startBeatNum, startNum, startDen;
         MathUtils::floatToBeat(m_scrollBeat, startBeatNum, startNum, startDen);
@@ -424,7 +433,6 @@ void ChartCanvas::drawGrid(QPainter& painter)
                                  startTime, endTime,
                                  m_timeDivision, bpmList, offset,
                                  m_verticalFlip);
-        Logger::debug("ChartCanvas::drawGrid - m_gridRenderer->drawGrid completed");
     } catch (const std::exception& e) {
         Logger::error(QString("ChartCanvas::drawGrid - Exception: %1").arg(e.what()));
         throw;
@@ -919,7 +927,13 @@ void ChartCanvas::mousePressEvent(QMouseEvent* event)
         // 8. 移动选中的音符功能已移除：点击空白区域只清除选中，不开始移动操作
         // 注意：Shift+点击空白区域的功能已在上方实现
     } else if (event->button() == Qt::RightButton) {
-        // 右键菜单预留
+        // 右键菜单：从参考线时间点播放
+        QMenu menu(this);
+        QAction* playFromRefAction = menu.addAction(tr("从参考线时间点播放"));
+        QAction* selectedAction = menu.exec(event->globalPos());
+        if (selectedAction == playFromRefAction) {
+            playFromReferenceLine();
+        }
     }
 }
 
@@ -1021,14 +1035,80 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
             m_scrollBeat = targetScrollBeat;
             // 确保滚动位置合理
             if (m_scrollBeat < 0) m_scrollBeat = 0;
-            // 触发重绘
-            update();
+            // 触发重绘（通过节流机制）
+            m_repaintPending = true;
             // 发射滚动位置变化信号，用于同步滑条
             emit scrollPositionChanged(m_scrollBeat);
         }
     }
     
-    update(); // 重绘画布以更新基准线
+    // 标记需要重绘
+    m_repaintPending = true;
+    
+    // 根据播放状态设置重绘间隔
+    int interval = 16; // 默认60FPS（约16.7ms）
+    if (m_playbackController && m_playbackController->state() == PlaybackController::Paused) {
+        interval = 100; // 暂停时降低到10FPS
+    }
+    
+    // 如果定时器未运行，则启动定时器
+    if (!m_repaintTimer->isActive()) {
+        m_repaintTimer->start(interval);
+    }
+}
+
+void ChartCanvas::playFromReferenceLine()
+{
+    if (!m_playbackController) {
+        return;
+    }
+    
+    // 确保参考线时间有效
+    if (m_currentPlayTime < 0) {
+        m_currentPlayTime = 0;
+    }
+    
+    // 如果正在播放，先暂停
+    if (m_playbackController->state() == PlaybackController::Playing) {
+        m_playbackController->pause();
+    }
+    
+    // 滚动到参考线时间点
+    if (m_chartController && m_chartController->chart()) {
+        const auto& bpmList = m_chartController->chart()->bpmList();
+        int offset = m_chartController->chart()->meta().offset;
+        int beatNum, numerator, denominator;
+        MathUtils::msToBeat(m_currentPlayTime, bpmList, offset, beatNum, numerator, denominator);
+        double beat = beatNum + static_cast<double>(numerator) / denominator;
+        
+        // 计算使当前拍号对齐到基准线（屏幕80%高度）所需的滚动位置
+        double baselineRatio = 0.8; // 屏幕80%下侧
+        double targetScrollBeat;
+        if (m_verticalFlip) {
+            targetScrollBeat = beat - (1.0 - baselineRatio) * m_visibleBeatRange;
+        } else {
+            targetScrollBeat = beat - baselineRatio * m_visibleBeatRange;
+        }
+        
+        // 更新滚动位置
+        m_scrollBeat = targetScrollBeat;
+        if (m_scrollBeat < 0) m_scrollBeat = 0;
+        
+        // 触发重绘
+        m_repaintPending = true;
+        emit scrollPositionChanged(m_scrollBeat);
+    }
+    
+    // 启用自动滚动（确保播放时跟随）
+    m_autoScrollEnabled = true;
+    
+    // 从参考线时间点开始播放
+    m_playbackController->playFromTime(m_currentPlayTime);
+}
+
+double ChartCanvas::currentPlayTime() const
+{
+    return m_currentPlayTime;
 }
 
 void ChartCanvas::onSelectionChanged()
@@ -1138,4 +1218,69 @@ void ChartCanvas::timerEvent(QTimerEvent* event)
         stopSnapTimer();
     }
     QWidget::timerEvent(event);
+}
+
+void ChartCanvas::performDelayedRepaint()
+{
+    if (m_repaintPending || m_forceRepaint) {
+        m_repaintPending = false;
+        m_forceRepaint = false;
+        m_lastRepaintTime = QDateTime::currentMSecsSinceEpoch();
+        update();
+    }
+}
+
+void ChartCanvas::invalidateCache()
+{
+    m_cacheValid = false;
+}
+
+void ChartCanvas::updateNotePosCacheIfNeeded()
+{
+    if (!m_chartController || !m_chartController->chart()) {
+        m_cacheValid = false;
+        return;
+    }
+    
+    const auto& notes = m_chartController->chart()->notes();
+    bool sizeChanged = notes.size() != m_notePosCache.size();
+    bool paramsChanged = !qFuzzyCompare(m_scrollBeat, m_cachedScrollBeat) ||
+                         !qFuzzyCompare(m_visibleBeatRange, m_cachedVisibleBeatRange) ||
+                         (width() != m_cachedWidth) ||
+                         (height() != m_cachedHeight) ||
+                         (m_verticalFlip != m_cachedVerticalFlip);
+    
+    if (m_cacheValid && !sizeChanged && !paramsChanged) {
+        return; // 缓存有效
+    }
+    
+    // 重新计算缓存
+    m_notePosCache.resize(notes.size());
+    const auto& bpmList = m_chartController->chart()->bpmList();
+    int offset = m_chartController->chart()->meta().offset;
+    
+    for (int i = 0; i < notes.size(); ++i) {
+        const Note& note = notes[i];
+        // 只缓存普通音符和Rain音符的位置（对于Rain音符，缓存起始位置）
+        // 注意：Rain音符的矩形区域需要特殊处理，这里只缓存起始点
+        if (note.type == NoteType::SOUND) {
+            m_notePosCache[i] = QPointF(); // 无效位置
+            continue;
+        }
+        m_notePosCache[i] = noteToPos(note);
+    }
+    
+    // 更新缓存参数
+    m_cachedScrollBeat = m_scrollBeat;
+    m_cachedVisibleBeatRange = m_visibleBeatRange;
+    m_cachedWidth = width();
+    m_cachedHeight = height();
+    m_cachedVerticalFlip = m_verticalFlip;
+    m_cacheValid = true;
+}
+
+void ChartCanvas::resizeEvent(QResizeEvent* event)
+{
+    invalidateCache();
+    QWidget::resizeEvent(event);
 }

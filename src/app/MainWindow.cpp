@@ -931,8 +931,8 @@ void MainWindow::togglePlayback()
         d->playbackController->pause();
     } else {
         Logger::debug("Playback started");
-        // 获取当前参考线位置（使用当前音频位置）
-        double startTime = d->playbackController->currentTime();
+        // 获取当前参考线位置（使用画布参考线时间点）
+        double startTime = d->canvas->currentPlayTime();
         // 对齐到网格（如果谱面存在）
         const Chart* chart = d->chartController->chart();
         if (chart) {

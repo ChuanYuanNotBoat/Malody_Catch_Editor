@@ -82,8 +82,8 @@ double PlaybackController::speed() const
 
 void PlaybackController::seekTo(double timeMs)
 {
-    Logger::debug(QString("PlaybackController::seekTo - Seeking to %1ms").arg(timeMs));
-    m_audioPlayer->setPosition(static_cast<qint64>(timeMs));
+    Logger::debug(QString("PlaybackController::seekTo - Seeking to %1ms (adjusted)").arg(timeMs));
+    m_audioPlayer->setAdjustedPosition(static_cast<qint64>(timeMs));
 }
 
 void PlaybackController::seekToBeat(int beat, int num, int den)
@@ -94,7 +94,7 @@ void PlaybackController::seekToBeat(int beat, int num, int den)
 
 double PlaybackController::currentTime() const
 {
-    return static_cast<double>(m_audioPlayer->position());
+    return static_cast<double>(m_audioPlayer->adjustedPosition());
 }
 
 void PlaybackController::setNoteSoundEnabled(bool enabled)
@@ -104,7 +104,9 @@ void PlaybackController::setNoteSoundEnabled(bool enabled)
 
 void PlaybackController::onAudioPositionChanged(qint64 position)
 {
-    emit positionChanged(static_cast<double>(position));
+    Q_UNUSED(position);
+    // 使用调整后的位置发出信号
+    emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
 }
 
 void PlaybackController::onAudioError(const QString& error)
