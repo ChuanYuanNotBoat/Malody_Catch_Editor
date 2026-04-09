@@ -10,7 +10,7 @@ double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
 {
     try {
         if (bpmList.isEmpty())
-            return offsetMs;
+            return -offsetMs;
 
         double targetBeat = beatNum + static_cast<double>(numerator) / denominator;
 
@@ -31,13 +31,13 @@ double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
         double beatDelta = targetBeat - curBeat;
         if (cur.bpm <= 0) {
             Logger::error(QString("MathUtils::beatToMs - Invalid BPM: %1").arg(cur.bpm));
-            return offsetMs;
+            return -offsetMs;
         }
         // 每分钟 cur.bpm 拍，所以每拍时长 = 60000 / cur.bpm 毫秒
         double ms = beatDelta * (60000.0 / cur.bpm);
 
         // 计算之前所有段的累计时间
-        double prevMs = offsetMs;
+        double prevMs = -offsetMs;
         for (int i = 0; i < idx; ++i) {
             const BpmEntry& prev = bpmList[i];
             double prevBeat = prev.beatNum + static_cast<double>(prev.numerator) / prev.denominator;
@@ -63,10 +63,10 @@ double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
         return prevMs + ms;
     } catch (const std::exception& e) {
         Logger::error(QString("MathUtils::beatToMs - Exception: %1").arg(e.what()));
-        return offsetMs;
+        return -offsetMs;
     } catch (...) {
         Logger::error("MathUtils::beatToMs - Unknown exception");
-        return offsetMs;
+        return -offsetMs;
     }
 }
 
@@ -80,7 +80,7 @@ void MathUtils::msToBeat(double ms, const QVector<BpmEntry>& bpmList, int offset
         return;
     }
 
-    double elapsed = ms - offsetMs;
+    double elapsed = ms + offsetMs;
     if (elapsed < 0) {
         outBeatNum = 0;
         outNumerator = 0;
