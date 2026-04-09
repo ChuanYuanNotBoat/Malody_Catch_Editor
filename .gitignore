@@ -66,3 +66,4 @@ beatmap/*
 LOG_README.md
 plans
 examples
+apply_diff.py

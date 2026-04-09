@@ -2,13 +2,14 @@
 #include "MathUtils.h"
 #include "Logger.h"
 #include <cmath>
-#include <numeric>   // for std::gcd
+#include <numeric> // for std::gcd
 #include <QDebug>
 
 double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
-                           const QVector<BpmEntry>& bpmList, int offsetMs)
+                           const QVector<BpmEntry> &bpmList, int offsetMs)
 {
-    try {
+    try
+    {
         if (bpmList.isEmpty())
             return -offsetMs;
 
@@ -16,20 +17,22 @@ double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
 
         // 找到第一个 BPM 变化点之前的 BPM
         int idx = 0;
-        while (idx + 1 < bpmList.size()) {
-            double nextBeat = bpmList[idx+1].beatNum +
-                              static_cast<double>(bpmList[idx+1].numerator) / bpmList[idx+1].denominator;
+        while (idx + 1 < bpmList.size())
+        {
+            double nextBeat = bpmList[idx + 1].beatNum +
+                              static_cast<double>(bpmList[idx + 1].numerator) / bpmList[idx + 1].denominator;
             if (targetBeat < nextBeat)
                 break;
             idx++;
         }
 
-        const BpmEntry& cur = bpmList[idx];
+        const BpmEntry &cur = bpmList[idx];
         double curBeat = cur.beatNum + static_cast<double>(cur.numerator) / cur.denominator;
 
         // 计算从 curBeat 到 targetBeat 的毫秒数
         double beatDelta = targetBeat - curBeat;
-        if (cur.bpm <= 0) {
+        if (cur.bpm <= 0)
+        {
             Logger::error(QString("MathUtils::beatToMs - Invalid BPM: %1").arg(cur.bpm));
             return -offsetMs;
         }
@@ -38,21 +41,26 @@ double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
 
         // 计算之前所有段的累计时间
         double prevMs = -offsetMs;
-        for (int i = 0; i < idx; ++i) {
-            const BpmEntry& prev = bpmList[i];
+        for (int i = 0; i < idx; ++i)
+        {
+            const BpmEntry &prev = bpmList[i];
             double prevBeat = prev.beatNum + static_cast<double>(prev.numerator) / prev.denominator;
-            
+
             // 下一段的开始beat
             double nextBeat;
-            if (i + 1 < bpmList.size()) {
-                const BpmEntry& next = bpmList[i+1];
+            if (i + 1 < bpmList.size())
+            {
+                const BpmEntry &next = bpmList[i + 1];
                 nextBeat = next.beatNum + static_cast<double>(next.numerator) / next.denominator;
-            } else {
+            }
+            else
+            {
                 nextBeat = prevBeat; // 不应该发生
             }
-            
+
             double beatLen = nextBeat - prevBeat;
-            if (prev.bpm <= 0) {
+            if (prev.bpm <= 0)
+            {
                 Logger::warn(QString("MathUtils::beatToMs - Invalid BPM at index %1: %2").arg(i).arg(prev.bpm));
                 continue;
             }
@@ -61,19 +69,24 @@ double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
         }
 
         return prevMs + ms;
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         Logger::error(QString("MathUtils::beatToMs - Exception: %1").arg(e.what()));
         return -offsetMs;
-    } catch (...) {
+    }
+    catch (...)
+    {
         Logger::error("MathUtils::beatToMs - Unknown exception");
         return -offsetMs;
     }
 }
 
-void MathUtils::msToBeat(double ms, const QVector<BpmEntry>& bpmList, int offsetMs,
-                         int& outBeatNum, int& outNumerator, int& outDenominator)
+void MathUtils::msToBeat(double ms, const QVector<BpmEntry> &bpmList, int offsetMs,
+                         int &outBeatNum, int &outNumerator, int &outDenominator)
 {
-    if (bpmList.isEmpty()) {
+    if (bpmList.isEmpty())
+    {
         outBeatNum = 0;
         outNumerator = 1;
         outDenominator = 1;
@@ -81,7 +94,8 @@ void MathUtils::msToBeat(double ms, const QVector<BpmEntry>& bpmList, int offset
     }
 
     double elapsed = ms + offsetMs;
-    if (elapsed < 0) {
+    if (elapsed < 0)
+    {
         outBeatNum = 0;
         outNumerator = 0;
         outDenominator = 1;
@@ -90,22 +104,27 @@ void MathUtils::msToBeat(double ms, const QVector<BpmEntry>& bpmList, int offset
 
     int idx = 0;
     double accumulatedMs = 0;
-    while (idx < bpmList.size()) {
-        const BpmEntry& cur = bpmList[idx];
+    while (idx < bpmList.size())
+    {
+        const BpmEntry &cur = bpmList[idx];
         double curBeat = cur.beatNum + static_cast<double>(cur.numerator) / cur.denominator;
 
         // 当前段时长
         double nextBeat;
-        if (idx + 1 < bpmList.size()) {
-            const BpmEntry& next = bpmList[idx+1];
+        if (idx + 1 < bpmList.size())
+        {
+            const BpmEntry &next = bpmList[idx + 1];
             nextBeat = next.beatNum + static_cast<double>(next.numerator) / next.denominator;
-        } else {
+        }
+        else
+        {
             nextBeat = curBeat + 1e9; // 无穷大
         }
         double beatLen = nextBeat - curBeat;
         double segmentMs = beatLen * (60000.0 / cur.bpm);
 
-        if (elapsed < accumulatedMs + segmentMs) {
+        if (elapsed < accumulatedMs + segmentMs)
+        {
             // 落在此段
             double remainMs = elapsed - accumulatedMs;
             double beatOffset = remainMs * (cur.bpm / 60000.0);
@@ -126,7 +145,7 @@ void MathUtils::msToBeat(double ms, const QVector<BpmEntry>& bpmList, int offset
     outDenominator = 1;
 }
 
-Note MathUtils::snapNoteToTime(const Note& note, int timeDivision)
+Note MathUtils::snapNoteToTime(const Note &note, int timeDivision)
 {
     Note snapped = note;
     // 将时间对齐到 division 的整数倍
@@ -141,13 +160,15 @@ Note MathUtils::snapNoteToTime(const Note& note, int timeDivision)
     int num = static_cast<int>(std::round(frac * timeDivision));
     int den = timeDivision;
     int gcd = std::gcd(num, den);
-    if (gcd > 0) {
+    if (gcd > 0)
+    {
         num /= gcd;
         den /= gcd;
     }
     snapped.numerator = num;
     snapped.denominator = den;
-    if (note.isRain) {
+    if (note.isRain)
+    {
         // 同样处理结束时间
         double endBeatPos = note.endBeatNum + static_cast<double>(note.endNumerator) / note.endDenominator;
         double endRounded = std::round(endBeatPos / divisionBeat) * divisionBeat;
@@ -156,7 +177,8 @@ Note MathUtils::snapNoteToTime(const Note& note, int timeDivision)
         int endNum = static_cast<int>(std::round(endFrac * timeDivision));
         int endDen = timeDivision;
         int endGcd = std::gcd(endNum, endDen);
-        if (endGcd > 0) {
+        if (endGcd > 0)
+        {
             endNum /= endGcd;
             endDen /= endGcd;
         }
@@ -166,7 +188,7 @@ Note MathUtils::snapNoteToTime(const Note& note, int timeDivision)
     return snapped;
 }
 
-double MathUtils::snapTimeToGrid(double timeMs, const QVector<BpmEntry>& bpmList, int offset, int timeDivision)
+double MathUtils::snapTimeToGrid(double timeMs, const QVector<BpmEntry> &bpmList, int offset, int timeDivision)
 {
     // 将时间转换为拍号
     int beatNum, numerator, denominator;
@@ -183,15 +205,17 @@ double MathUtils::snapTimeToGrid(double timeMs, const QVector<BpmEntry>& bpmList
 
 double MathUtils::beatToFloat(int beatNum, int numerator, int denominator)
 {
-    if (denominator == 0) return static_cast<double>(beatNum); // 防止除零
+    if (denominator == 0)
+        return static_cast<double>(beatNum); // 防止除零
     return static_cast<double>(beatNum) + static_cast<double>(numerator) / denominator;
 }
 
-void MathUtils::floatToBeat(double beat, int& beatNum, int& numerator, int& denominator, int maxDenominator)
+void MathUtils::floatToBeat(double beat, int &beatNum, int &numerator, int &denominator, int maxDenominator)
 {
     beatNum = static_cast<int>(beat);
     double fraction = beat - beatNum;
-    if (fraction == 0.0) {
+    if (fraction == 0.0)
+    {
         numerator = 0;
         denominator = 1;
         return;
@@ -199,11 +223,14 @@ void MathUtils::floatToBeat(double beat, int& beatNum, int& numerator, int& deno
     // 将分数近似为分母不超过maxDenominator的有理数
     double bestError = 1.0;
     int bestNum = 0, bestDen = 1;
-    for (int d = 1; d <= maxDenominator; ++d) {
+    for (int d = 1; d <= maxDenominator; ++d)
+    {
         int n = static_cast<int>(std::round(fraction * d));
-        if (n > d) n = d;
+        if (n > d)
+            n = d;
         double err = std::abs(fraction - static_cast<double>(n) / d);
-        if (err < bestError) {
+        if (err < bestError)
+        {
             bestError = err;
             bestNum = n;
             bestDen = d;
@@ -213,13 +240,14 @@ void MathUtils::floatToBeat(double beat, int& beatNum, int& numerator, int& deno
     denominator = bestDen;
     // 化简
     int gcd = std::gcd(numerator, denominator);
-    if (gcd > 0) {
+    if (gcd > 0)
+    {
         numerator /= gcd;
         denominator /= gcd;
     }
 }
 
-bool MathUtils::isSameBeat(const Note& a, const Note& b, int timeDivision)
+bool MathUtils::isSameBeat(const Note &a, const Note &b, int timeDivision)
 {
     // 将两个音符的时间对齐到 timeDivision 后比较
     Note sa = snapNoteToTime(a, timeDivision);
@@ -229,20 +257,22 @@ bool MathUtils::isSameBeat(const Note& a, const Note& b, int timeDivision)
            sa.denominator == sb.denominator;
 }
 
-Note MathUtils::snapNoteToBeat(const Note& note, int timeDivision)
+Note MathUtils::snapNoteToBeat(const Note &note, int timeDivision)
 {
     return snapNoteToTime(note, timeDivision);
 }
 
 double MathUtils::beatToPixel(double beat, double scrollBeat, double visibleBeatRange, int height)
 {
-    if (visibleBeatRange <= 0) return 0;
+    if (visibleBeatRange <= 0)
+        return 0;
     return (beat - scrollBeat) / visibleBeatRange * height;
 }
 
 double MathUtils::pixelToBeat(int y, double scrollBeat, double visibleBeatRange, int height)
 {
-    if (height <= 0) return scrollBeat;
+    if (height <= 0)
+        return scrollBeat;
     return scrollBeat + (static_cast<double>(y) / height) * visibleBeatRange;
 }
 
@@ -256,7 +286,7 @@ int MathUtils::snapXToGrid(int x, int gridDivision)
     return std::clamp(result, 0, 512);
 }
 
-bool MathUtils::isSameTime(const Note& a, const Note& b, int timeDivision)
+bool MathUtils::isSameTime(const Note &a, const Note &b, int timeDivision)
 {
     // 将两个音符的时间对齐到 timeDivision 后比较
     Note sa = snapNoteToTime(a, timeDivision);
@@ -272,34 +302,39 @@ int MathUtils::snapXToBoundary(int x)
     const int BOUNDARY_THRESHOLD = 20; // 距离边界的阈值
     const int MIN_X = 0;
     const int MAX_X = 512;
-    
+
     // 先进行边界限制
-    if (x < MIN_X) return MIN_X;
-    if (x > MAX_X) return MAX_X;
-    
+    if (x < MIN_X)
+        return MIN_X;
+    if (x > MAX_X)
+        return MAX_X;
+
     // 检查是否接近边界
-    if (x < BOUNDARY_THRESHOLD) {
+    if (x < BOUNDARY_THRESHOLD)
+    {
         Logger::debug(QString("[MathUtils::snapXToBoundary] x=%1 < threshold %2, snap to 0").arg(x).arg(BOUNDARY_THRESHOLD));
         return MIN_X;
     }
-    if (x > MAX_X - BOUNDARY_THRESHOLD) {
+    if (x > MAX_X - BOUNDARY_THRESHOLD)
+    {
         Logger::debug(QString("[MathUtils::snapXToBoundary] x=%1 > max-threshold %2, snap to 512").arg(x).arg(MAX_X - BOUNDARY_THRESHOLD));
         return MAX_X;
     }
-    
+
     Logger::debug(QString("[MathUtils::snapXToBoundary] x=%1 not snapped").arg(x));
     return x; // 不吸附
 }
 
-Note MathUtils::snapNoteToTimeWithBoundary(const Note& note, int timeDivision)
+Note MathUtils::snapNoteToTimeWithBoundary(const Note &note, int timeDivision)
 {
     // 先进行时间分度吸附
     Note snapped = snapNoteToTime(note, timeDivision);
-    
+
     // 检查时间边界：时间不能为负
     // 计算总拍数
     double beatPos = snapped.beatNum + static_cast<double>(snapped.numerator) / snapped.denominator;
-    if (beatPos < 0) {
+    if (beatPos < 0)
+    {
         // 吸附到最近的正时间分度
         double divisionBeat = 1.0 / timeDivision;
         double rounded = std::ceil(0.0 / divisionBeat) * divisionBeat; // 向上取整到最近的正分度
@@ -308,18 +343,21 @@ Note MathUtils::snapNoteToTimeWithBoundary(const Note& note, int timeDivision)
         int num = static_cast<int>(std::round(frac * timeDivision));
         int den = timeDivision;
         int gcd = std::gcd(num, den);
-        if (gcd > 0) {
+        if (gcd > 0)
+        {
             num /= gcd;
             den /= gcd;
         }
         snapped.numerator = num;
         snapped.denominator = den;
     }
-    
+
     // 对于Rain音符，还需要检查结束时间边界
-    if (note.isRain) {
+    if (note.isRain)
+    {
         double endBeatPos = snapped.endBeatNum + static_cast<double>(snapped.endNumerator) / snapped.endDenominator;
-        if (endBeatPos < 0) {
+        if (endBeatPos < 0)
+        {
             // 结束时间不能为负，吸附到最近的正时间分度
             double divisionBeat = 1.0 / timeDivision;
             double endRounded = std::ceil(0.0 / divisionBeat) * divisionBeat;
@@ -328,22 +366,24 @@ Note MathUtils::snapNoteToTimeWithBoundary(const Note& note, int timeDivision)
             int endNum = static_cast<int>(std::round(endFrac * timeDivision));
             int endDen = timeDivision;
             int endGcd = std::gcd(endNum, endDen);
-            if (endGcd > 0) {
+            if (endGcd > 0)
+            {
                 endNum /= endGcd;
                 endDen /= endGcd;
             }
             snapped.endNumerator = endNum;
             snapped.endDenominator = endDen;
         }
-        
+
         // 确保结束时间不小于开始时间
-        if (endBeatPos < beatPos) {
+        if (endBeatPos < beatPos)
+        {
             // 如果结束时间小于开始时间，将结束时间设置为开始时间
             snapped.endBeatNum = snapped.beatNum;
             snapped.endNumerator = snapped.numerator;
             snapped.endDenominator = snapped.denominator;
         }
     }
-    
+
     return snapped;
 }
