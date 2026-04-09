@@ -20,6 +20,11 @@ public:
     double playbackSpeed() const;
     void setPlaybackSpeed(double speed);
 
+    int audioLatency() const;
+    void setAudioLatency(int latency);
+    int globalAudioOffset() const;
+    void setGlobalAudioOffset(int offset);
+
     QString currentSkin() const;
     void setCurrentSkin(const QString& skinName);
 

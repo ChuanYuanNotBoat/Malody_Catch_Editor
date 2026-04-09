@@ -1,6 +1,7 @@
 #include "AudioPlayer.h"
 #include "utils/Logger.h"
 #include "utils/PerformanceTimer.h"
+#include "utils/Settings.h"
 #include <QAudioOutput>
 #include <QMediaPlayer>
 #include <QDebug>
@@ -12,7 +13,12 @@
 
 AudioPlayer::AudioPlayer(QObject* parent) : QObject(parent),
     m_loaded(false),
-    m_lastError()
+    m_lastError(),
+    m_loadingState(LoadingState::Idle),
+    m_loadTimeoutTimer(nullptr),
+    m_currentLoadPath(),
+    m_audioLatency(0),
+    m_userOffset(0)
 {
     m_player = new QMediaPlayer(this);
     m_audioOutput = new QAudioOutput(this);
@@ -21,10 +27,44 @@ AudioPlayer::AudioPlayer(QObject* parent) : QObject(parent),
     connect(m_player, &QMediaPlayer::positionChanged, this, &AudioPlayer::positionChanged);
     connect(m_player, &QMediaPlayer::durationChanged, this, &AudioPlayer::durationChanged);
     connect(m_player, &QMediaPlayer::playbackStateChanged, this, &AudioPlayer::stateChanged);
+
+    // 创建超时定时器
+    m_loadTimeoutTimer = new QTimer(this);
+    m_loadTimeoutTimer->setSingleShot(true);
+    connect(m_loadTimeoutTimer, &QTimer::timeout, this, [this]() {
+        if (m_loadingState == LoadingState::Loading) {
+            m_lastError = QString("音频加载超时 (5秒)");
+            Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
+            // 断开信号连接
+            disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
+            disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
+            setLoadingState(LoadingState::Error);
+            emit errorOccurred(m_lastError);
+        }
+    });
+
+    // 从设置加载音频延迟和全局偏移
+    m_audioLatency = Settings::instance().audioLatency();
+    m_userOffset = Settings::instance().globalAudioOffset();
 }
 
 AudioPlayer::~AudioPlayer()
 {
+}
+
+AudioPlayer::LoadingState AudioPlayer::loadingState() const
+{
+    return m_loadingState;
+}
+
+void AudioPlayer::setLoadingState(LoadingState state)
+{
+    if (m_loadingState != state) {
+        m_loadingState = state;
+        emit loadingStateChanged(state);
+        // 同步更新 m_loaded 状态
+        m_loaded = (state == LoadingState::Loaded);
+    }
 }
 
 bool AudioPlayer::load(const QString& filePath)
@@ -34,8 +74,9 @@ bool AudioPlayer::load(const QString& filePath)
     Logger::info(QString("AudioPlayer::load - Loading audio from: %1").arg(filePath));
     
     // 重置状态
-    m_loaded = false;
+    setLoadingState(LoadingState::Idle);
     m_lastError.clear();
+    m_currentLoadPath.clear();
     
     // 检查文件是否存在
     QFileInfo fileInfo(filePath);
@@ -69,76 +110,81 @@ bool AudioPlayer::load(const QString& filePath)
         QUrl url = QUrl::fromLocalFile(actualPath);
         Logger::debug(QString("AudioPlayer::load - URL: %1").arg(url.toString()));
         
-        m_player->setSource(url);
+        // 停止任何正在进行的加载
+        if (m_loadingState == LoadingState::Loading) {
+            Logger::debug("AudioPlayer::load - 取消之前的加载");
+            m_loadTimeoutTimer->stop();
+            // 断开之前的连接
+            disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
+            disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
+        }
         
-        // 异步等待媒体加载完成
-        QEventLoop loop;
-        QTimer timeoutTimer;
-        timeoutTimer.setSingleShot(true);
+        // 设置加载状态
+        setLoadingState(LoadingState::Loading);
+        m_currentLoadPath = filePath;
         
-        bool loaded = false;
-        bool timedOut = false;
-        
-        // 媒体状态变化处理
-        auto onStatusChanged = [&](QMediaPlayer::MediaStatus status) {
-            Logger::debug(QString("AudioPlayer::load - MediaStatus changed: %1").arg(static_cast<int>(status)));
-            if (status == QMediaPlayer::LoadedMedia ||
-                status == QMediaPlayer::BufferedMedia ||
-                status == QMediaPlayer::InvalidMedia) {
-                loaded = true;
-                loop.quit();
+        // 连接媒体状态变化信号
+        connect(m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+            Logger::debug(QString("AudioPlayer::mediaStatusChanged - MediaStatus: %1").arg(static_cast<int>(status)));
+            if (status == QMediaPlayer::LoadedMedia || status == QMediaPlayer::BufferedMedia) {
+                // 加载成功
+                m_loadTimeoutTimer->stop();
+                // 验证音频时长
+                qint64 duration = m_player->duration();
+                if (duration <= 0) {
+                    m_lastError = QString("音频时长无效（可能格式不支持），错误信息: %1").arg(m_player->errorString());
+                    Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
+                    setLoadingState(LoadingState::Error);
+                    emit errorOccurred(m_lastError);
+                } else {
+                    Logger::info(QString("AudioPlayer::load - 音频加载成功，时长: %1 ms").arg(duration));
+                    setLoadingState(LoadingState::Loaded);
+                }
+                // 断开信号连接
+                disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
+                disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
+            } else if (status == QMediaPlayer::InvalidMedia) {
+                // 媒体无效
+                m_loadTimeoutTimer->stop();
+                m_lastError = QString("媒体无效，错误信息: %1").arg(m_player->errorString());
+                Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
+                setLoadingState(LoadingState::Error);
+                emit errorOccurred(m_lastError);
+                disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
+                disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
             }
-        };
-        
-        connect(m_player, &QMediaPlayer::mediaStatusChanged, this, onStatusChanged);
-        connect(&timeoutTimer, &QTimer::timeout, &loop, [&]() {
-            timedOut = true;
-            loop.quit();
         });
         
-        timeoutTimer.start(5000); // 5秒超时
-        loop.exec();
-        
-        disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
-        
-        // 检查超时
-        if (timedOut) {
-            m_lastError = QString("音频加载超时 (5秒)");
-            Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
+        // 连接错误信号
+        connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error error, const QString& errorString) {
+            Logger::error(QString("AudioPlayer::load - 媒体错误: %1, %2").arg(int(error)).arg(errorString));
+            m_loadTimeoutTimer->stop();
+            m_lastError = QString("媒体错误 %1: %2").arg(int(error)).arg(errorString);
+            setLoadingState(LoadingState::Error);
             emit errorOccurred(m_lastError);
-            return false;
-        }
+            disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
+            disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
+        });
         
-        // 检查媒体错误
-        QMediaPlayer::Error err = m_player->error();
-        if (err != QMediaPlayer::NoError) {
-            m_lastError = QString("媒体错误 %1: %2").arg(int(err)).arg(m_player->errorString());
-            Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
-            emit errorOccurred(m_lastError);
-            return false;
-        }
+        // 开始加载
+        m_player->setSource(url);
         
-        // 验证音频时长是否有效
-        qint64 duration = m_player->duration();
-        if (duration <= 0) {
-            m_lastError = QString("音频时长无效（可能格式不支持），错误信息: %1").arg(m_player->errorString());
-            Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
-            emit errorOccurred(m_lastError);
-            return false;
-        }
+        // 启动超时定时器
+        m_loadTimeoutTimer->start(5000); // 5秒超时
         
-        m_loaded = true;
-        Logger::info(QString("AudioPlayer::load - 音频加载成功，时长: %1 ms").arg(duration));
-        return true;
+        Logger::debug("AudioPlayer::load - 异步加载已启动");
+        return true; // 表示加载已开始
     } catch (const std::exception& e) {
         m_lastError = QString("异常: %1").arg(e.what());
         Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
         emit errorOccurred(m_lastError);
+        setLoadingState(LoadingState::Error);
         return false;
     } catch (...) {
         m_lastError = QString("未知异常");
         Logger::error("AudioPlayer::load - Unknown exception");
         emit errorOccurred(m_lastError);
+        setLoadingState(LoadingState::Error);
         return false;
     }
 }
@@ -239,4 +285,42 @@ bool AudioPlayer::canPlay() const
 QString AudioPlayer::lastError() const
 {
     return m_lastError;
+}
+
+void AudioPlayer::setAudioLatency(int latency)
+{
+    m_audioLatency = latency;
+}
+
+int AudioPlayer::audioLatency() const
+{
+    return m_audioLatency;
+}
+
+void AudioPlayer::setUserOffset(int offset)
+{
+    m_userOffset = offset;
+}
+
+int AudioPlayer::userOffset() const
+{
+    return m_userOffset;
+}
+
+qint64 AudioPlayer::adjustedPosition() const
+{
+    qint64 pos = position();
+    int totalOffset = m_audioLatency + m_userOffset;
+    // 调整位置：实际听到的时间 = 音频位置 + 总偏移量
+    // 注意：偏移量符号需要根据延迟定义确定
+    // 假设正偏移量表示音频延迟（需要提前播放），因此调整后位置 = pos + totalOffset
+    return pos + totalOffset;
+}
+
+void AudioPlayer::setAdjustedPosition(qint64 adjustedMs)
+{
+    int totalOffset = m_audioLatency + m_userOffset;
+    // 调整位置：音频位置 = 调整后位置 - 总偏移量
+    qint64 pos = adjustedMs - totalOffset;
+    setPosition(pos);
 }
