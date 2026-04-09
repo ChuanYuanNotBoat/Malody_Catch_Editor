@@ -22,6 +22,7 @@ private:
 
     ChartController* m_chartController;
     PlaybackController* m_playbackController;
-    double m_currentTime; // ms
-    double m_totalDuration;
+    double m_currentTime; // ms (chart time, without offset)
+    double m_totalDuration; // audio duration (max chart time + offset)
+    double m_offset; // audio offset in ms
 };

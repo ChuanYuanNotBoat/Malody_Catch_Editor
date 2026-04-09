@@ -52,6 +52,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void timerEvent(QTimerEvent* event) override;
 
 private:
     void drawGrid(QPainter& painter);
@@ -67,6 +68,10 @@ private:
     void updateMoveSelection(const QPointF& currentPos); // 更新移动偏移
     void endMoveSelection();                             // 结束移动，压入复合撤销命令
     void prepareMoveChanges();                           // 备份当前选中的音符
+
+    void snapPlayheadToGrid();       // 对齐参考线到网格
+    void startSnapTimer();           // 启动对齐定时器
+    void stopSnapTimer();            // 停止对齐定时器
 
     ChartController* m_chartController;
     SelectionController* m_selectionController;
@@ -114,6 +119,10 @@ private:
 
     bool m_rainFirst;
     QPointF m_rainStartPos;
+
+    bool m_snapToGrid;               // 是否启用网格对齐
+    int m_snapTimerId;               // 滚动结束对齐定时器ID
+    bool m_isScrolling;              // 是否正在滚动
 
     int leftMargin() const;
     int rightMargin() const;

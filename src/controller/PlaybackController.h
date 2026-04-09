@@ -14,6 +14,7 @@ public:
     AudioPlayer* audioPlayer() const { return m_audioPlayer; }
 
     void play();
+    void playFromTime(double timeMs);
     void pause();
     void stop();
     void setSpeed(double speed);

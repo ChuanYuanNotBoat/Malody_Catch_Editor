@@ -179,6 +179,21 @@ Note MathUtils::snapNoteToTime(const Note& note, int timeDivision)
     return snapped;
 }
 
+double MathUtils::snapTimeToGrid(double timeMs, const QVector<BpmEntry>& bpmList, int offset, int timeDivision)
+{
+    // 将时间转换为拍号
+    int beatNum, numerator, denominator;
+    msToBeat(timeMs, bpmList, offset, beatNum, numerator, denominator);
+    // 创建临时Note用于吸附
+    Note temp;
+    temp.beatNum = beatNum;
+    temp.numerator = numerator;
+    temp.denominator = denominator;
+    Note snapped = snapNoteToTime(temp, timeDivision);
+    // 转换回时间
+    return beatToMs(snapped.beatNum, snapped.numerator, snapped.denominator, bpmList, offset);
+}
+
 double MathUtils::beatToFloat(int beatNum, int numerator, int denominator)
 {
     if (denominator == 0) return static_cast<double>(beatNum); // 防止除零

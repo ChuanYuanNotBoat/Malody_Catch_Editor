@@ -36,6 +36,15 @@ void PlaybackController::play()
     }
 }
 
+void PlaybackController::playFromTime(double timeMs)
+{
+    if (m_state == Playing) {
+        pause();
+    }
+    seekTo(timeMs);
+    play();
+}
+
 void PlaybackController::pause()
 {
     if (m_state == Playing) {

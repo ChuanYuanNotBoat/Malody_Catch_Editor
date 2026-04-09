@@ -51,7 +51,10 @@ ChartCanvas::ChartCanvas(QWidget* parent)
       m_gridSnapBackup(false),
       m_wasGridSnapEnabled(false),
       m_dragReferenceIndex(-1),
-      m_rainFirst(true)   // 新增：Rain 放置状态
+      m_rainFirst(true),   // 新增：Rain 放置状态
+      m_snapToGrid(true),
+      m_snapTimerId(0),
+      m_isScrolling(false)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -85,6 +88,7 @@ void ChartCanvas::setPlaybackController(PlaybackController* controller)
     // 断开旧的连接
     if (m_playbackController) {
         disconnect(m_playbackController, &PlaybackController::positionChanged, this, &ChartCanvas::playbackPositionChanged);
+        disconnect(m_playbackController, &PlaybackController::stateChanged, this, nullptr);
     }
     
     m_playbackController = controller;
@@ -93,6 +97,12 @@ void ChartCanvas::setPlaybackController(PlaybackController* controller)
     // 连接新的信号
     if (m_playbackController) {
         connect(m_playbackController, &PlaybackController::positionChanged, this, &ChartCanvas::playbackPositionChanged);
+        connect(m_playbackController, &PlaybackController::stateChanged,
+                this, [this](PlaybackController::State state) {
+            if (state == PlaybackController::Stopped || state == PlaybackController::Paused) {
+                snapPlayheadToGrid();
+            }
+        });
         // 初始化当前时间
         m_currentPlayTime = m_playbackController->currentTime();
     }
@@ -143,8 +153,11 @@ void ChartCanvas::setVerticalFlip(bool flip)
 
 void ChartCanvas::setTimeDivision(int division)
 {
-    m_timeDivision = division;
-    update();
+    if (division != m_timeDivision) {
+        m_timeDivision = division;
+        snapPlayheadToGrid(); // 重新对齐
+        update();
+    }
 }
 
 void ChartCanvas::setGridDivision(int division)
@@ -945,6 +958,10 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent* event)
 
 void ChartCanvas::wheelEvent(QWheelEvent* event)
 {
+    // 标记为正在滚动
+    m_isScrolling = true;
+    stopSnapTimer();
+    
     double delta = event->angleDelta().y();
     if (delta != 0) {
         double step = m_visibleBeatRange * 0.1;
@@ -964,6 +981,9 @@ void ChartCanvas::wheelEvent(QWheelEvent* event)
         if (m_visibleBeatRange > 1000) m_visibleBeatRange = 1000;
         update();
     }
+    
+    // 滚动结束后启动对齐定时器（300ms后）
+    startSnapTimer();
 }
 
 void ChartCanvas::playbackPositionChanged(double timeMs)
@@ -1061,4 +1081,61 @@ int ChartCanvas::rightMargin() const
 {
     // 右边距 = 0（暂不预留）
     return 0;
+}
+
+void ChartCanvas::snapPlayheadToGrid()
+{
+    if (!m_chartController || !m_chartController->chart() || !m_snapToGrid) {
+        return;
+    }
+    
+    // 获取当前参考线时间
+    double currentTime = m_currentPlayTime;
+    
+    // 获取必要参数
+    const auto& bpmList = m_chartController->chart()->bpmList();
+    int offset = m_chartController->chart()->meta().offset;
+    
+    // 对齐到网格
+    double snappedTime = MathUtils::snapTimeToGrid(
+        currentTime, bpmList, offset, m_timeDivision);
+    
+    // 如果时间发生变化，更新参考线位置
+    if (std::abs(snappedTime - currentTime) > 1e-6) {
+        // 更新参考线时间
+        m_currentPlayTime = snappedTime;
+        
+        // 通知播放控制器跳转到新位置
+        if (m_playbackController) {
+            m_playbackController->seekTo(snappedTime);
+        }
+        
+        // 重绘画布
+        update();
+    }
+}
+
+void ChartCanvas::startSnapTimer()
+{
+    stopSnapTimer();
+    m_snapTimerId = startTimer(300); // 300ms延迟
+}
+
+void ChartCanvas::stopSnapTimer()
+{
+    if (m_snapTimerId != 0) {
+        killTimer(m_snapTimerId);
+        m_snapTimerId = 0;
+    }
+}
+
+void ChartCanvas::timerEvent(QTimerEvent* event)
+{
+    if (event->timerId() == m_snapTimerId) {
+        // 滚动结束，进行对齐
+        m_isScrolling = false;
+        snapPlayheadToGrid();
+        stopSnapTimer();
+    }
+    QWidget::timerEvent(event);
 }

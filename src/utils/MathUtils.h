@@ -27,4 +27,6 @@ public:
     // 边界吸附函数
     static int snapXToBoundary(int x);  // X轴边界吸附到0或512
     static Note snapNoteToTimeWithBoundary(const Note& note, int timeDivision);  // 时间分度吸附带边界检查
+    // 时间对齐网格
+    static double snapTimeToGrid(double timeMs, const QVector<BpmEntry>& bpmList, int offset, int timeDivision);
 };
