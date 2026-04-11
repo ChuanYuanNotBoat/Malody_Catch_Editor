@@ -11,6 +11,9 @@ public:
     QString lastOpenPath() const;
     void setLastOpenPath(const QString& path);
 
+    QString lastProjectPath() const;
+    void setLastProjectPath(const QString& path);
+
     bool colorNoteEnabled() const;
     void setColorNoteEnabled(bool enabled);
 
@@ -31,7 +34,6 @@ public:
     int noteSize() const;
     void setNoteSize(int size);
 
-    // 描边设置
     int outlineWidth() const;
     void setOutlineWidth(int width);
     QColor outlineColor() const;

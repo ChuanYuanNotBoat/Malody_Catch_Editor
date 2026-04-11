@@ -1,4 +1,3 @@
-// src/app/MainWindow.h
 #pragma once
 
 #include <QMainWindow>
@@ -36,6 +35,7 @@ protected:
 
 private slots:
     void openChart();
+    void openFolder();
     void saveChart();
     void saveChartAs();
     void exportMcz();
@@ -46,6 +46,7 @@ private slots:
     void toggleVerticalFlip(bool flipped);
     void togglePlayback();
     void changeSkin(const QString& skinName);
+    void switchDifficulty();
     void adjustNoteSize();
     void calibrateSkin();
     void configureOutline();
@@ -58,6 +59,9 @@ private:
     void createCentralArea();
     void retranslateUi();
     void populateSkinMenu();
+    void loadChartFile(const QString& filePath);
+    QString selectChartFromList(const QList<QPair<QString, QString>>& charts, const QString& title);
+    QString beatmapRootPath() const;   // 新增：返回 beatmap 根目录
 
     class Private;
     Private* d;
