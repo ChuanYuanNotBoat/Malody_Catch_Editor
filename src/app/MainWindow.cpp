@@ -4,6 +4,7 @@
 #include "ui/BPMTimePanel.h"
 #include "ui/MetaEditPanel.h"
 #include "ui/dialogs/LogSettingsDialog.h"
+#include "ui/LeftPanel.h"
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
 #include "controller/PlaybackController.h"
@@ -506,6 +507,12 @@ void MainWindow::createCentralArea()
 {
     Logger::debug("Creating central area...");
 
+    // ========== 左侧面板 ==========
+    LeftPanel* leftPanel = new LeftPanel(this);
+    leftPanel->setChartController(d->chartController);
+    leftPanel->setPlaybackController(d->playbackController);
+
+    // ========== 画布 + 滚动条容器 ==========
     d->canvas = new ChartCanvas(this);
     d->canvas->setChartController(d->chartController);
     d->canvas->setSelectionController(d->selectionController);
@@ -515,42 +522,39 @@ void MainWindow::createCentralArea()
     if (d->skin) d->canvas->setSkin(d->skin);
     d->canvas->setNoteSize(Settings::instance().noteSize());
 
+    // 将画布传递给左侧面板（用于缩放控制）
+    leftPanel->setChartCanvas(d->canvas);
+
     // 创建垂直滚动条
     d->verticalScrollBar = new QScrollBar(Qt::Vertical);
-    d->verticalScrollBar->setRange(0, 100000);  // 大范围用于精确滚动
+    d->verticalScrollBar->setRange(0, 100000);
     d->verticalScrollBar->setValue(0);
     d->verticalScrollBar->setSingleStep(100);
     d->verticalScrollBar->setPageStep(5000);
-    
-    // 创建Canvas + 滚动条的容器布局
+
     QWidget* canvasContainer = new QWidget(this);
     QHBoxLayout* canvasLayout = new QHBoxLayout(canvasContainer);
     canvasLayout->setContentsMargins(0, 0, 0, 0);
     canvasLayout->setSpacing(0);
-    canvasLayout->addWidget(d->canvas, 1);      // Canvas 占据大部分空间
-    canvasLayout->addWidget(d->verticalScrollBar, 0);  // 滚动条在右侧
+    canvasLayout->addWidget(d->canvas, 1);
+    canvasLayout->addWidget(d->verticalScrollBar, 0);
 
-    // 连接滚动条到Canvas
-    // Lambda：根据滚动条值和实际音频时长计算滚动位置
+    // 连接滚动条到画布
     auto updateScrollPos = [this](int value) {
         if (d->canvas && d->chartController && d->chartController->chart()) {
-            // 获取实际音频时长（毫秒）
-            qint64 duration = 300000;  // 默认值
+            qint64 duration = 300000;
             if (d->playbackController && d->playbackController->audioPlayer()) {
                 duration = d->playbackController->audioPlayer()->duration();
-                if (duration <= 0) duration = 300000;  // 如果获取失败，使用默认值
+                if (duration <= 0) duration = 300000;
             }
-            // 将滚动条值（0-100000）映射到实际的时间范围
             double scrollPos = (value / 100000.0) * duration;
             d->canvas->setScrollPos(scrollPos);
         }
     };
-    
     connect(d->verticalScrollBar, QOverload<int>::of(&QScrollBar::valueChanged), this, updateScrollPos);
-    
-    // 双向同步：将Canvas滚动位置变化同步到滑条
+
+    // 双向同步：画布滚动位置变化 -> 滚动条
     connect(d->canvas, &ChartCanvas::scrollPositionChanged, this, [this](double beat) {
-        // 将beat转换为滚动条值
         if (d->playbackController && d->playbackController->audioPlayer()) {
             qint64 duration = d->playbackController->audioPlayer()->duration();
             if (duration > 0 && d->chartController && d->chartController->chart()) {
@@ -560,29 +564,24 @@ void MainWindow::createCentralArea()
                 MathUtils::floatToBeat(beat, beatNum, numerator, denominator);
                 double timeMs = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
                 int value = static_cast<int>((timeMs / duration) * 100000);
-                // 阻塞信号避免循环
                 d->verticalScrollBar->blockSignals(true);
                 d->verticalScrollBar->setValue(value);
                 d->verticalScrollBar->blockSignals(false);
             }
         }
     });
-    
-    // 当音频时长改变时，更新滚动条范围
+
+    // 音频时长变化时重置滚动条
     if (d->playbackController && d->playbackController->audioPlayer()) {
         connect(d->playbackController->audioPlayer(), &AudioPlayer::durationChanged, this, [this](qint64 duration) {
             if (duration > 0) {
-                // 根据音频时长调整滚动条范围
-                // 保持0-100000的范围，通过这个范围来控制滚动灵敏度
-                Logger::debug(QString("Audio duration changed: %1 ms, scrollbar will adapt automatically").arg(duration));
-                // 重置滚动条到起始位置
+                Logger::debug(QString("Audio duration changed: %1 ms").arg(duration));
                 d->verticalScrollBar->setValue(0);
             }
         });
     }
-    
-    Logger::debug("Connected scrollbar and audio duration signals");
 
+    // ========== 右侧面板容器 ==========
     d->rightPanelContainer = new QWidget(this);
     QVBoxLayout* rightLayout = new QVBoxLayout(d->rightPanelContainer);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -606,43 +605,42 @@ void MainWindow::createCentralArea()
     connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
     connect(d->notePanel, &NoteEditPanel::gridSnapChanged, d->canvas, [this](bool on) {
         Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));
-        this->d->canvas->setGridSnap(on);
+        d->canvas->setGridSnap(on);
     });
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode) {
         d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode));
     });
-    Logger::debug("Connected signals");
 
+    // ========== 主分割器（左 / 中 / 右） ==========
     d->splitter = new QSplitter(Qt::Horizontal, this);
-    d->splitter->addWidget(canvasContainer);     // 使用包含scrollbar的容器
-    d->splitter->addWidget(d->rightPanelContainer);
-    d->splitter->setSizes({800, 300});
+    d->splitter->addWidget(leftPanel);          // 左侧面板
+    d->splitter->addWidget(canvasContainer);    // 画布+滚动条
+    d->splitter->addWidget(d->rightPanelContainer); // 右侧面板
+    d->splitter->setSizes({150, 800, 300});     // 左:中:右 = 150:800:300
     setCentralWidget(d->splitter);
 
+    // ========== 工具栏（右侧面板切换） ==========
     QToolBar* toolBar = addToolBar(tr("Tools"));
     toolBar->addAction(tr("Note"), [this]() {
         d->notePanel->setVisible(true);
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(false);
         d->currentRightPanel = d->notePanel;
-        Logger::debug("Switched to Note panel");
     });
     toolBar->addAction(tr("BPM"), [this]() {
         d->notePanel->setVisible(false);
         d->bpmPanel->setVisible(true);
         d->metaPanel->setVisible(false);
         d->currentRightPanel = d->bpmPanel;
-        Logger::debug("Switched to BPM panel");
     });
     toolBar->addAction(tr("Meta"), [this]() {
         d->notePanel->setVisible(false);
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(true);
         d->currentRightPanel = d->metaPanel;
-        Logger::debug("Switched to Meta panel");
     });
 
-    Logger::debug("Central area created");
+    Logger::debug("Central area created with LeftPanel.");
 }
 
 void MainWindow::openChart()

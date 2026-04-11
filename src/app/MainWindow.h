@@ -1,3 +1,4 @@
+// src/app/MainWindow.h
 #pragma once
 
 #include <QMainWindow>
@@ -7,8 +8,16 @@ class SelectionController;
 class PlaybackController;
 class Skin;
 class RightPanel;
+class LeftPanel;
 class QSplitter;
 class QMenu;
+class QScrollBar;
+class ChartCanvas;
+class NoteEditPanel;
+class BPMTimePanel;
+class MetaEditPanel;
+class QToolBar;
+class QAction;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -37,11 +46,11 @@ private slots:
     void toggleVerticalFlip(bool flipped);
     void togglePlayback();
     void changeSkin(const QString& skinName);
-    void adjustNoteSize();                       // 改为打开对话框
-    void calibrateSkin();                        // 新增：皮肤校准
-    void configureOutline();                     // 新增：描边设置
-    void openLogSettings();                      // 新增：打开日志设置
-    void exportDiagnosticsReport();              // 新增：导出诊断报告
+    void adjustNoteSize();
+    void calibrateSkin();
+    void configureOutline();
+    void openLogSettings();
+    void exportDiagnosticsReport();
 
 private:
     void setupUi();
