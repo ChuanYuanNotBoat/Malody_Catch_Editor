@@ -67,3 +67,6 @@ LOG_README.md
 plans
 examples
 apply_diff.py
+change.diff
+apply_replace.py
+changes.patch
