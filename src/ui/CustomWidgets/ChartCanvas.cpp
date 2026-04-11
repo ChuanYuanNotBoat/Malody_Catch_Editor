@@ -1103,13 +1103,14 @@ void ChartCanvas::keyPressEvent(QKeyEvent* event)
 
 int ChartCanvas::leftMargin() const
 {
-    if (m_gridDivision <= 0) return 0;
-    return (3 * width()) / m_gridDivision;
+    // 固定左边距为画布宽度的 1/20
+    return width() / 20;
 }
 
 int ChartCanvas::rightMargin() const
 {
-    return 0;
+    // 固定右边距为画布宽度的 1/20
+    return width() / 20;
 }
 
 void ChartCanvas::snapPlayheadToGrid()
