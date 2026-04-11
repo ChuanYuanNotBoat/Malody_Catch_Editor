@@ -1,3 +1,4 @@
+// MainWindow.cpp - 修改后完整代码
 #include "MainWindow.h"
 #include "ui/CustomWidgets/ChartCanvas.h"
 #include "ui/NoteEditPanel.h"
@@ -79,7 +80,7 @@ public:
     QAction *calibrateSkinAction;
     QAction *outlineAction;
 
-    QString currentChartPath; // 当前打开的谱面文件路径
+    QString currentChartPath;
 };
 
 MainWindow::MainWindow(ChartController *chartCtrl,
@@ -195,6 +196,13 @@ void MainWindow::createMenus()
             Logger::debug("Deleted selected notes via menu");
         } });
 
+    // 新增：粘贴时使用288分度选项
+    editMenu->addSeparator();
+    QAction *paste288Action = editMenu->addAction(tr("Paste with 288 Division"));
+    paste288Action->setCheckable(true);
+    paste288Action->setChecked(Settings::instance().pasteUse288Division());
+    connect(paste288Action, &QAction::toggled, this, &MainWindow::togglePaste288Division);
+
     // 视图菜单
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     d->colorAction = viewMenu->addAction(tr("&Color Notes"));
@@ -209,6 +217,30 @@ void MainWindow::createMenus()
     d->verticalFlipAction->setCheckable(true);
     d->verticalFlipAction->setChecked(Settings::instance().verticalFlip());
     connect(d->verticalFlipAction, &QAction::toggled, this, &MainWindow::toggleVerticalFlip);
+
+    // 背景图片开关
+    QAction *bgImageAction = viewMenu->addAction(tr("Show Background Image"));
+    bgImageAction->setCheckable(true);
+    bgImageAction->setChecked(Settings::instance().backgroundImageEnabled());
+    connect(bgImageAction, &QAction::toggled, this, [this](bool on)
+            {
+    Settings::instance().setBackgroundImageEnabled(on);
+    d->canvas->update(); });
+
+    // 背景色子菜单
+    QMenu *bgColorMenu = viewMenu->addMenu(tr("Background Color"));
+    bgColorMenu->addAction(tr("Black"), [this]()
+                           {
+    Settings::instance().setBackgroundColor(Qt::black);
+    d->canvas->update(); });
+    bgColorMenu->addAction(tr("White"), [this]()
+                           {
+    Settings::instance().setBackgroundColor(Qt::white);
+    d->canvas->update(); });
+    bgColorMenu->addAction(tr("Gray"), [this]()
+                           {
+    Settings::instance().setBackgroundColor(QColor(40, 40, 40));
+    d->canvas->update(); });
 
     // 设置菜单
     QMenu *settingsMenu = menuBar()->addMenu(tr("&Settings"));
@@ -256,12 +288,10 @@ void MainWindow::createCentralArea()
 {
     Logger::debug("Creating central area...");
 
-    // 左侧面板
     d->leftPanel = new LeftPanel(this);
     d->leftPanel->setChartController(d->chartController);
     d->leftPanel->setPlaybackController(d->playbackController);
 
-    // 画布
     d->canvas = new ChartCanvas(this);
     d->canvas->setChartController(d->chartController);
     d->canvas->setSelectionController(d->selectionController);
@@ -272,10 +302,8 @@ void MainWindow::createCentralArea()
         d->canvas->setSkin(d->skin);
     d->canvas->setNoteSize(Settings::instance().noteSize());
 
-    // 将画布传递给左侧面板（用于缩放控制）
     d->leftPanel->setChartCanvas(d->canvas);
 
-    // 垂直滚动条
     d->verticalScrollBar = new QScrollBar(Qt::Vertical);
     d->verticalScrollBar->setRange(0, 100000);
     d->verticalScrollBar->setValue(0);
@@ -333,7 +361,6 @@ void MainWindow::createCentralArea()
             } });
     }
 
-    // 右侧面板容器
     d->rightPanelContainer = new QWidget(this);
     QVBoxLayout *rightLayout = new QVBoxLayout(d->rightPanelContainer);
     rightLayout->setContentsMargins(0, 0, 0, 0);
@@ -362,7 +389,6 @@ void MainWindow::createCentralArea()
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode)
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
 
-    // 主分割器
     d->splitter = new QSplitter(Qt::Horizontal, this);
     d->splitter->addWidget(d->leftPanel);
     d->splitter->addWidget(canvasContainer);
@@ -370,7 +396,6 @@ void MainWindow::createCentralArea()
     d->splitter->setSizes({150, 800, 300});
     setCentralWidget(d->splitter);
 
-    // 工具栏（右侧面板切换）
     QToolBar *toolBar = addToolBar(tr("Tools"));
     toolBar->addAction(tr("Note"), [this]()
                        {
@@ -394,7 +419,7 @@ void MainWindow::createCentralArea()
     Logger::debug("Central area created with LeftPanel.");
 }
 
-// ==================== 新增：beatmap 根目录 ====================
+// ==================== beatmap 根目录 ====================
 QString MainWindow::beatmapRootPath() const
 {
     return QCoreApplication::applicationDirPath() + "/beatmap";
@@ -456,11 +481,9 @@ void MainWindow::loadChartFile(const QString &filePath)
     QFileInfo fi(filePath);
     if (fi.suffix().toLower() == "mcz")
     {
-        // 固定解压到 beatmap/<mcz文件名>/
         QString beatmapDir = beatmapRootPath();
         QString targetDir = beatmapDir + "/" + fi.completeBaseName();
 
-        // 确保 beatmap 根目录存在
         QDir().mkpath(beatmapDir);
 
         QString extractedDir;
@@ -470,7 +493,6 @@ void MainWindow::loadChartFile(const QString &filePath)
             return;
         }
 
-        // 扫描解压目录中的谱面
         QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(extractedDir);
         if (charts.isEmpty())
         {
@@ -482,11 +504,9 @@ void MainWindow::loadChartFile(const QString &filePath)
         if (actualChartPath.isEmpty())
             return;
 
-        // 将项目路径设为 beatmap 根目录，便于后续操作
         Settings::instance().setLastProjectPath(beatmapDir);
     }
 
-    // 加载谱面
     if (!d->chartController->loadChart(actualChartPath))
     {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
@@ -496,13 +516,11 @@ void MainWindow::loadChartFile(const QString &filePath)
     d->currentChartPath = actualChartPath;
     Settings::instance().setLastOpenPath(QFileInfo(actualChartPath).absolutePath());
 
-    // 如果不是从 MCZ 解压来的，也更新项目路径为谱面所在目录
     if (QFileInfo(filePath).suffix().toLower() != "mcz")
     {
         Settings::instance().setLastProjectPath(QFileInfo(actualChartPath).absolutePath());
     }
 
-    // 加载音频
     QString chartDir = QFileInfo(actualChartPath).absolutePath();
     QString audioFile = d->chartController->chart()->meta().audioFile;
     if (!audioFile.isEmpty())
@@ -1133,4 +1151,11 @@ void MainWindow::setSkin(Skin *skin)
     if (d->canvas)
         d->canvas->setSkin(skin);
     Logger::debug("Skin set externally");
+}
+
+// ==================== 粘贴288分度选项槽函数 ====================
+void MainWindow::togglePaste288Division(bool enabled)
+{
+    Settings::instance().setPasteUse288Division(enabled);
+    Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
 }

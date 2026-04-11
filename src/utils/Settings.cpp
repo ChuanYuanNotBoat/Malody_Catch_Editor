@@ -122,7 +122,6 @@ bool Settings::verticalFlip() const
 {
     return m_settings.value("view/verticalFlip", true).toBool();
 }
-
 void Settings::setVerticalFlip(bool flipped)
 {
     m_settings.setValue("view/verticalFlip", flipped);
@@ -135,4 +134,31 @@ QKeySequence Settings::shortcut(const QString &action) const
 void Settings::setShortcut(const QString &action, const QKeySequence &seq)
 {
     m_settings.setValue("shortcut/" + action, seq.toString());
+}
+
+bool Settings::pasteUse288Division() const
+{
+    return m_settings.value("editor/pasteUse288Division", false).toBool();
+}
+void Settings::setPasteUse288Division(bool enabled)
+{
+    m_settings.setValue("editor/pasteUse288Division", enabled);
+}
+
+bool Settings::backgroundImageEnabled() const
+{
+    return m_settings.value("view/backgroundImageEnabled", true).toBool();
+}
+void Settings::setBackgroundImageEnabled(bool enabled)
+{
+    m_settings.setValue("view/backgroundImageEnabled", enabled);
+}
+
+QColor Settings::backgroundColor() const
+{
+    return m_settings.value("view/backgroundColor", QColor(40, 40, 40)).value<QColor>();
+}
+void Settings::setBackgroundColor(const QColor &color)
+{
+    m_settings.setValue("view/backgroundColor", color);
 }

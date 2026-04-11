@@ -246,7 +246,6 @@ void ChartController::addNote(const Note &note)
 
 void ChartController::removeNote(const Note &note)
 {
-    // 查找 note 是否存在
     int idx = m_chart.notes().indexOf(note);
     if (idx != -1)
         m_undoStack->push(new RemoveNoteCommand(this, note));
@@ -360,14 +359,14 @@ bool ChartController::loadChart(const QString &path)
         Chart newChart;
         Logger::debug("ChartController::loadChart: Created new Chart object");
 
-        // 导入模式下禁用详细日志，仅显示统计信息
         if (ChartIO::load(path, newChart, false))
         {
             Logger::debug("ChartController::loadChart: ChartIO::load completed successfully");
             Logger::debug(QString("ChartController::loadChart: Chart has %1 notes").arg(newChart.notes().size()));
 
             m_chart = newChart;
-            Logger::debug("ChartController::loadChart: Chart assigned to m_chart");
+            m_currentChartPath = path; // 保存路径
+            Logger::debug("ChartController::loadChart: Chart assigned to m_chart, path saved");
 
             m_undoStack->clear();
             Logger::debug("ChartController::loadChart: Undo stack cleared");
