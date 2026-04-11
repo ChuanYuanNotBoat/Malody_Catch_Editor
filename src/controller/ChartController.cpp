@@ -8,142 +8,229 @@
 #include <QPair>
 
 // 撤销命令基类
-class ChartController::ChartCommand : public QUndoCommand {
+class ChartController::ChartCommand : public QUndoCommand
+{
 public:
-    ChartCommand(ChartController* controller, const QString& text) : QUndoCommand(text), m_controller(controller) {}
+    ChartCommand(ChartController *controller, const QString &text) : QUndoCommand(text), m_controller(controller) {}
+
 protected:
-    ChartController* m_controller;
+    ChartController *m_controller;
 };
 
 // 添加音符命令
-class ChartController::AddNoteCommand : public ChartController::ChartCommand {
+class ChartController::AddNoteCommand : public ChartController::ChartCommand
+{
 public:
-    AddNoteCommand(ChartController* controller, const Note& note) : ChartCommand(controller, "Add Note"), m_note(note) {}
-    void undo() override { m_controller->m_chart.removeNote(m_note); m_controller->chartChanged(); }
-    void redo() override { m_controller->m_chart.addNote(m_note); m_controller->chartChanged(); }
+    AddNoteCommand(ChartController *controller, const Note &note) : ChartCommand(controller, "Add Note"), m_note(note) {}
+    void undo() override
+    {
+        m_controller->m_chart.removeNote(m_note);
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        m_controller->m_chart.addNote(m_note);
+        m_controller->chartChanged();
+    }
+
 private:
     Note m_note;
 };
 
 // 删除音符命令
-class ChartController::RemoveNoteCommand : public ChartController::ChartCommand {
+class ChartController::RemoveNoteCommand : public ChartController::ChartCommand
+{
 public:
-    RemoveNoteCommand(ChartController* controller, const Note& note) : ChartCommand(controller, "Remove Note"), m_note(note) {}
-    void undo() override { m_controller->m_chart.addNote(m_note); m_controller->chartChanged(); }
-    void redo() override { m_controller->m_chart.removeNote(m_note); m_controller->chartChanged(); }
+    RemoveNoteCommand(ChartController *controller, const Note &note) : ChartCommand(controller, "Remove Note"), m_note(note) {}
+    void undo() override
+    {
+        m_controller->m_chart.addNote(m_note);
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        m_controller->m_chart.removeNote(m_note);
+        m_controller->chartChanged();
+    }
+
 private:
     Note m_note;
 };
 
 // 复合删除多个音符命令
-class ChartController::RemoveNotesCommand : public ChartController::ChartCommand {
+class ChartController::RemoveNotesCommand : public ChartController::ChartCommand
+{
 public:
-    RemoveNotesCommand(ChartController* controller, const QVector<Note>& notes)
+    RemoveNotesCommand(ChartController *controller, const QVector<Note> &notes)
         : ChartCommand(controller, QString("Remove %1 Notes").arg(notes.size())), m_notes(notes) {}
-    
-    void undo() override {
-        for (const Note& note : m_notes) {
+
+    void undo() override
+    {
+        for (const Note &note : m_notes)
+        {
             m_controller->m_chart.addNote(note);
         }
         m_controller->chartChanged();
     }
-    
-    void redo() override {
-        for (const Note& note : m_notes) {
+
+    void redo() override
+    {
+        for (const Note &note : m_notes)
+        {
             m_controller->m_chart.removeNote(note);
         }
         m_controller->chartChanged();
     }
-    
+
 private:
     QVector<Note> m_notes;
 };
 
 // 移动单个音符命令
-class ChartController::MoveNoteCommand : public ChartController::ChartCommand {
+class ChartController::MoveNoteCommand : public ChartController::ChartCommand
+{
 public:
-    MoveNoteCommand(ChartController* controller, const Note& original, const Note& newNote)
+    MoveNoteCommand(ChartController *controller, const Note &original, const Note &newNote)
         : ChartCommand(controller, "Move Note"), m_original(original), m_new(newNote) {}
-    void undo() override { m_controller->m_chart.removeNote(m_new); m_controller->m_chart.addNote(m_original); m_controller->chartChanged(); }
-    void redo() override { m_controller->m_chart.removeNote(m_original); m_controller->m_chart.addNote(m_new); m_controller->chartChanged(); }
+    void undo() override
+    {
+        m_controller->m_chart.removeNote(m_new);
+        m_controller->m_chart.addNote(m_original);
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        m_controller->m_chart.removeNote(m_original);
+        m_controller->m_chart.addNote(m_new);
+        m_controller->chartChanged();
+    }
+
 private:
     Note m_original, m_new;
 };
 
 // 复合移动多个音符命令
-class ChartController::MoveNotesCommand : public ChartController::ChartCommand {
+class ChartController::MoveNotesCommand : public ChartController::ChartCommand
+{
 public:
-    MoveNotesCommand(ChartController* controller, const QList<QPair<Note, Note>>& changes)
+    MoveNotesCommand(ChartController *controller, const QList<QPair<Note, Note>> &changes)
         : ChartCommand(controller, "Move Notes"), m_changes(changes) {}
-    void undo() override {
-        for (const auto& change : m_changes) {
+    void undo() override
+    {
+        for (const auto &change : m_changes)
+        {
             m_controller->m_chart.removeNote(change.second);
         }
-        for (const auto& change : m_changes) {
+        for (const auto &change : m_changes)
+        {
             m_controller->m_chart.addNote(change.first);
         }
         m_controller->chartChanged();
     }
-    void redo() override {
-        for (const auto& change : m_changes) {
+    void redo() override
+    {
+        for (const auto &change : m_changes)
+        {
             m_controller->m_chart.removeNote(change.first);
         }
-        for (const auto& change : m_changes) {
+        for (const auto &change : m_changes)
+        {
             m_controller->m_chart.addNote(change.second);
         }
         m_controller->chartChanged();
     }
+
 private:
     QList<QPair<Note, Note>> m_changes;
 };
 
 // 添加 BPM 命令
-class ChartController::AddBpmCommand : public ChartController::ChartCommand {
+class ChartController::AddBpmCommand : public ChartController::ChartCommand
+{
 public:
-    AddBpmCommand(ChartController* controller, const BpmEntry& bpm) : ChartCommand(controller, "Add BPM"), m_bpm(bpm) {}
-    void undo() override { m_controller->m_chart.removeBpm(m_controller->m_chart.bpmList().size() - 1); m_controller->chartChanged(); }
-    void redo() override { m_controller->m_chart.addBpm(m_bpm); m_controller->chartChanged(); }
+    AddBpmCommand(ChartController *controller, const BpmEntry &bpm) : ChartCommand(controller, "Add BPM"), m_bpm(bpm) {}
+    void undo() override
+    {
+        m_controller->m_chart.removeBpm(m_controller->m_chart.bpmList().size() - 1);
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        m_controller->m_chart.addBpm(m_bpm);
+        m_controller->chartChanged();
+    }
+
 private:
     BpmEntry m_bpm;
 };
 
 // 删除 BPM 命令
-class ChartController::RemoveBpmCommand : public ChartController::ChartCommand {
+class ChartController::RemoveBpmCommand : public ChartController::ChartCommand
+{
 public:
-    RemoveBpmCommand(ChartController* controller, int index, const BpmEntry& bpm)
+    RemoveBpmCommand(ChartController *controller, int index, const BpmEntry &bpm)
         : ChartCommand(controller, "Remove BPM"), m_index(index), m_bpm(bpm) {}
-    void undo() override { m_controller->m_chart.addBpm(m_bpm); m_controller->chartChanged(); }
-    void redo() override { m_controller->m_chart.removeBpm(m_index); m_controller->chartChanged(); }
+    void undo() override
+    {
+        m_controller->m_chart.addBpm(m_bpm);
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        m_controller->m_chart.removeBpm(m_index);
+        m_controller->chartChanged();
+    }
+
 private:
     int m_index;
     BpmEntry m_bpm;
 };
 
 // 更新 BPM 命令
-class ChartController::UpdateBpmCommand : public ChartController::ChartCommand {
+class ChartController::UpdateBpmCommand : public ChartController::ChartCommand
+{
 public:
-    UpdateBpmCommand(ChartController* controller, int index, const BpmEntry& oldBpm, const BpmEntry& newBpm)
+    UpdateBpmCommand(ChartController *controller, int index, const BpmEntry &oldBpm, const BpmEntry &newBpm)
         : ChartCommand(controller, "Update BPM"), m_index(index), m_old(oldBpm), m_new(newBpm) {}
-    void undo() override { m_controller->m_chart.updateBpm(m_index, m_old); m_controller->chartChanged(); }
-    void redo() override { m_controller->m_chart.updateBpm(m_index, m_new); m_controller->chartChanged(); }
+    void undo() override
+    {
+        m_controller->m_chart.updateBpm(m_index, m_old);
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        m_controller->m_chart.updateBpm(m_index, m_new);
+        m_controller->chartChanged();
+    }
+
 private:
     int m_index;
     BpmEntry m_old, m_new;
 };
 
 // 设置元数据命令
-class ChartController::SetMetaCommand : public ChartController::ChartCommand {
+class ChartController::SetMetaCommand : public ChartController::ChartCommand
+{
 public:
-    SetMetaCommand(ChartController* controller, const MetaData& oldMeta, const MetaData& newMeta)
+    SetMetaCommand(ChartController *controller, const MetaData &oldMeta, const MetaData &newMeta)
         : ChartCommand(controller, "Edit Meta"), m_old(oldMeta), m_new(newMeta) {}
-    void undo() override { m_controller->m_chart.meta() = m_old; m_controller->chartChanged(); }
-    void redo() override { m_controller->m_chart.meta() = m_new; m_controller->chartChanged(); }
+    void undo() override
+    {
+        m_controller->m_chart.meta() = m_old;
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        m_controller->m_chart.meta() = m_new;
+        m_controller->chartChanged();
+    }
+
 private:
     MetaData m_old, m_new;
 };
 
 // ---------- ChartController 实现 ----------
-ChartController::ChartController(QObject* parent) : QObject(parent)
+ChartController::ChartController(QObject *parent) : QObject(parent)
 {
     m_undoStack = new QUndoStack(this);
 }
@@ -152,12 +239,12 @@ ChartController::~ChartController()
 {
 }
 
-void ChartController::addNote(const Note& note)
+void ChartController::addNote(const Note &note)
 {
     m_undoStack->push(new AddNoteCommand(this, note));
 }
 
-void ChartController::removeNote(const Note& note)
+void ChartController::removeNote(const Note &note)
 {
     // 查找 note 是否存在
     int idx = m_chart.notes().indexOf(note);
@@ -165,45 +252,50 @@ void ChartController::removeNote(const Note& note)
         m_undoStack->push(new RemoveNoteCommand(this, note));
 }
 
-void ChartController::moveNote(const Note& original, const Note& newNote)
+void ChartController::moveNote(const Note &original, const Note &newNote)
 {
-    if (original == newNote) return;
+    if (original == newNote)
+        return;
     m_undoStack->push(new MoveNoteCommand(this, original, newNote));
 }
 
-void ChartController::moveNotes(const QList<QPair<Note, Note>>& changes)
+void ChartController::moveNotes(const QList<QPair<Note, Note>> &changes)
 {
-    if (changes.isEmpty()) return;
+    if (changes.isEmpty())
+        return;
     m_undoStack->push(new MoveNotesCommand(this, changes));
 }
 
-void ChartController::removeNotes(const QVector<Note>& notes)
+void ChartController::removeNotes(const QVector<Note> &notes)
 {
-    if (notes.isEmpty()) return;
+    if (notes.isEmpty())
+        return;
     qDebug() << "[ChartController] removeNotes: pushing command for" << notes.size() << "notes";
     m_undoStack->push(new RemoveNotesCommand(this, notes));
 }
 
-void ChartController::addBpm(const BpmEntry& bpm)
+void ChartController::addBpm(const BpmEntry &bpm)
 {
     m_undoStack->push(new AddBpmCommand(this, bpm));
 }
 
 void ChartController::removeBpm(int index)
 {
-    if (index >= 0 && index < m_chart.bpmList().size()) {
+    if (index >= 0 && index < m_chart.bpmList().size())
+    {
         m_undoStack->push(new RemoveBpmCommand(this, index, m_chart.bpmList()[index]));
     }
 }
 
-void ChartController::updateBpm(int index, const BpmEntry& bpm)
+void ChartController::updateBpm(int index, const BpmEntry &bpm)
 {
-    if (index >= 0 && index < m_chart.bpmList().size()) {
+    if (index >= 0 && index < m_chart.bpmList().size())
+    {
         m_undoStack->push(new UpdateBpmCommand(this, index, m_chart.bpmList()[index], bpm));
     }
 }
 
-void ChartController::setMetaData(const MetaData& meta)
+void ChartController::setMetaData(const MetaData &meta)
 {
     m_undoStack->push(new SetMetaCommand(this, m_chart.meta(), meta));
 }
@@ -211,13 +303,18 @@ void ChartController::setMetaData(const MetaData& meta)
 void ChartController::undo()
 {
     qDebug() << "ChartController::undo called";
-    try {
+    try
+    {
         m_undoStack->undo();
         qDebug() << "ChartController::undo completed";
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         qCritical() << "ChartController::undo exception:" << e.what();
         throw;
-    } catch (...) {
+    }
+    catch (...)
+    {
         qCritical() << "ChartController::undo unknown exception";
         throw;
     }
@@ -226,13 +323,18 @@ void ChartController::undo()
 void ChartController::redo()
 {
     qDebug() << "ChartController::redo called";
-    try {
+    try
+    {
         m_undoStack->redo();
         qDebug() << "ChartController::redo completed";
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         qCritical() << "ChartController::redo exception:" << e.what();
         throw;
-    } catch (...) {
+    }
+    catch (...)
+    {
         qCritical() << "ChartController::redo unknown exception";
         throw;
     }
@@ -248,67 +350,79 @@ bool ChartController::canRedo() const
     return m_undoStack->canRedo();
 }
 
-bool ChartController::loadChart(const QString& path)
+bool ChartController::loadChart(const QString &path)
 {
     PerformanceTimer loadTimer("ChartController::loadChart", "ui_operations");
-    
+
     Logger::info(QString("ChartController::loadChart: Loading chart from %1").arg(path));
-    try {
+    try
+    {
         Chart newChart;
         Logger::debug("ChartController::loadChart: Created new Chart object");
-        
+
         // 导入模式下禁用详细日志，仅显示统计信息
-        if (ChartIO::load(path, newChart, false)) {
+        if (ChartIO::load(path, newChart, false))
+        {
             Logger::debug("ChartController::loadChart: ChartIO::load completed successfully");
             Logger::debug(QString("ChartController::loadChart: Chart has %1 notes").arg(newChart.notes().size()));
-            
+
             m_chart = newChart;
             Logger::debug("ChartController::loadChart: Chart assigned to m_chart");
-            
+
             m_undoStack->clear();
             Logger::debug("ChartController::loadChart: Undo stack cleared");
-            
+
             emit chartChanged();
             emit chartLoaded();
             Logger::info("ChartController::loadChart: Signals emitted");
-            
+
             Logger::info(QString("ChartController::loadChart: Successfully loaded chart with %1 notes").arg(newChart.notes().size()));
             return true;
         }
         Logger::error(QString("ChartController::loadChart: ChartIO::load failed for %1").arg(path));
         emit errorOccurred("Failed to load chart: " + path);
         return false;
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         Logger::error(QString("ChartController::loadChart: Exception - %1").arg(e.what()));
         emit errorOccurred("Exception loading chart: " + QString::fromStdString(std::string(e.what())));
         return false;
-    } catch (...) {
+    }
+    catch (...)
+    {
         Logger::error("ChartController::loadChart: Unknown exception");
         emit errorOccurred("Unknown exception loading chart");
         return false;
     }
 }
 
-bool ChartController::saveChart(const QString& path)
+bool ChartController::saveChart(const QString &path)
 {
     PerformanceTimer saveTimer("ChartController::saveChart", "ui_operations");
-    
+
     Logger::info(QString("ChartController::saveChart: Saving chart to %1").arg(path));
     Logger::debug(QString("ChartController::saveChart: Chart has %1 notes").arg(m_chart.notes().size()));
-    
-    try {
-        if (ChartIO::save(path, m_chart)) {
+
+    try
+    {
+        if (ChartIO::save(path, m_chart))
+        {
             Logger::info(QString("ChartController::saveChart: Successfully saved chart to %1").arg(path));
             return true;
         }
         Logger::error(QString("ChartController::saveChart: ChartIO::save failed for %1").arg(path));
         emit errorOccurred("Failed to save chart: " + path);
         return false;
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         Logger::error(QString("ChartController::saveChart: Exception - %1").arg(e.what()));
         emit errorOccurred("Exception saving chart: " + QString::fromStdString(std::string(e.what())));
         return false;
-    } catch (...) {
+    }
+    catch (...)
+    {
         Logger::error("ChartController::saveChart: Unknown exception");
         emit errorOccurred("Unknown exception saving chart");
         return false;

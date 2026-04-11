@@ -18,20 +18,21 @@ class MetaEditPanel;
 class QToolBar;
 class QAction;
 
-class MainWindow : public QMainWindow {
+class MainWindow : public QMainWindow
+{
     Q_OBJECT
 public:
-    explicit MainWindow(ChartController* chartCtrl,
-                        SelectionController* selCtrl,
-                        PlaybackController* playCtrl,
-                        Skin* skin,
-                        QWidget* parent = nullptr);
+    explicit MainWindow(ChartController *chartCtrl,
+                        SelectionController *selCtrl,
+                        PlaybackController *playCtrl,
+                        Skin *skin,
+                        QWidget *parent = nullptr);
     ~MainWindow();
 
-    void setSkin(Skin* skin);
+    void setSkin(Skin *skin);
 
 protected:
-    void changeEvent(QEvent* event) override;
+    void changeEvent(QEvent *event) override;
 
 private slots:
     void openChart();
@@ -45,7 +46,7 @@ private slots:
     void toggleHyperfruitMode(bool on);
     void toggleVerticalFlip(bool flipped);
     void togglePlayback();
-    void changeSkin(const QString& skinName);
+    void changeSkin(const QString &skinName);
     void switchDifficulty();
     void adjustNoteSize();
     void calibrateSkin();
@@ -59,10 +60,10 @@ private:
     void createCentralArea();
     void retranslateUi();
     void populateSkinMenu();
-    void loadChartFile(const QString& filePath);
-    QString selectChartFromList(const QList<QPair<QString, QString>>& charts, const QString& title);
-    QString beatmapRootPath() const;   // 新增：返回 beatmap 根目录
+    void loadChartFile(const QString &filePath);
+    QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
+    QString beatmapRootPath() const; // 新增：返回 beatmap 根目录
 
     class Private;
-    Private* d;
+    Private *d;
 };

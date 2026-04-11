@@ -5,10 +5,11 @@
 class ChartController;
 class SelectionController;
 
-class RightPanel : public QWidget {
+class RightPanel : public QWidget
+{
     Q_OBJECT
 public:
-    explicit RightPanel(QWidget* parent = nullptr);
-    virtual void setChartController(ChartController* controller) = 0;
-    virtual void setSelectionController(SelectionController* controller) = 0;
+    explicit RightPanel(QWidget *parent = nullptr);
+    virtual void setChartController(ChartController *controller) = 0;
+    virtual void setSelectionController(SelectionController *controller) = 0;
 };

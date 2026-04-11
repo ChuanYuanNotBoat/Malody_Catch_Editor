@@ -4,7 +4,7 @@
 #include "model/Chart.h"
 #include <QTimer>
 
-PlaybackController::PlaybackController(AudioPlayer* audioPlayer, QObject* parent)
+PlaybackController::PlaybackController(AudioPlayer *audioPlayer, QObject *parent)
     : QObject(parent), m_audioPlayer(audioPlayer), m_state(Stopped), m_speed(1.0), m_noteSoundEnabled(true)
 {
     connect(m_audioPlayer, &AudioPlayer::positionChanged, this, &PlaybackController::onAudioPositionChanged);
@@ -18,9 +18,11 @@ PlaybackController::State PlaybackController::state() const
 
 void PlaybackController::play()
 {
-    if (m_state == Stopped || m_state == Paused) {
+    if (m_state == Stopped || m_state == Paused)
+    {
         // 检查音频是否可播放
-        if (!m_audioPlayer->canPlay()) {
+        if (!m_audioPlayer->canPlay())
+        {
             QString errorMsg = QString("Cannot play audio: %1").arg(m_audioPlayer->lastError());
             Logger::error(QString("PlaybackController::play - %1").arg(errorMsg));
             // 发出错误信号以便UI显示用户提示
@@ -31,14 +33,17 @@ void PlaybackController::play()
         m_state = Playing;
         Logger::debug(QString("PlaybackController::play - Playing from position %1ms").arg(m_audioPlayer->position()));
         emit stateChanged(m_state);
-    } else {
+    }
+    else
+    {
         Logger::debug(QString("PlaybackController::play - Ignored, already in state %1").arg(m_state));
     }
 }
 
 void PlaybackController::playFromTime(double timeMs)
 {
-    if (m_state == Playing) {
+    if (m_state == Playing)
+    {
         pause();
     }
     seekTo(timeMs);
@@ -47,7 +52,8 @@ void PlaybackController::playFromTime(double timeMs)
 
 void PlaybackController::pause()
 {
-    if (m_state == Playing) {
+    if (m_state == Playing)
+    {
         m_audioPlayer->pause();
         m_state = Paused;
         Logger::debug(QString("PlaybackController::pause - Paused at position %1ms").arg(m_audioPlayer->position()));
@@ -57,7 +63,8 @@ void PlaybackController::pause()
 
 void PlaybackController::stop()
 {
-    if (m_state != Stopped) {
+    if (m_state != Stopped)
+    {
         m_audioPlayer->stop();
         m_state = Stopped;
         Logger::debug("PlaybackController::stop - Playback stopped");
@@ -67,8 +74,10 @@ void PlaybackController::stop()
 
 void PlaybackController::setSpeed(double speed)
 {
-    if (speed < 0.25) speed = 0.25;
-    if (speed > 1.0) speed = 1.0;
+    if (speed < 0.25)
+        speed = 0.25;
+    if (speed > 1.0)
+        speed = 1.0;
     m_speed = speed;
     m_audioPlayer->setSpeed(speed);
     Logger::debug(QString("PlaybackController::setSpeed - Speed changed to %1x").arg(speed));
@@ -109,11 +118,12 @@ void PlaybackController::onAudioPositionChanged(qint64 position)
     emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
 }
 
-void PlaybackController::onAudioError(const QString& error)
+void PlaybackController::onAudioError(const QString &error)
 {
     Logger::error(QString("PlaybackController::onAudioError - Audio error: %1").arg(error));
     // 可以选择停止播放并更新状态
-    if (m_state != Stopped) {
+    if (m_state != Stopped)
+    {
         m_state = Stopped;
         emit stateChanged(m_state);
     }

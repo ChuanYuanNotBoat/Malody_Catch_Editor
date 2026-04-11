@@ -16,18 +16,21 @@ double HyperfruitDetector::catcherWidth() const
     return 106.75 * (1.0 - 0.14 * (m_cs - 5));
 }
 
-QSet<int> HyperfruitDetector::detect(const QVector<Note>& notes) const
+QSet<int> HyperfruitDetector::detect(const QVector<Note> &notes) const
 {
     QSet<int> hyperSet;
-    if (notes.size() < 2) return hyperSet;
+    if (notes.size() < 2)
+        return hyperSet;
 
     double catcherW = catcherWidth() / 2.0;
-    for (int i = 1; i < notes.size(); ++i) {
-        const Note& prev = notes[i - 1];
-        const Note& curr = notes[i];
+    for (int i = 1; i < notes.size(); ++i)
+    {
+        const Note &prev = notes[i - 1];
+        const Note &curr = notes[i];
 
         // 只对普通 note 进行检测（Rain 音符不参与判定）
-        if (prev.isRain || curr.isRain) continue;
+        if (prev.isRain || curr.isRain)
+            continue;
 
         // 获取时间差（毫秒）
         // 假设外部已经传入了 bpmList 和 offset，但这里没有这些信息，所以需要从外部计算

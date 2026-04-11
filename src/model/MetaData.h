@@ -2,7 +2,8 @@
 
 #include <QString>
 
-struct MetaData {
+struct MetaData
+{
     QString title;
     QString titleOrg;
     QString artist;

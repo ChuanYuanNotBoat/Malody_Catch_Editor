@@ -4,16 +4,17 @@
 #include <QVector>
 #include "plugin/PluginInterface.h"
 
-class PluginManager : public QObject {
+class PluginManager : public QObject
+{
     Q_OBJECT
 public:
-    explicit PluginManager(QObject* parent = nullptr);
+    explicit PluginManager(QObject *parent = nullptr);
     ~PluginManager();
 
-    void loadPlugins(const QString& pluginsDir, QWidget* parent = nullptr);
-    QVector<PluginInterface*> plugins() const;
+    void loadPlugins(const QString &pluginsDir, QWidget *parent = nullptr);
+    QVector<PluginInterface *> plugins() const;
     void notifyChartChanged();
 
 private:
-    QVector<PluginInterface*> m_plugins;
+    QVector<PluginInterface *> m_plugins;
 };

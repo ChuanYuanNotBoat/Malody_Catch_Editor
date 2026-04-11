@@ -3,15 +3,21 @@
 #include <QObject>
 #include "audio/AudioPlayer.h"
 
-class PlaybackController : public QObject {
+class PlaybackController : public QObject
+{
     Q_OBJECT
 public:
-    enum State { Stopped, Playing, Paused };
+    enum State
+    {
+        Stopped,
+        Playing,
+        Paused
+    };
 
-    explicit PlaybackController(AudioPlayer* audioPlayer, QObject* parent = nullptr);
+    explicit PlaybackController(AudioPlayer *audioPlayer, QObject *parent = nullptr);
 
     State state() const;
-    AudioPlayer* audioPlayer() const { return m_audioPlayer; }
+    AudioPlayer *audioPlayer() const { return m_audioPlayer; }
 
     void play();
     void playFromTime(double timeMs);
@@ -31,14 +37,13 @@ signals:
     void positionChanged(double timeMs);
     void speedChanged(double speed);
     void beatReached(int beatNum, int num, int den);
-    void errorOccurred(const QString& error);
+    void errorOccurred(const QString &error);
 private slots:
     void onAudioPositionChanged(qint64 position);
-    void onAudioError(const QString& error);
-
+    void onAudioError(const QString &error);
 
 private:
-    AudioPlayer* m_audioPlayer;
+    AudioPlayer *m_audioPlayer;
     State m_state;
     double m_speed;
     bool m_noteSoundEnabled;

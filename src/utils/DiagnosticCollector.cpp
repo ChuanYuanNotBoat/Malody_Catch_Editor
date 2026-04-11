@@ -1,16 +1,18 @@
 #include "DiagnosticCollector.h"
 #include <QJsonArray>
 
-DiagnosticCollector& DiagnosticCollector::instance() {
+DiagnosticCollector &DiagnosticCollector::instance()
+{
     static DiagnosticCollector s_instance;
     return s_instance;
 }
 
 void DiagnosticCollector::recordSkippedNote(int noteIndex,
-                                           int noteType,
-                                           const QString& reason,
-                                           const QStringList& missingFields,
-                                           const QStringList& presentFields) {
+                                            int noteType,
+                                            const QString &reason,
+                                            const QStringList &missingFields,
+                                            const QStringList &presentFields)
+{
     SkippedNoteDetail detail;
     detail.index = noteIndex;
     detail.type = noteType;
@@ -20,11 +22,12 @@ void DiagnosticCollector::recordSkippedNote(int noteIndex,
     m_skippedNotes.append(detail);
 }
 
-void DiagnosticCollector::recordLoadMetrics(const QString& filePath,
-                                           qint64 duration,
-                                           int totalNotes,
-                                           int loadedNotes,
-                                           int skippedNotes) {
+void DiagnosticCollector::recordLoadMetrics(const QString &filePath,
+                                            qint64 duration,
+                                            int totalNotes,
+                                            int loadedNotes,
+                                            int skippedNotes)
+{
     LoadMetrics metrics;
     metrics.filePath = filePath;
     metrics.duration = duration;
@@ -34,9 +37,10 @@ void DiagnosticCollector::recordLoadMetrics(const QString& filePath,
     m_loadMetrics.append(metrics);
 }
 
-void DiagnosticCollector::recordSaveMetrics(const QString& filePath,
-                                           qint64 duration,
-                                           int notesCount) {
+void DiagnosticCollector::recordSaveMetrics(const QString &filePath,
+                                            qint64 duration,
+                                            int notesCount)
+{
     SaveMetrics metrics;
     metrics.filePath = filePath;
     metrics.duration = duration;
@@ -44,97 +48,113 @@ void DiagnosticCollector::recordSaveMetrics(const QString& filePath,
     m_saveMetrics.append(metrics);
 }
 
-void DiagnosticCollector::recordRenderMetrics(qint64 frameTimeMs, int notesRenderedCount) {
+void DiagnosticCollector::recordRenderMetrics(qint64 frameTimeMs, int notesRenderedCount)
+{
     RenderMetricsData metrics;
     metrics.frameTimeMs = frameTimeMs;
     metrics.notesRenderedCount = notesRenderedCount;
     m_renderMetrics.append(metrics);
 }
 
-DiagnosticCollector::DiagnosticReport DiagnosticCollector::generateReport() const {
+DiagnosticCollector::DiagnosticReport DiagnosticCollector::generateReport() const
+{
     DiagnosticReport report;
 
     // 统计跳过的notes
-    for (const auto& detail : m_skippedNotes) {
+    for (const auto &detail : m_skippedNotes)
+    {
         report.skippedNotesSummary.totalSkipped++;
         report.skippedNotesSummary.byReason[detail.reason]++;
         report.skippedNotesSummary.byType[detail.type]++;
-        
-        for (const auto& field : detail.missingFields) {
+
+        for (const auto &field : detail.missingFields)
+        {
             report.skippedNotesSummary.byMissingField[field]++;
         }
     }
 
     // 聚合加载指标
-    if (!m_loadMetrics.empty()) {
+    if (!m_loadMetrics.empty())
+    {
         report.performanceMetrics.lastLoadDuration = m_loadMetrics.last().duration;
         report.lastLoadedFilePath = m_loadMetrics.last().filePath;
-        
+
         report.performanceMetrics.loadCount = m_loadMetrics.size();
-        for (const auto& metrics : m_loadMetrics) {
+        for (const auto &metrics : m_loadMetrics)
+        {
             report.performanceMetrics.totalLoadDuration += metrics.duration;
         }
     }
 
     // 聚合保存指标
-    if (!m_saveMetrics.empty()) {
+    if (!m_saveMetrics.empty())
+    {
         report.performanceMetrics.lastSaveDuration = m_saveMetrics.last().duration;
         report.lastSavedFilePath = m_saveMetrics.last().filePath;
-        
+
         report.performanceMetrics.saveCount = m_saveMetrics.size();
-        for (const auto& metrics : m_saveMetrics) {
+        for (const auto &metrics : m_saveMetrics)
+        {
             report.performanceMetrics.totalSaveDuration += metrics.duration;
         }
     }
 
     // 聚合渲染指标
-    if (!m_renderMetrics.empty()) {
+    if (!m_renderMetrics.empty())
+    {
         report.performanceMetrics.totalFrames = m_renderMetrics.size();
-        for (const auto& metrics : m_renderMetrics) {
+        for (const auto &metrics : m_renderMetrics)
+        {
             report.performanceMetrics.totalRenderTime += metrics.frameTimeMs;
-            if (metrics.frameTimeMs > report.performanceMetrics.maxFrameTime) {
+            if (metrics.frameTimeMs > report.performanceMetrics.maxFrameTime)
+            {
                 report.performanceMetrics.maxFrameTime = metrics.frameTimeMs;
             }
         }
-        report.performanceMetrics.avgFrameTime = static_cast<double>(report.performanceMetrics.totalRenderTime) 
-                                                  / report.performanceMetrics.totalFrames;
+        report.performanceMetrics.avgFrameTime = static_cast<double>(report.performanceMetrics.totalRenderTime) / report.performanceMetrics.totalFrames;
     }
 
     return report;
 }
 
-void DiagnosticCollector::clear() {
+void DiagnosticCollector::clear()
+{
     m_skippedNotes.clear();
     m_loadMetrics.clear();
     m_saveMetrics.clear();
     m_renderMetrics.clear();
 }
 
-QVector<DiagnosticCollector::SkippedNoteDetail> DiagnosticCollector::getSkippedNoteDetails() const {
+QVector<DiagnosticCollector::SkippedNoteDetail> DiagnosticCollector::getSkippedNoteDetails() const
+{
     return m_skippedNotes;
 }
 
-QJsonObject DiagnosticCollector::DiagnosticReport::toJsonObject() const {
+QJsonObject DiagnosticCollector::DiagnosticReport::toJsonObject() const
+{
     QJsonObject root;
 
     // 跳过notes统计
     QJsonObject skippedObj;
     skippedObj["total"] = skippedNotesSummary.totalSkipped;
-    
+
     QJsonObject byReasonObj;
-    for (auto it = skippedNotesSummary.byReason.constBegin(); it != skippedNotesSummary.byReason.constEnd(); ++it) {
+    for (auto it = skippedNotesSummary.byReason.constBegin(); it != skippedNotesSummary.byReason.constEnd(); ++it)
+    {
         byReasonObj[it.key()] = it.value();
     }
     skippedObj["by_reason"] = byReasonObj;
 
     QJsonObject byTypeObj;
-    for (auto it = skippedNotesSummary.byType.constBegin(); it != skippedNotesSummary.byType.constEnd(); ++it) {
+    for (auto it = skippedNotesSummary.byType.constBegin(); it != skippedNotesSummary.byType.constEnd(); ++it)
+    {
         byTypeObj[QString::number(it.key())] = it.value();
     }
     skippedObj["by_type"] = byTypeObj;
 
     QJsonObject byFieldObj;
-    for (auto it = skippedNotesSummary.byMissingField.constBegin(); it != skippedNotesSummary.byMissingField.constEnd(); ++it) {
+    for (auto it = skippedNotesSummary.byMissingField.constBegin(); it != skippedNotesSummary.byMissingField.constEnd(); ++it)
+    {
         byFieldObj[it.key()] = it.value();
     }
     skippedObj["by_missing_field"] = byFieldObj;
@@ -171,65 +191,75 @@ QJsonObject DiagnosticCollector::DiagnosticReport::toJsonObject() const {
     return root;
 }
 
-QString DiagnosticCollector::DiagnosticReport::toFormattedString() const {
+QString DiagnosticCollector::DiagnosticReport::toFormattedString() const
+{
     QString result;
     result += "========== Diagnostic Report ==========\n";
     result += QString("Skipped Notes: %1\n").arg(skippedNotesSummary.totalSkipped);
-    
-    if (!skippedNotesSummary.byReason.empty()) {
+
+    if (!skippedNotesSummary.byReason.empty())
+    {
         result += "  By Reason:\n";
-        for (auto it = skippedNotesSummary.byReason.constBegin(); it != skippedNotesSummary.byReason.constEnd(); ++it) {
+        for (auto it = skippedNotesSummary.byReason.constBegin(); it != skippedNotesSummary.byReason.constEnd(); ++it)
+        {
             result += QString("    %1: %2\n").arg(it.key(), QString::number(it.value()));
         }
     }
 
-    if (!skippedNotesSummary.byMissingField.empty()) {
+    if (!skippedNotesSummary.byMissingField.empty())
+    {
         result += "  Missing Fields:\n";
-        for (auto it = skippedNotesSummary.byMissingField.constBegin(); it != skippedNotesSummary.byMissingField.constEnd(); ++it) {
+        for (auto it = skippedNotesSummary.byMissingField.constBegin(); it != skippedNotesSummary.byMissingField.constEnd(); ++it)
+        {
             result += QString("    %1: %2 notes\n").arg(it.key(), QString::number(it.value()));
         }
     }
 
     result += "\nPerformance Metrics:\n";
     result += QString("  Load: count=%1, avg=%2ms\n")
-        .arg(performanceMetrics.loadCount)
-        .arg(performanceMetrics.loadCount > 0 ? performanceMetrics.totalLoadDuration / performanceMetrics.loadCount : 0);
-    
+                  .arg(performanceMetrics.loadCount)
+                  .arg(performanceMetrics.loadCount > 0 ? performanceMetrics.totalLoadDuration / performanceMetrics.loadCount : 0);
+
     result += QString("  Save: count=%1, avg=%2ms\n")
-        .arg(performanceMetrics.saveCount)
-        .arg(performanceMetrics.saveCount > 0 ? performanceMetrics.totalSaveDuration / performanceMetrics.saveCount : 0);
-    
-    if (performanceMetrics.totalFrames > 0) {
+                  .arg(performanceMetrics.saveCount)
+                  .arg(performanceMetrics.saveCount > 0 ? performanceMetrics.totalSaveDuration / performanceMetrics.saveCount : 0);
+
+    if (performanceMetrics.totalFrames > 0)
+    {
         result += QString("  Render: frames=%1, avg=%2ms, max=%3ms\n")
-            .arg(performanceMetrics.totalFrames)
-            .arg(performanceMetrics.avgFrameTime, 0, 'f', 2)
-            .arg(performanceMetrics.maxFrameTime);
+                      .arg(performanceMetrics.totalFrames)
+                      .arg(performanceMetrics.avgFrameTime, 0, 'f', 2)
+                      .arg(performanceMetrics.maxFrameTime);
     }
 
     result += "=======================================\n";
     return result;
 }
 
-QJsonDocument DiagnosticCollector::toJsonDocument() const {
+QJsonDocument DiagnosticCollector::toJsonDocument() const
+{
     QJsonObject root;
     root["report"] = generateReport().toJsonObject();
-    
+
     // 添加详细跳过notes列表
     QJsonArray skippedDetailsArray;
-    for (const auto& detail : m_skippedNotes) {
+    for (const auto &detail : m_skippedNotes)
+    {
         QJsonObject detailObj;
         detailObj["index"] = detail.index;
         detailObj["type"] = detail.type;
         detailObj["reason"] = detail.reason;
-        
+
         QJsonArray missingArray;
-        for (const auto& field : detail.missingFields) {
+        for (const auto &field : detail.missingFields)
+        {
             missingArray.append(field);
         }
         detailObj["missing_fields"] = missingArray;
 
         QJsonArray presentArray;
-        for (const auto& field : detail.presentFields) {
+        for (const auto &field : detail.presentFields)
+        {
             presentArray.append(field);
         }
         detailObj["present_fields"] = presentArray;

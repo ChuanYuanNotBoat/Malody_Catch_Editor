@@ -10,21 +10,22 @@
 #include <QDebug>
 #include <QDateTime>
 
-bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
+bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
 {
     PerformanceTimer loadTimer("ChartIO::load", "chart_loading");
-    
+
     Logger::info(QString("ChartIO::load - Loading chart from: %1 (verbose mode: %2)").arg(filePath).arg(verbose ? "on" : "off"));
-    
+
     // 保存原来的 verbose 设置
     bool previousVerbose = Logger::isVerbose();
     // 设置为导入所需的 verbose 模式
     Logger::setVerbose(verbose);
-    
+
     QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
         Logger::error(QString("ChartIO::load - Cannot open file: %1").arg(filePath));
-        Logger::setVerbose(previousVerbose);  // 恢复设置
+        Logger::setVerbose(previousVerbose); // 恢复设置
         return false;
     }
 
@@ -33,9 +34,10 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
     Logger::debug(QString("ChartIO::load - Read %1 bytes from file").arg(data.size()));
 
     QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (doc.isNull()) {
+    if (doc.isNull())
+    {
         Logger::error(QString("ChartIO::load - Invalid JSON in file: %1").arg(filePath));
-        Logger::setVerbose(previousVerbose);  // 恢复设置
+        Logger::setVerbose(previousVerbose); // 恢复设置
         return false;
     }
 
@@ -47,14 +49,18 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
     int bpmCount = 0;
     // 清空现有的 BPM 列表（包括 clear() 添加的默认条目）
     outChart.bpmList().clear();
-    if (root.contains("time") && root["time"].isArray()) {
+    if (root.contains("time") && root["time"].isArray())
+    {
         QJsonArray timeArray = root["time"].toArray();
         Logger::debug(QString("ChartIO::load - Found 'time' array with %1 entries").arg(timeArray.size()));
-        for (const QJsonValue& val : timeArray) {
+        for (const QJsonValue &val : timeArray)
+        {
             QJsonObject obj = val.toObject();
-            if (!obj.contains("beat") || !obj.contains("bpm")) continue;
+            if (!obj.contains("beat") || !obj.contains("bpm"))
+                continue;
             QJsonArray beatArr = obj["beat"].toArray();
-            if (beatArr.size() < 3) continue;
+            if (beatArr.size() < 3)
+                continue;
             int beatNum = beatArr[0].toInt();
             int num = beatArr[1].toInt();
             int den = beatArr[2].toInt();
@@ -63,120 +69,142 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
             bpmCount++;
         }
         Logger::info(QString("ChartIO::load - Loaded %1 BPM entries").arg(bpmCount));
-    } else {
+    }
+    else
+    {
         Logger::debug("ChartIO::load - No 'time' array found in file");
     }
     // 如果文件中没有 BPM 条目，确保至少有一个默认 BPM 条目
-    if (bpmCount == 0) {
+    if (bpmCount == 0)
+    {
         outChart.addBpm(BpmEntry(0, 1, 1, 120.0));
         Logger::debug("ChartIO::load - Added default BPM entry (120.0)");
     }
 
     // 读取 note 数组
     int normalNoteCount = 0, rainNoteCount = 0, soundNoteCount = 0, skippedNoteCount = 0;
-    int totalNoteCount = 0;  // 用于统计成功率
-    
-    if (root.contains("note") && root["note"].isArray()) {
+    int totalNoteCount = 0; // 用于统计成功率
+
+    if (root.contains("note") && root["note"].isArray())
+    {
         QJsonArray noteArray = root["note"].toArray();
         totalNoteCount = noteArray.size();
         Logger::debug(QString("ChartIO::load - Found 'note' array with %1 entries").arg(totalNoteCount));
-        
-        for (int i = 0; i < noteArray.size(); i++) {
+
+        for (int i = 0; i < noteArray.size(); i++)
+        {
             QJsonObject obj = noteArray[i].toObject();
             QJsonArray beatArr = obj["beat"].toArray();
-            
-            if (!obj.contains("beat") || beatArr.size() < 3) {
+
+            if (!obj.contains("beat") || beatArr.size() < 3)
+            {
                 Logger::warn(QString("ChartIO::load - Note %1: Skipped (invalid beat array)").arg(i));
                 skippedNoteCount++;
-                
+
                 // 记录诊断信息
                 QStringList missingFields;
                 missingFields << "beat";
                 DiagnosticCollector::instance().recordSkippedNote(i, -1, "invalid_beat", missingFields);
                 continue;
             }
-            
+
             int beatNum = beatArr[0].toInt();
             int num = beatArr[1].toInt();
             int den = beatArr[2].toInt();
             int type = obj.value("type").toInt(0);
 
             // 音效音符（type=1）：有 sound 字段，无 x 字段
-            if (type == 1 && obj.contains("sound")) {
+            if (type == 1 && obj.contains("sound"))
+            {
                 QString sound = obj["sound"].toString();
                 int vol = obj.value("vol").toInt(100);
                 int offset = obj.value("offset").toInt(0);
                 outChart.addNote(Note(beatNum, num, den, sound, vol, offset));
                 soundNoteCount++;
-                if (Logger::isVerbose()) {
+                if (Logger::isVerbose())
+                {
                     Logger::debug(QString("ChartIO::load - Note %1: Sound note at [%2,%3,%4], sound=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(sound));
                 }
             }
             // Rain 音符（type=3）：有 endbeat 字段，x 字段可选
-            else if (type == 3 && obj.contains("endbeat")) {
+            else if (type == 3 && obj.contains("endbeat"))
+            {
                 QJsonArray endBeatArr = obj["endbeat"].toArray();
-                if (endBeatArr.size() >= 3) {
-                    int x = obj.value("x").toInt(256);  // 如果没有 x 字段，默认值为 256（屏幕中央）
+                if (endBeatArr.size() >= 3)
+                {
+                    int x = obj.value("x").toInt(256); // 如果没有 x 字段，默认值为 256（屏幕中央）
                     int endBeatNum = endBeatArr[0].toInt();
                     int endNum = endBeatArr[1].toInt();
                     int endDen = endBeatArr[2].toInt();
                     outChart.addNote(Note(beatNum, num, den, endBeatNum, endNum, endDen, x));
                     rainNoteCount++;
-                    if (Logger::isVerbose()) {
+                    if (Logger::isVerbose())
+                    {
                         Logger::debug(QString("ChartIO::load - Note %1: Rain note at [%2,%3,%4]-[%5,%6,%7], x=%8").arg(i).arg(beatNum).arg(num).arg(den).arg(endBeatNum).arg(endNum).arg(endDen).arg(x));
                     }
-                } else {
+                }
+                else
+                {
                     Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=3, invalid endbeat format)").arg(i));
                     skippedNoteCount++;
-                    
+
                     // 记录诊断信息
                     QStringList missingFields;
                     missingFields << "endbeat";
                     QStringList presentFields;
                     presentFields << "beat" << "type";
-                    if (obj.contains("x")) presentFields << "x";
+                    if (obj.contains("x"))
+                        presentFields << "x";
                     DiagnosticCollector::instance().recordSkippedNote(i, 3, "invalid_endbeat_format", missingFields, presentFields);
                 }
             }
             // 普通音符（type=0）：必须有 x 字段
-            else if (obj.contains("x")) {
+            else if (obj.contains("x"))
+            {
                 int x = obj["x"].toInt();
                 outChart.addNote(Note(beatNum, num, den, x));
                 normalNoteCount++;
-                if (Logger::isVerbose()) {
+                if (Logger::isVerbose())
+                {
                     Logger::debug(QString("ChartIO::load - Note %1: Normal note at [%2,%3,%4], x=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(x));
                 }
-            } 
+            }
             // Sound note检查（type=1但缺少sound字段）
-            else if (type == 1) {
+            else if (type == 1)
+            {
                 Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=1, missing 'sound' field)").arg(i));
                 skippedNoteCount++;
-                
+
                 QStringList missingFields;
                 missingFields << "sound";
                 QStringList presentFields;
                 presentFields << "beat" << "type";
-                if (obj.contains("vol")) presentFields << "vol";
-                if (obj.contains("offset")) presentFields << "offset";
+                if (obj.contains("vol"))
+                    presentFields << "vol";
+                if (obj.contains("offset"))
+                    presentFields << "offset";
                 DiagnosticCollector::instance().recordSkippedNote(i, 1, "missing_sound_field", missingFields, presentFields);
             }
             // Rain note检查（type=3但缺少endbeat字段）
-            else if (type == 3) {
+            else if (type == 3)
+            {
                 Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=3, missing 'endbeat' field)").arg(i));
                 skippedNoteCount++;
-                
+
                 QStringList missingFields;
                 missingFields << "endbeat";
                 QStringList presentFields;
                 presentFields << "beat" << "type";
-                if (obj.contains("x")) presentFields << "x";
+                if (obj.contains("x"))
+                    presentFields << "x";
                 DiagnosticCollector::instance().recordSkippedNote(i, 3, "missing_endbeat_field", missingFields, presentFields);
             }
             // 普通音符缺少x字段
-            else {
+            else
+            {
                 Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=%2, missing 'x' field)").arg(i).arg(type));
                 skippedNoteCount++;
-                
+
                 QStringList missingFields;
                 missingFields << "x";
                 QStringList presentFields;
@@ -184,119 +212,149 @@ bool ChartIO::load(const QString& filePath, Chart& outChart, bool verbose)
                 DiagnosticCollector::instance().recordSkippedNote(i, type, "missing_x_field", missingFields, presentFields);
             }
         }
-        
+
         // 输出详细统计信息
         int totalLoadedNotes = normalNoteCount + rainNoteCount + soundNoteCount;
         double successRate = totalNoteCount > 0 ? (totalLoadedNotes * 100.0 / totalNoteCount) : 0.0;
-        
+
         Logger::info(QString("ChartIO::load - Loaded %1 normal notes, %2 rain notes, %3 sound notes")
-                    .arg(normalNoteCount).arg(rainNoteCount).arg(soundNoteCount));
+                         .arg(normalNoteCount)
+                         .arg(rainNoteCount)
+                         .arg(soundNoteCount));
         Logger::info(QString("ChartIO::load - Note Summary: %1 / %2 notes loaded (%3%% success rate)")
-                    .arg(totalLoadedNotes).arg(totalNoteCount).arg(QString::number(successRate, 'f', 1)));
-        
-        if (skippedNoteCount > 0) {
+                         .arg(totalLoadedNotes)
+                         .arg(totalNoteCount)
+                         .arg(QString::number(successRate, 'f', 1)));
+
+        if (skippedNoteCount > 0)
+        {
             Logger::warn(QString("ChartIO::load - Skipped %1 notes with missing/invalid fields").arg(skippedNoteCount));
         }
-        
+
         // 记录加载指标
-        DiagnosticCollector::instance().recordLoadMetrics(filePath, loadTimer.elapsed(), 
-                                                         totalNoteCount, totalLoadedNotes, skippedNoteCount);
-    } else {
+        DiagnosticCollector::instance().recordLoadMetrics(filePath, loadTimer.elapsed(),
+                                                          totalNoteCount, totalLoadedNotes, skippedNoteCount);
+    }
+    else
+    {
         Logger::debug("ChartIO::load - No 'note' array found in file");
     }
 
     // 读取 meta（如果有）
-    if (root.contains("meta") && root["meta"].isObject()) {
+    if (root.contains("meta") && root["meta"].isObject())
+    {
         QJsonObject metaObj = root["meta"].toObject();
         // 调试：记录所有meta键
-        for (auto it = metaObj.begin(); it != metaObj.end(); ++it) {
+        for (auto it = metaObj.begin(); it != metaObj.end(); ++it)
+        {
             Logger::info(QString("ChartIO::load - meta key '%1' = '%2'").arg(it.key()).arg(it.value().toString()));
         }
-        MetaData& meta = outChart.meta();
-        
+        MetaData &meta = outChart.meta();
+
         // 支持嵌套 song 对象
         QJsonObject songObj;
-        if (metaObj.contains("song") && metaObj["song"].isObject()) {
+        if (metaObj.contains("song") && metaObj["song"].isObject())
+        {
             songObj = metaObj["song"].toObject();
             meta.title = songObj.value("title").toString();
             meta.titleOrg = songObj.value("titleorg").toString();
             meta.artist = songObj.value("artist").toString();
             // artistOrg 可能不存在，留空
-        } else {
+        }
+        else
+        {
             // 回退到平面字段
             meta.title = metaObj.value("title").toString();
             meta.titleOrg = metaObj.value("title_org").toString();
             meta.artist = metaObj.value("artist").toString();
             meta.artistOrg = metaObj.value("artist_org").toString();
         }
-        
+
         meta.chartAuthor = metaObj.value("creator").toString();
         meta.difficulty = metaObj.value("version").toString();
         meta.backgroundFile = metaObj.value("background").toString();
-        
+
         // 读取 mode_ext.speed
-        if (metaObj.contains("mode_ext") && metaObj["mode_ext"].isObject()) {
+        if (metaObj.contains("mode_ext") && metaObj["mode_ext"].isObject())
+        {
             QJsonObject modeExtObj = metaObj["mode_ext"].toObject();
             meta.speed = modeExtObj.value("speed").toInt();
-        } else {
+        }
+        else
+        {
             meta.speed = metaObj.value("speed").toInt();
         }
-        
+
         // 音频文件：优先使用 meta.audio，否则从 note 数组中寻找 sound 字段
         meta.audioFile = metaObj.value("audio").toString();
-        if (meta.audioFile.isEmpty() && root.contains("note") && root["note"].isArray()) {
+        if (meta.audioFile.isEmpty() && root.contains("note") && root["note"].isArray())
+        {
             QJsonArray noteArray = root["note"].toArray();
-            for (const QJsonValue& noteVal : noteArray) {
+            for (const QJsonValue &noteVal : noteArray)
+            {
                 QJsonObject noteObj = noteVal.toObject();
-                if (noteObj.contains("sound") && noteObj["sound"].isString()) {
+                if (noteObj.contains("sound") && noteObj["sound"].isString())
+                {
                     meta.audioFile = noteObj["sound"].toString();
                     break;
                 }
             }
         }
-        
+
         // 预览时间和偏移量
         meta.previewTime = metaObj.value("preview").toInt(); // 字段名是 preview 不是 preview_time
         meta.offset = metaObj.value("offset").toInt();
-        
+
         // 如果 offset 为0，尝试从 note 数组中的 sound 音符读取 offset 字段
-        if (meta.offset == 0 && root.contains("note") && root["note"].isArray()) {
+        if (meta.offset == 0 && root.contains("note") && root["note"].isArray())
+        {
             QJsonArray noteArray = root["note"].toArray();
-            for (const QJsonValue& noteVal : noteArray) {
+            for (const QJsonValue &noteVal : noteArray)
+            {
                 QJsonObject noteObj = noteVal.toObject();
-                if (noteObj.contains("type") && noteObj["type"].toInt() == 1 && noteObj.contains("offset")) {
+                if (noteObj.contains("type") && noteObj["type"].toInt() == 1 && noteObj.contains("offset"))
+                {
                     meta.offset = noteObj["offset"].toInt();
                     break;
                 }
             }
         }
-        
+
         // 第一个 BPM 从 time 数组读取
-        if (!outChart.bpmList().empty()) {
+        if (!outChart.bpmList().empty())
+        {
             meta.firstBpm = outChart.bpmList()[0].bpm;
-        } else {
+        }
+        else
+        {
             meta.firstBpm = metaObj.value("bpm").toDouble();
         }
-        
+
         Logger::info(QString("ChartIO::load - Meta loaded: title=%1, artist=%2, difficulty=%3, speed=%4, firstBpm=%5")
-                     .arg(meta.title).arg(meta.artist).arg(meta.difficulty).arg(meta.speed).arg(meta.firstBpm));
-    } else {
+                         .arg(meta.title)
+                         .arg(meta.artist)
+                         .arg(meta.difficulty)
+                         .arg(meta.speed)
+                         .arg(meta.firstBpm));
+    }
+    else
+    {
         Logger::info("ChartIO::load - No 'meta' object found in file");
     }
 
     outChart.sortNotes();
     Logger::info(QString("ChartIO::load - Chart loaded successfully from: %1").arg(filePath));
-    Logger::setVerbose(previousVerbose);  // 恢复原来的设置
+    Logger::setVerbose(previousVerbose); // 恢复原来的设置
     return true;
 }
 
-bool ChartIO::save(const QString& filePath, const Chart& chart)
+bool ChartIO::save(const QString &filePath, const Chart &chart)
 {
     PerformanceTimer saveTimer("ChartIO::save", "chart_saving");
-    
+
     Logger::info(QString("ChartIO::save - Saving chart to: %1").arg(filePath));
     Logger::debug(QString("ChartIO::save - Chart has %1 notes").arg(chart.notes().size()));
-    
+
     QJsonObject root;
 
     // 保存 meta（使用嵌套结构以匹配示例格式）
@@ -305,10 +363,10 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
     metaObj["creator"] = chart.meta().chartAuthor;
     metaObj["background"] = chart.meta().backgroundFile;
     metaObj["version"] = chart.meta().difficulty;
-    metaObj["id"] = 0; // 暂未存储歌曲ID，用0代替
-    metaObj["mode"] = 3; // Catch模式
+    metaObj["id"] = 0;                                    // 暂未存储歌曲ID，用0代替
+    metaObj["mode"] = 3;                                  // Catch模式
     metaObj["time"] = QDateTime::currentSecsSinceEpoch(); // 当前时间戳
-    
+
     // song 子对象
     QJsonObject songObj;
     songObj["title"] = chart.meta().title;
@@ -316,38 +374,45 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
     songObj["id"] = 0; // 暂未存储歌曲ID
     songObj["titleorg"] = chart.meta().titleOrg;
     metaObj["song"] = songObj;
-    
+
     // mode_ext 子对象
     QJsonObject modeExtObj;
     modeExtObj["speed"] = chart.meta().speed;
     metaObj["mode_ext"] = modeExtObj;
-    
+
     // 注意：示例谱面中没有 audio、preview_time、offset、bpm 字段
     // 这些信息可能通过其他方式存储（例如 note 数组中的 sound 字段）
     // 如果需要保留，可以额外添加平面字段，但为了兼容性暂时省略
     // 如果 chart.meta() 中有这些值，可以选择性添加
-    if (!chart.meta().audioFile.isEmpty()) {
+    if (!chart.meta().audioFile.isEmpty())
+    {
         metaObj["audio"] = chart.meta().audioFile;
     }
-    if (chart.meta().previewTime != 0) {
+    if (chart.meta().previewTime != 0)
+    {
         metaObj["preview"] = chart.meta().previewTime; // 字段名是 preview
     }
-    if (chart.meta().offset != 0) {
+    if (chart.meta().offset != 0)
+    {
         metaObj["offset"] = chart.meta().offset;
     }
     // firstBpm 已经通过 time 数组存储，但也可以保存在 meta.bpm 中
     // 为了兼容性，可以同时保存
-    if (chart.meta().firstBpm > 0) {
+    if (chart.meta().firstBpm > 0)
+    {
         metaObj["bpm"] = chart.meta().firstBpm;
     }
-    
+
     root["meta"] = metaObj;
     Logger::debug(QString("ChartIO::save - Meta saved: title=%1, difficulty=%2, speed=%3")
-                  .arg(chart.meta().title).arg(chart.meta().difficulty).arg(chart.meta().speed));
+                      .arg(chart.meta().title)
+                      .arg(chart.meta().difficulty)
+                      .arg(chart.meta().speed));
 
     // 保存 time 数组
     QJsonArray timeArray;
-    for (const BpmEntry& bpm : chart.bpmList()) {
+    for (const BpmEntry &bpm : chart.bpmList())
+    {
         QJsonObject obj;
         QJsonArray beatArr;
         beatArr.append(bpm.beatNum);
@@ -368,8 +433,9 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
     // 保存 note 数组
     QJsonArray noteArray;
     int normalNoteCount = 0, rainNoteCount = 0, soundNoteCount = 0;
-    
-    for (const Note& note : chart.notes()) {
+
+    for (const Note &note : chart.notes())
+    {
         QJsonObject obj;
         QJsonArray beatArr;
         beatArr.append(note.beatNum);
@@ -377,7 +443,8 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
         beatArr.append(note.denominator);
         obj["beat"] = beatArr;
 
-        if (note.type == NoteType::SOUND) {
+        if (note.type == NoteType::SOUND)
+        {
             // 音效音符
             obj["type"] = 1;
             obj["sound"] = note.sound;
@@ -385,7 +452,9 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
             obj["offset"] = note.offset;
             soundNoteCount++;
             Logger::debug(QString("ChartIO::save - Sound note: [%1,%2,%3], sound=%4").arg(note.beatNum).arg(note.numerator).arg(note.denominator).arg(note.sound));
-        } else if (note.type == NoteType::RAIN) {
+        }
+        else if (note.type == NoteType::RAIN)
+        {
             // Rain 音符
             obj["type"] = 3;
             obj["x"] = note.x;
@@ -396,7 +465,9 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
             obj["endbeat"] = endBeatArr;
             rainNoteCount++;
             Logger::debug(QString("ChartIO::save - Rain note: [%1,%2,%3]-[%4,%5,%6], x=%7").arg(note.beatNum).arg(note.numerator).arg(note.denominator).arg(note.endBeatNum).arg(note.endNumerator).arg(note.endDenominator).arg(note.x));
-        } else {
+        }
+        else
+        {
             // 普通音符
             obj["x"] = note.x;
             normalNoteCount++;
@@ -421,19 +492,20 @@ bool ChartIO::save(const QString& filePath, const Chart& chart)
 
     QJsonDocument doc(root);
     QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
         Logger::error(QString("ChartIO::save - Cannot open file for writing: %1").arg(filePath));
         return false;
     }
-    
+
     QByteArray jsonData = doc.toJson();
     file.write(jsonData);
     file.close();
-    
+
     Logger::info(QString("ChartIO::save - Chart saved successfully (%1 bytes) to: %2").arg(jsonData.size()).arg(filePath));
-    
+
     // 记录保存指标
     DiagnosticCollector::instance().recordSaveMetrics(filePath, saveTimer.elapsed(), chart.notes().size());
-    
+
     return true;
 }

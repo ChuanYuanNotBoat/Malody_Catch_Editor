@@ -12,20 +12,21 @@
  *
  * 线程安全：方法调用应在主线程（Qt 信号槽机制）。
  */
-class AudioPlayer : public QObject {
+class AudioPlayer : public QObject
+{
     Q_OBJECT
 public:
-    explicit AudioPlayer(QObject* parent = nullptr);
+    explicit AudioPlayer(QObject *parent = nullptr);
     ~AudioPlayer();
 
-    bool load(const QString& filePath);
+    bool load(const QString &filePath);
     void play();
     void pause();
     void stop();
     void setPosition(qint64 positionMs);
     qint64 position() const;
     qint64 duration() const;
-    void setSpeed(double speed);   // 0.25 ~ 1.0
+    void setSpeed(double speed); // 0.25 ~ 1.0
     double speed() const;
 
     bool isPlaying() const;
@@ -34,7 +35,8 @@ public:
     bool canPlay() const;
     QString lastError() const;
 
-    enum class LoadingState {
+    enum class LoadingState
+    {
         Idle,
         Loading,
         Loaded,
@@ -57,14 +59,14 @@ signals:
     void positionChanged(qint64 position);
     void durationChanged(qint64 duration);
     void stateChanged(QMediaPlayer::PlaybackState state);
-    void errorOccurred(const QString& error);
+    void errorOccurred(const QString &error);
     void loadingStateChanged(LoadingState state);
 
 private:
-    QMediaPlayer* m_player;
-    QAudioOutput* m_audioOutput;
+    QMediaPlayer *m_player;
+    QAudioOutput *m_audioOutput;
     LoadingState m_loadingState;
-    QTimer* m_loadTimeoutTimer;
+    QTimer *m_loadTimeoutTimer;
     QString m_currentLoadPath;
     bool m_loaded;
     QString m_lastError;
@@ -73,5 +75,5 @@ private:
     int m_audioLatency; ///< 音频延迟补偿（毫秒）
     int m_userOffset;   ///< 用户全局偏移（毫秒）
 
-    QString normalizeAudioPath(const QString& originalPath);
+    QString normalizeAudioPath(const QString &originalPath);
 };

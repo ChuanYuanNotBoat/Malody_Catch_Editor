@@ -4,15 +4,16 @@
 #include <QKeySequence>
 #include <QColor>
 
-class Settings {
+class Settings
+{
 public:
-    static Settings& instance();
+    static Settings &instance();
 
     QString lastOpenPath() const;
-    void setLastOpenPath(const QString& path);
+    void setLastOpenPath(const QString &path);
 
     QString lastProjectPath() const;
-    void setLastProjectPath(const QString& path);
+    void setLastProjectPath(const QString &path);
 
     bool colorNoteEnabled() const;
     void setColorNoteEnabled(bool enabled);
@@ -29,7 +30,7 @@ public:
     void setGlobalAudioOffset(int offset);
 
     QString currentSkin() const;
-    void setCurrentSkin(const QString& skinName);
+    void setCurrentSkin(const QString &skinName);
 
     int noteSize() const;
     void setNoteSize(int size);
@@ -37,16 +38,16 @@ public:
     int outlineWidth() const;
     void setOutlineWidth(int width);
     QColor outlineColor() const;
-    void setOutlineColor(const QColor& color);
+    void setOutlineColor(const QColor &color);
 
     QString language() const;
-    void setLanguage(const QString& languageCode);
+    void setLanguage(const QString &languageCode);
 
     bool verticalFlip() const;
     void setVerticalFlip(bool flipped);
 
-    QKeySequence shortcut(const QString& action) const;
-    void setShortcut(const QString& action, const QKeySequence& seq);
+    QKeySequence shortcut(const QString &action) const;
+    void setShortcut(const QString &action, const QKeySequence &seq);
 
 private:
     Settings();

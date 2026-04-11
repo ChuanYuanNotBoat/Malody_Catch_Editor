@@ -4,106 +4,135 @@
 
 Settings::Settings() : m_settings("CatchEditor", "CatchChartEditor") {}
 
-Settings& Settings::instance() {
+Settings &Settings::instance()
+{
     static Settings inst;
     return inst;
 }
 
-QString Settings::lastOpenPath() const {
+QString Settings::lastOpenPath() const
+{
     return m_settings.value("lastOpenPath", "").toString();
 }
-void Settings::setLastOpenPath(const QString& path) {
+void Settings::setLastOpenPath(const QString &path)
+{
     m_settings.setValue("lastOpenPath", path);
 }
 
-QString Settings::lastProjectPath() const {
+QString Settings::lastProjectPath() const
+{
     QString defaultPath = QCoreApplication::applicationDirPath() + "/beatmap";
     return m_settings.value("lastProjectPath", defaultPath).toString();
 }
-void Settings::setLastProjectPath(const QString& path) {
+void Settings::setLastProjectPath(const QString &path)
+{
     m_settings.setValue("lastProjectPath", path);
 }
 
-bool Settings::colorNoteEnabled() const {
+bool Settings::colorNoteEnabled() const
+{
     return m_settings.value("colorNoteEnabled", true).toBool();
 }
-void Settings::setColorNoteEnabled(bool enabled) {
+void Settings::setColorNoteEnabled(bool enabled)
+{
     m_settings.setValue("colorNoteEnabled", enabled);
 }
 
-bool Settings::hyperfruitOutlineEnabled() const {
+bool Settings::hyperfruitOutlineEnabled() const
+{
     return m_settings.value("hyperfruitOutlineEnabled", true).toBool();
 }
-void Settings::setHyperfruitOutlineEnabled(bool enabled) {
+void Settings::setHyperfruitOutlineEnabled(bool enabled)
+{
     m_settings.setValue("hyperfruitOutlineEnabled", enabled);
 }
 
-double Settings::playbackSpeed() const {
+double Settings::playbackSpeed() const
+{
     return m_settings.value("playbackSpeed", 1.0).toDouble();
 }
-void Settings::setPlaybackSpeed(double speed) {
+void Settings::setPlaybackSpeed(double speed)
+{
     m_settings.setValue("playbackSpeed", speed);
 }
 
-int Settings::audioLatency() const {
+int Settings::audioLatency() const
+{
     return m_settings.value("audio/latency", 0).toInt();
 }
-void Settings::setAudioLatency(int latency) {
+void Settings::setAudioLatency(int latency)
+{
     m_settings.setValue("audio/latency", latency);
 }
-int Settings::globalAudioOffset() const {
+int Settings::globalAudioOffset() const
+{
     return m_settings.value("audio/globalOffset", 0).toInt();
 }
-void Settings::setGlobalAudioOffset(int offset) {
+void Settings::setGlobalAudioOffset(int offset)
+{
     m_settings.setValue("audio/globalOffset", offset);
 }
 
-QString Settings::currentSkin() const {
+QString Settings::currentSkin() const
+{
     return m_settings.value("currentSkin", "default").toString();
 }
-void Settings::setCurrentSkin(const QString& skinName) {
+void Settings::setCurrentSkin(const QString &skinName)
+{
     m_settings.setValue("currentSkin", skinName);
 }
 
-int Settings::noteSize() const {
+int Settings::noteSize() const
+{
     return m_settings.value("noteSize", 16).toInt();
 }
-void Settings::setNoteSize(int size) {
+void Settings::setNoteSize(int size)
+{
     m_settings.setValue("noteSize", size);
 }
 
-int Settings::outlineWidth() const {
+int Settings::outlineWidth() const
+{
     return m_settings.value("outlineWidth", 1).toInt();
 }
-void Settings::setOutlineWidth(int width) {
+void Settings::setOutlineWidth(int width)
+{
     m_settings.setValue("outlineWidth", width);
 }
 
-QColor Settings::outlineColor() const {
+QColor Settings::outlineColor() const
+{
     return m_settings.value("outlineColor", QColor(Qt::black)).value<QColor>();
 }
-void Settings::setOutlineColor(const QColor& color) {
+void Settings::setOutlineColor(const QColor &color)
+{
     m_settings.setValue("outlineColor", color);
 }
 
-QString Settings::language() const {
+QString Settings::language() const
+{
     return m_settings.value("language", "en_US").toString();
 }
-void Settings::setLanguage(const QString& languageCode) {
+void Settings::setLanguage(const QString &languageCode)
+{
     m_settings.setValue("language", languageCode);
 }
 
-bool Settings::verticalFlip() const {
+bool Settings::verticalFlip() const
+{
     return m_settings.value("view/verticalFlip", true).toBool();
 }
 
-void Settings::setVerticalFlip(bool flipped) {
+void Settings::setVerticalFlip(bool flipped)
+{
     m_settings.setValue("view/verticalFlip", flipped);
 }
 
-QKeySequence Settings::shortcut(const QString& action) const {
+QKeySequence Settings::shortcut(const QString &action) const
+{
     return QKeySequence(m_settings.value("shortcut/" + action).toString());
 }
-void Settings::setShortcut(const QString& action, const QKeySequence& seq) {
+void Settings::setShortcut(const QString &action, const QKeySequence &seq)
+{
     m_settings.setValue("shortcut/" + action, seq.toString());
 }

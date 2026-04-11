@@ -4,13 +4,14 @@
 #include <QTranslator>
 #include <QMap>
 
-class Translator : public QObject {
+class Translator : public QObject
+{
     Q_OBJECT
 public:
-    static Translator& instance();
+    static Translator &instance();
 
     QMap<QString, QString> availableLanguages() const;
-    bool setLanguage(const QString& languageCode);
+    bool setLanguage(const QString &languageCode);
     QString currentLanguage() const;
 
 signals:

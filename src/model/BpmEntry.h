@@ -1,6 +1,7 @@
 #pragma once
 
-struct BpmEntry {
+struct BpmEntry
+{
     int beatNum;
     int numerator;
     int denominator;

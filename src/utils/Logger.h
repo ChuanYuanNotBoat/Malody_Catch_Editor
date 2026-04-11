@@ -7,9 +7,16 @@
 #include <QtMessageHandler>
 #include <QMap>
 
-class Logger {
+class Logger
+{
 public:
-    enum Level { Debug, Info, Warning, Error };
+    enum Level
+    {
+        Debug,
+        Info,
+        Warning,
+        Error
+    };
     // 日志文件最大大小：5MB
     static constexpr qint64 MAX_LOG_FILE_SIZE = 5 * 1024 * 1024;
     /**
@@ -17,7 +24,7 @@ public:
      * 多次调用安全，仅第一次调用会真正初始化
      * @param logsDir 日志文件夹路径（相对于可执行文件目录），默认为 "logs"
      */
-    static void init(const QString& logsDir = "logs");
+    static void init(const QString &logsDir = "logs");
 
     /**
      * @brief 关闭日志文件
@@ -49,13 +56,13 @@ public:
     /**
      * @brief 写入日志消息
      */
-    static void log(Level level, const QString& message);
-    static void debug(const QString& msg);
-    static void info(const QString& msg);
-    static void warn(const QString& msg);
-    static void error(const QString& msg);
-    static bool s_verbose;      // 详细日志模式
-    static QString s_logsDir;   // 日志文件夹路径
+    static void log(Level level, const QString &message);
+    static void debug(const QString &msg);
+    static void info(const QString &msg);
+    static void warn(const QString &msg);
+    static void error(const QString &msg);
+    static bool s_verbose;    // 详细日志模式
+    static QString s_logsDir; // 日志文件夹路径
 
     /**
      * @brief 如果日志文件超过大小限制，自动轮换到新文件
@@ -65,7 +72,7 @@ public:
     /**
      * @brief Qt 消息处理回调（供 qInstallMessageHandler 使用）
      */
-    static void qtMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg);
+    static void qtMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg);
 
     // 结构化日志和诊断功能
 
@@ -92,17 +99,17 @@ public:
      * @param module 模块名称（如"ChartIO", "ChartController"）
      * @param context 上下文信息（自定义字段）
      */
-    static void logStructured(Level level, 
-                             const QString& message,
-                             const QString& module = "",
-                             const QMap<QString, QString>& context = QMap<QString, QString>());
+    static void logStructured(Level level,
+                              const QString &message,
+                              const QString &module = "",
+                              const QMap<QString, QString> &context = QMap<QString, QString>());
 
 private:
     static QFile m_file;
     static QTextStream m_stream;
     static QMutex m_mutex;
     static QtMessageHandler m_previousHandler;
-    static bool s_initialized;  // 标记是否已初始化
+    static bool s_initialized; // 标记是否已初始化
 
     // JSON日志成员
     static bool s_jsonLoggingEnabled;

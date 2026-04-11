@@ -5,31 +5,37 @@
 
 int main(int argc, char *argv[])
 {
-    try {
+    try
+    {
         // 设置应用名称和版本
         QCoreApplication::setApplicationName("Malody Catch Chart Editor");
         QCoreApplication::setApplicationVersion("0.1.0");
 
         Application app(argc, argv);
 
-        if (!app.initialize()) {
+        if (!app.initialize())
+        {
             Logger::error("Failed to initialize application.");
             Logger::shutdown();
             return 1;
         }
 
         int result = app.exec();
-        
+
         Logger::info("Application exiting with code: " + QString::number(result));
         Logger::shutdown();
-        
+
         return result;
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         Logger::error("Exception: " + QString::fromStdString(std::string(e.what())));
         Logger::shutdown();
         std::cerr << "Exception: " << e.what() << std::endl;
         return 2;
-    } catch (...) {
+    }
+    catch (...)
+    {
         Logger::error("Unknown exception occurred");
         Logger::shutdown();
         std::cerr << "Unknown exception occurred" << std::endl;

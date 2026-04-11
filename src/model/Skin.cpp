@@ -15,26 +15,31 @@ Skin::Skin() : m_valid(false), m_skinPath("")
         m_noteScales[i] = 1.0;
 }
 
-bool Skin::loadFromDir(const QString& skinPath)
+bool Skin::loadFromDir(const QString &skinPath)
 {
     clear();
     m_skinPath = skinPath;
     QDir dir(skinPath);
-    if (!dir.exists()) {
+    if (!dir.exists())
+    {
         Logger::warn(QString("Skin path does not exist: %1").arg(skinPath));
         return false;
     }
 
     // 加载 note 图片
-    auto loadNotePixmap = [&](int type, const QString& filename) {
+    auto loadNotePixmap = [&](int type, const QString &filename)
+    {
         QFileInfo info(dir.filePath(filename));
-        if (info.exists()) {
+        if (info.exists())
+        {
             m_notePixmaps[type] = QPixmap(info.filePath());
             if (m_notePixmaps[type].isNull())
                 Logger::warn(QString("Failed to load %1").arg(info.filePath()));
             else
                 Logger::debug(QString("Loaded note type %1: %2").arg(type).arg(filename));
-        } else {
+        }
+        else
+        {
             Logger::debug(QString("Note skin %1 not found, will use fallback").arg(filename));
         }
     };
@@ -48,25 +53,30 @@ bool Skin::loadFromDir(const QString& skinPath)
 
     // 加载 bar 图片
     QFileInfo barInfo(dir.filePath("catch-bar.png"));
-    if (barInfo.exists()) {
+    if (barInfo.exists())
+    {
         m_barPixmap = QPixmap(barInfo.filePath());
         Logger::debug("Loaded catch-bar.png");
     }
 
     // 加载 light 图片
-    for (int i = 0; i <= 16; ++i) {
+    for (int i = 0; i <= 16; ++i)
+    {
         QFileInfo lightInfo(dir.filePath(QString("catch-light-%1.png").arg(i)));
-        if (lightInfo.exists()) {
+        if (lightInfo.exists())
+        {
             m_lightPixmaps[i] = QPixmap(lightInfo.filePath());
         }
     }
     QFileInfo lightArc(dir.filePath("catch-light-arc.png"));
-    if (lightArc.exists()) {
+    if (lightArc.exists())
+    {
         m_lightPixmaps[17] = QPixmap(lightArc.filePath());
         Logger::debug("Loaded catch-light-arc.png");
     }
     QFileInfo lightBar(dir.filePath("catch-light-bar.png"));
-    if (lightBar.exists()) {
+    if (lightBar.exists())
+    {
         m_lightPixmaps[18] = QPixmap(lightBar.filePath());
         Logger::debug("Loaded catch-light-bar.png");
     }
@@ -76,10 +86,10 @@ bool Skin::loadFromDir(const QString& skinPath)
 
     m_valid = true;
     Logger::info(QString("Skin loaded from %1, note pixmaps count: %2, bar: %3, light: %4")
-                 .arg(skinPath)
-                 .arg(m_notePixmaps.size())
-                 .arg(m_barPixmap.isNull() ? 0 : 1)
-                 .arg(m_lightPixmaps.size()));
+                     .arg(skinPath)
+                     .arg(m_notePixmaps.size())
+                     .arg(m_barPixmap.isNull() ? 0 : 1)
+                     .arg(m_lightPixmaps.size()));
     return true;
 }
 
@@ -95,7 +105,7 @@ void Skin::clear()
     m_skinPath.clear();
 }
 
-const QPixmap* Skin::getNotePixmap(int noteType) const
+const QPixmap *Skin::getNotePixmap(int noteType) const
 {
     auto it = m_notePixmaps.constFind(noteType);
     if (it != m_notePixmaps.constEnd())
@@ -103,12 +113,12 @@ const QPixmap* Skin::getNotePixmap(int noteType) const
     return nullptr;
 }
 
-const QPixmap* Skin::getBarPixmap() const
+const QPixmap *Skin::getBarPixmap() const
 {
     return m_barPixmap.isNull() ? nullptr : &m_barPixmap;
 }
 
-const QPixmap* Skin::getLightPixmap(int lightIndex) const
+const QPixmap *Skin::getLightPixmap(int lightIndex) const
 {
     auto it = m_lightPixmaps.constFind(lightIndex);
     if (it != m_lightPixmaps.constEnd())
@@ -128,18 +138,21 @@ void Skin::setNoteScale(int noteType, double scale)
 
 bool Skin::saveConfig() const
 {
-    if (m_skinPath.isEmpty()) return false;
+    if (m_skinPath.isEmpty())
+        return false;
     QDir dir(m_skinPath);
     QString configPath = dir.filePath("skin_config.json");
     QJsonObject root;
     QJsonArray scales;
-    for (int i = 0; i <= 5; ++i) {
+    for (int i = 0; i <= 5; ++i)
+    {
         scales.append(m_noteScales.value(i, 1.0));
     }
     root["noteScales"] = scales;
     QJsonDocument doc(root);
     QFile file(configPath);
-    if (!file.open(QIODevice::WriteOnly)) {
+    if (!file.open(QIODevice::WriteOnly))
+    {
         Logger::error("Failed to open skin config for writing: " + configPath);
         return false;
     }
@@ -150,28 +163,34 @@ bool Skin::saveConfig() const
 
 bool Skin::loadConfig()
 {
-    if (m_skinPath.isEmpty()) return false;
+    if (m_skinPath.isEmpty())
+        return false;
     QDir dir(m_skinPath);
     QString configPath = dir.filePath("skin_config.json");
-    if (!QFile::exists(configPath)) {
+    if (!QFile::exists(configPath))
+    {
         Logger::debug("No skin config found, using defaults");
         return false;
     }
     QFile file(configPath);
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (!file.open(QIODevice::ReadOnly))
+    {
         Logger::warn("Failed to open skin config: " + configPath);
         return false;
     }
     QByteArray data = file.readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (doc.isNull()) {
+    if (doc.isNull())
+    {
         Logger::warn("Invalid skin config JSON");
         return false;
     }
     QJsonObject root = doc.object();
-    if (root.contains("noteScales") && root["noteScales"].isArray()) {
+    if (root.contains("noteScales") && root["noteScales"].isArray())
+    {
         QJsonArray scales = root["noteScales"].toArray();
-        for (int i = 0; i < scales.size() && i <= 5; ++i) {
+        for (int i = 0; i < scales.size() && i <= 5; ++i)
+        {
             m_noteScales[i] = scales[i].toDouble();
         }
     }

@@ -8,21 +8,22 @@
 
 /**
  * @brief 诊断数据收集器
- * 
+ *
  * 统计和收集应用运行过程中的诊断信息，包括：
  * - 跳过的notes统计
  * - 字段缺失分析
  * - 性能指标
  * - 加载/保存操作的详细信息
- * 
+ *
  * 单例模式，全局唯一实例
  */
-class DiagnosticCollector {
+class DiagnosticCollector
+{
 public:
     /**
      * @brief 获取单例实例
      */
-    static DiagnosticCollector& instance();
+    static DiagnosticCollector &instance();
 
     // Note跳过记录
 
@@ -35,10 +36,10 @@ public:
      * @param presentFields 存在的字段列表（如["beat", "type"]）
      */
     void recordSkippedNote(int noteIndex,
-                          int noteType,
-                          const QString& reason,
-                          const QStringList& missingFields = QStringList(),
-                          const QStringList& presentFields = QStringList());
+                           int noteType,
+                           const QString &reason,
+                           const QStringList &missingFields = QStringList(),
+                           const QStringList &presentFields = QStringList());
 
     // 操作指标记录
 
@@ -50,18 +51,18 @@ public:
      * @param loadedNotes 成功加载的note数
      * @param skippedNotes 跳过的note数
      */
-    void recordLoadMetrics(const QString& filePath,
-                          qint64 duration,
-                          int totalNotes,
-                          int loadedNotes,
-                          int skippedNotes);
+    void recordLoadMetrics(const QString &filePath,
+                           qint64 duration,
+                           int totalNotes,
+                           int loadedNotes,
+                           int skippedNotes);
 
     /**
      * @brief 记录图表保存的性能指标
      */
-    void recordSaveMetrics(const QString& filePath,
-                          qint64 duration,
-                          int notesCount);
+    void recordSaveMetrics(const QString &filePath,
+                           qint64 duration,
+                           int notesCount);
 
     /**
      * @brief 记录渲染帧的性能指标
@@ -73,27 +74,30 @@ public:
     /**
      * @brief 诊断报告结构体
      */
-    struct DiagnosticReport {
+    struct DiagnosticReport
+    {
         // Note跳过统计
-        struct SkippedNotesSummary {
+        struct SkippedNotesSummary
+        {
             int totalSkipped = 0;
-            QMap<QString, int> byReason;      ///< 按原因分类的跳过统计（reason -> count）
+            QMap<QString, int> byReason;       ///< 按原因分类的跳过统计（reason -> count）
             QMap<int, int> byType;             ///< 按note类型分类（type -> count）
             QMap<QString, int> byMissingField; ///< 按缺失字段分类（field -> count）
         } skippedNotesSummary;
 
         // 性能指标
-        struct PerformanceMetrics {
-            qint64 lastLoadDuration = 0;    ///< 最后一次加载耗时
-            qint64 totalLoadDuration = 0;   ///< 所有加载操作的总耗时
-            int loadCount = 0;               ///< 加载操作次数
-            
+        struct PerformanceMetrics
+        {
+            qint64 lastLoadDuration = 0;  ///< 最后一次加载耗时
+            qint64 totalLoadDuration = 0; ///< 所有加载操作的总耗时
+            int loadCount = 0;            ///< 加载操作次数
+
             qint64 lastSaveDuration = 0;
             qint64 totalSaveDuration = 0;
             int saveCount = 0;
 
-            qint64 maxFrameTime = 0;         ///< 最长帧时间
-            double avgFrameTime = 0;         ///< 平均帧时间
+            qint64 maxFrameTime = 0; ///< 最长帧时间
+            double avgFrameTime = 0; ///< 平均帧时间
             qint64 totalRenderTime = 0;
             int totalFrames = 0;
         } performanceMetrics;
@@ -126,7 +130,8 @@ public:
     /**
      * @brief 获取详细的跳过note列表
      */
-    struct SkippedNoteDetail {
+    struct SkippedNoteDetail
+    {
         int index;
         int type;
         QString reason;
@@ -146,8 +151,9 @@ private:
     DiagnosticCollector() = default;
 
     QVector<SkippedNoteDetail> m_skippedNotes;
-    
-    struct LoadMetrics {
+
+    struct LoadMetrics
+    {
         QString filePath;
         qint64 duration;
         int totalNotes;
@@ -156,14 +162,16 @@ private:
     };
     QVector<LoadMetrics> m_loadMetrics;
 
-    struct SaveMetrics {
+    struct SaveMetrics
+    {
         QString filePath;
         qint64 duration;
         int notesCount;
     };
     QVector<SaveMetrics> m_saveMetrics;
 
-    struct RenderMetricsData {
+    struct RenderMetricsData
+    {
         qint64 frameTimeMs;
         int notesRenderedCount;
     };
