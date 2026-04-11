@@ -3,62 +3,32 @@
 #include <QString>
 #include <QStringList>
 #include <QPair>
-#include "model/Chart.h"
 
 class ProjectIO {
 public:
     /**
-     * @brief 导入MCZ文件 - 解压到指定目录，返回主.mc文件路径
-     * @param mczPath MCZ文件路径
-     * @param outputDir 输出目录（不存在则创建）
-     * @param outChartPath 输出：解压后的主.mc文件路径
-     * @return 成功返回true
+     * @brief 解压 MCZ 文件到指定目录
+     * @param mczPath MCZ 文件路径
+     * @param outputDir 目标目录（将创建）
+     * @param outExtractedDir 输出：解压后的根目录路径
+     * @return 成功返回 true
      */
-    static bool importMcz(const QString& mczPath, const QString& outputDir, QString& outChartPath);
-    
+    static bool extractMcz(const QString& mczPath, const QString& outputDir, QString& outExtractedDir);
+
     /**
-     * @brief 导出为MCZ文件 - 将.mc及其依赖打包为MCZ
-     * @param outputMczPath 输出的MCZ文件路径
-     * @param sourceChartPath 源.mc文件路径
-     * @return 成功返回true
+     * @brief 将谱面目录打包为 MCZ
      */
     static bool exportToMcz(const QString& outputMczPath, const QString& sourceChartPath);
-    
-    /**
-     * @brief 自动检测并加载文件 - 根据扩展名决定导入方式
-     * @param filePath .mc或.mcz文件路径
-     * @param outChartPath 输出：加载后的.mc文件路径
-     * @return 成功返回true
-     */
-    static bool loadChartFile(const QString& filePath, QString& outChartPath);
-    
-    /**
-     * @brief 在MCZ中查找所有.mc文件及其难度
-     * @param extractDir 解压后的目录
-     * @return 返回(文件路径, 难度名)的列表
-     */
-    static QList<QPair<QString, QString>> findChartsInMcz(const QString& extractDir);
-    
-    /**
-     * @brief 收集文件依赖 - 从.mc文件所在目录收集所有依赖文件
-     * @param chartDir .mc文件所在目录
-     * @return 依赖文件的绝对路径列表
-     */
-    static QStringList collectDependencies(const QString& chartDir);
 
-private:
     /**
-     * @brief 递归复制目录
+     * @brief 递归扫描目录中所有 .mc 文件，并提取难度名
+     * @param dirPath 要扫描的目录
+     * @return 返回 (文件路径, 难度名) 列表
      */
-    static bool copyDir(const QString& srcDir, const QString& destDir);
-    
+    static QList<QPair<QString, QString>> findChartsInDirectory(const QString& dirPath);
+
     /**
-     * @brief 递归删除目录
-     */
-    static bool removeDir(const QString& dirPath);
-    
-    /**
-     * @brief 从.mc文件读取难度名
+     * @brief 从 .mc 文件中读取难度名（meta.version）
      */
     static QString getDifficultyFromMc(const QString& mcPath);
 };

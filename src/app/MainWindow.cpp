@@ -3,8 +3,8 @@
 #include "ui/NoteEditPanel.h"
 #include "ui/BPMTimePanel.h"
 #include "ui/MetaEditPanel.h"
-#include "ui/dialogs/LogSettingsDialog.h"
 #include "ui/LeftPanel.h"
+#include "ui/dialogs/LogSettingsDialog.h"
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
 #include "controller/PlaybackController.h"
@@ -36,10 +36,6 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QColorDialog>
-#include <algorithm>
-#include <QDebug>
-#include <QSlider>
-#include <QPushButton>
 #include <QPainter>
 #include <QRadioButton>
 #include <QCheckBox>
@@ -53,8 +49,8 @@
 #include <QJsonDocument>
 #include <QInputDialog>
 #include <QListWidget>
-#include <QTemporaryDir>
 #include <QScrollBar>
+#include <algorithm>
 
 class MainWindow::Private {
 public:
@@ -63,13 +59,14 @@ public:
     PlaybackController* playbackController;
     Skin* skin;
     ChartCanvas* canvas;
-    QScrollBar* verticalScrollBar;  // 新增：用于快速滚动
+    QScrollBar* verticalScrollBar;
     QSplitter* splitter;
     QWidget* rightPanelContainer;
     RightPanel* currentRightPanel;
     NoteEditPanel* notePanel;
     BPMTimePanel* bpmPanel;
     MetaEditPanel* metaPanel;
+    LeftPanel* leftPanel;
     QAction* undoAction;
     QAction* redoAction;
     QAction* colorAction;
@@ -80,10 +77,8 @@ public:
     QAction* noteSizeAction;
     QAction* calibrateSkinAction;
     QAction* outlineAction;
-    
-    // MCZ support
-    QTemporaryDir* mczTempDir;
-    QString currentChartPath;
+
+    QString currentChartPath;      // 当前打开的谱面文件路径
 };
 
 MainWindow::MainWindow(ChartController* chartCtrl,
@@ -99,8 +94,8 @@ MainWindow::MainWindow(ChartController* chartCtrl,
     d->selectionController = selCtrl;
     d->playbackController = playCtrl;
     d->skin = skin;
-    d->mczTempDir = nullptr;
-    d->currentChartPath = "";
+    d->leftPanel = nullptr;
+    d->currentChartPath.clear();
 
     setupUi();
     createCentralArea();
@@ -111,7 +106,6 @@ MainWindow::MainWindow(ChartController* chartCtrl,
         d->canvas->update();
         d->undoAction->setEnabled(d->chartController->canUndo());
         d->redoAction->setEnabled(d->chartController->canRedo());
-        // 更新选择控制器的音符列表引用并重新计算选中索引
         if (d->selectionController) {
             d->selectionController->setNotes(&(d->chartController->chart()->notes()));
             d->selectionController->updateSelectionFromNotes();
@@ -131,10 +125,6 @@ MainWindow::MainWindow(ChartController* chartCtrl,
 
 MainWindow::~MainWindow()
 {
-    if (d->mczTempDir) {
-        delete d->mczTempDir;
-        d->mczTempDir = nullptr;
-    }
     delete d;
     Logger::info("MainWindow destroyed");
 }
@@ -152,13 +142,16 @@ void MainWindow::createMenus()
 
     // 文件菜单
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
-    QAction* openAction = fileMenu->addAction(tr("&Open..."), this, &MainWindow::openChart);
+    QAction* openAction = fileMenu->addAction(tr("&Open Chart..."), this, &MainWindow::openChart);
     openAction->setShortcut(QKeySequence::Open);
+    QAction* openFolderAction = fileMenu->addAction(tr("Open &Folder..."), this, &MainWindow::openFolder);
     QAction* saveAction = fileMenu->addAction(tr("&Save"), this, &MainWindow::saveChart);
     saveAction->setShortcut(QKeySequence::Save);
     QAction* saveAsAction = fileMenu->addAction(tr("Save &As..."), this, &MainWindow::saveChartAs);
     fileMenu->addSeparator();
     QAction* exportAction = fileMenu->addAction(tr("&Export .mcz..."), this, &MainWindow::exportMcz);
+    fileMenu->addSeparator();
+    QAction* switchDifficultyAction = fileMenu->addAction(tr("Switch &Difficulty..."), this, &MainWindow::switchDifficulty);
     fileMenu->addSeparator();
     QAction* exitAction = fileMenu->addAction(tr("E&xit"), this, &QWidget::close);
     exitAction->setShortcut(QKeySequence::Quit);
@@ -182,26 +175,20 @@ void MainWindow::createMenus()
     QAction* deleteAction = editMenu->addAction(tr("&Delete"));
     deleteAction->setShortcut(QKeySequence::Delete);
     connect(deleteAction, &QAction::triggered, this, [this]() {
-        // 删除选中的音符
         if (d->selectionController && !d->selectionController->selectedIndices().isEmpty()) {
             QSet<int> selected = d->selectionController->selectedIndices();
             const auto& notes = d->chartController->chart()->notes();
             QList<int> sorted = selected.values();
             std::sort(sorted.begin(), sorted.end(), std::greater<int>());
-            
-            // 收集要删除的音符
             QVector<Note> notesToDelete;
             for (int idx : sorted) {
                 if (idx >= 0 && idx < notes.size()) {
                     notesToDelete.append(notes[idx]);
                 }
             }
-            
-            // 使用批量删除命令
             if (!notesToDelete.isEmpty()) {
                 d->chartController->removeNotes(notesToDelete);
             }
-            
             d->selectionController->clearSelection();
             Logger::debug("Deleted selected notes via menu");
         }
@@ -263,6 +250,566 @@ void MainWindow::createMenus()
     Logger::debug("Menus created");
 }
 
+void MainWindow::createCentralArea()
+{
+    Logger::debug("Creating central area...");
+
+    // 左侧面板
+    d->leftPanel = new LeftPanel(this);
+    d->leftPanel->setChartController(d->chartController);
+    d->leftPanel->setPlaybackController(d->playbackController);
+
+    // 画布
+    d->canvas = new ChartCanvas(this);
+    d->canvas->setChartController(d->chartController);
+    d->canvas->setSelectionController(d->selectionController);
+    d->canvas->setPlaybackController(d->playbackController);
+    d->canvas->setColorMode(Settings::instance().colorNoteEnabled());
+    d->canvas->setHyperfruitEnabled(Settings::instance().hyperfruitOutlineEnabled());
+    if (d->skin) d->canvas->setSkin(d->skin);
+    d->canvas->setNoteSize(Settings::instance().noteSize());
+
+    // 将画布传递给左侧面板（用于缩放控制）
+    d->leftPanel->setChartCanvas(d->canvas);
+
+    // 垂直滚动条
+    d->verticalScrollBar = new QScrollBar(Qt::Vertical);
+    d->verticalScrollBar->setRange(0, 100000);
+    d->verticalScrollBar->setValue(0);
+    d->verticalScrollBar->setSingleStep(100);
+    d->verticalScrollBar->setPageStep(5000);
+
+    QWidget* canvasContainer = new QWidget(this);
+    QHBoxLayout* canvasLayout = new QHBoxLayout(canvasContainer);
+    canvasLayout->setContentsMargins(0, 0, 0, 0);
+    canvasLayout->setSpacing(0);
+    canvasLayout->addWidget(d->canvas, 1);
+    canvasLayout->addWidget(d->verticalScrollBar, 0);
+
+    auto updateScrollPos = [this](int value) {
+        if (d->canvas && d->chartController && d->chartController->chart()) {
+            qint64 duration = 300000;
+            if (d->playbackController && d->playbackController->audioPlayer()) {
+                duration = d->playbackController->audioPlayer()->duration();
+                if (duration <= 0) duration = 300000;
+            }
+            double scrollPos = (value / 100000.0) * duration;
+            d->canvas->setScrollPos(scrollPos);
+        }
+    };
+    connect(d->verticalScrollBar, QOverload<int>::of(&QScrollBar::valueChanged), this, updateScrollPos);
+
+    connect(d->canvas, &ChartCanvas::scrollPositionChanged, this, [this](double beat) {
+        if (d->playbackController && d->playbackController->audioPlayer()) {
+            qint64 duration = d->playbackController->audioPlayer()->duration();
+            if (duration > 0 && d->chartController && d->chartController->chart()) {
+                const auto& bpmList = d->chartController->chart()->bpmList();
+                int offset = d->chartController->chart()->meta().offset;
+                int beatNum, numerator, denominator;
+                MathUtils::floatToBeat(beat, beatNum, numerator, denominator);
+                double timeMs = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
+                int value = static_cast<int>((timeMs / duration) * 100000);
+                d->verticalScrollBar->blockSignals(true);
+                d->verticalScrollBar->setValue(value);
+                d->verticalScrollBar->blockSignals(false);
+            }
+        }
+    });
+
+    if (d->playbackController && d->playbackController->audioPlayer()) {
+        connect(d->playbackController->audioPlayer(), &AudioPlayer::durationChanged, this, [this](qint64 duration) {
+            if (duration > 0) {
+                Logger::debug(QString("Audio duration changed: %1 ms").arg(duration));
+                d->verticalScrollBar->setValue(0);
+            }
+        });
+    }
+
+    // 右侧面板容器
+    d->rightPanelContainer = new QWidget(this);
+    QVBoxLayout* rightLayout = new QVBoxLayout(d->rightPanelContainer);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+
+    d->notePanel = new NoteEditPanel(d->rightPanelContainer);
+    d->bpmPanel = new BPMTimePanel(d->rightPanelContainer);
+    d->metaPanel = new MetaEditPanel(d->rightPanelContainer);
+    d->currentRightPanel = d->notePanel;
+    rightLayout->addWidget(d->notePanel);
+    rightLayout->addWidget(d->bpmPanel);
+    rightLayout->addWidget(d->metaPanel);
+    d->bpmPanel->setVisible(false);
+    d->metaPanel->setVisible(false);
+
+    d->notePanel->setChartController(d->chartController);
+    d->notePanel->setSelectionController(d->selectionController);
+    d->bpmPanel->setChartController(d->chartController);
+    d->metaPanel->setChartController(d->chartController);
+
+    connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
+    connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
+    connect(d->notePanel, &NoteEditPanel::gridSnapChanged, d->canvas, [this](bool on) {
+        Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));
+        d->canvas->setGridSnap(on);
+    });
+    connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode) {
+        d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode));
+    });
+
+    // 主分割器
+    d->splitter = new QSplitter(Qt::Horizontal, this);
+    d->splitter->addWidget(d->leftPanel);
+    d->splitter->addWidget(canvasContainer);
+    d->splitter->addWidget(d->rightPanelContainer);
+    d->splitter->setSizes({150, 800, 300});
+    setCentralWidget(d->splitter);
+
+    // 工具栏（右侧面板切换）
+    QToolBar* toolBar = addToolBar(tr("Tools"));
+    toolBar->addAction(tr("Note"), [this]() {
+        d->notePanel->setVisible(true);
+        d->bpmPanel->setVisible(false);
+        d->metaPanel->setVisible(false);
+        d->currentRightPanel = d->notePanel;
+    });
+    toolBar->addAction(tr("BPM"), [this]() {
+        d->notePanel->setVisible(false);
+        d->bpmPanel->setVisible(true);
+        d->metaPanel->setVisible(false);
+        d->currentRightPanel = d->bpmPanel;
+    });
+    toolBar->addAction(tr("Meta"), [this]() {
+        d->notePanel->setVisible(false);
+        d->bpmPanel->setVisible(false);
+        d->metaPanel->setVisible(true);
+        d->currentRightPanel = d->metaPanel;
+    });
+
+    Logger::debug("Central area created with LeftPanel.");
+}
+
+// ==================== 新增：beatmap 根目录 ====================
+QString MainWindow::beatmapRootPath() const
+{
+    return QCoreApplication::applicationDirPath() + "/beatmap";
+}
+
+// ==================== 打开文件（单个 .mc 或 .mcz） ====================
+void MainWindow::openChart()
+{
+    QString startDir = Settings::instance().lastProjectPath();
+    if (startDir.isEmpty() || !QDir(startDir).exists()) {
+        startDir = beatmapRootPath();
+    }
+
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Chart"), startDir,
+                                                    tr("Malody Catch Chart (*.mc *.mcz);;All Files (*.*)"));
+    if (fileName.isEmpty()) return;
+
+    loadChartFile(fileName);
+}
+
+// ==================== 打开文件夹 ====================
+void MainWindow::openFolder()
+{
+    QString startDir = Settings::instance().lastProjectPath();
+    if (startDir.isEmpty() || !QDir(startDir).exists()) {
+        startDir = beatmapRootPath();
+    }
+
+    QString dirPath = QFileDialog::getExistingDirectory(this, tr("Open Folder"), startDir);
+    if (dirPath.isEmpty()) return;
+
+    Settings::instance().setLastProjectPath(dirPath);
+    Logger::info(QString("Opening folder: %1").arg(dirPath));
+
+    QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(dirPath);
+    if (charts.isEmpty()) {
+        QMessageBox::information(this, tr("No Charts"), tr("No .mc files found in the selected folder."));
+        return;
+    }
+
+    QString selectedPath = selectChartFromList(charts, tr("Select Chart in Folder"));
+    if (selectedPath.isEmpty()) return;
+
+    loadChartFile(selectedPath);
+}
+
+// ==================== 加载谱面（核心逻辑） ====================
+void MainWindow::loadChartFile(const QString& filePath)
+{
+    Logger::info(QString("Loading chart file: %1").arg(filePath));
+
+    QString actualChartPath = filePath;
+    QFileInfo fi(filePath);
+    if (fi.suffix().toLower() == "mcz") {
+        // 固定解压到 beatmap/<mcz文件名>/
+        QString beatmapDir = beatmapRootPath();
+        QString targetDir = beatmapDir + "/" + fi.completeBaseName();
+
+        // 确保 beatmap 根目录存在
+        QDir().mkpath(beatmapDir);
+
+        QString extractedDir;
+        if (!ProjectIO::extractMcz(filePath, targetDir, extractedDir)) {
+            QMessageBox::critical(this, tr("Error"), tr("Failed to extract MCZ file."));
+            return;
+        }
+
+        // 扫描解压目录中的谱面
+        QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(extractedDir);
+        if (charts.isEmpty()) {
+            QMessageBox::critical(this, tr("Error"), tr("No .mc files found in the extracted content."));
+            return;
+        }
+
+        actualChartPath = selectChartFromList(charts, tr("Select Chart from MCZ"));
+        if (actualChartPath.isEmpty()) return;
+
+        // 将项目路径设为 beatmap 根目录，便于后续操作
+        Settings::instance().setLastProjectPath(beatmapDir);
+    }
+
+    // 加载谱面
+    if (!d->chartController->loadChart(actualChartPath)) {
+        QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
+        return;
+    }
+
+    d->currentChartPath = actualChartPath;
+    Settings::instance().setLastOpenPath(QFileInfo(actualChartPath).absolutePath());
+
+    // 如果不是从 MCZ 解压来的，也更新项目路径为谱面所在目录
+    if (QFileInfo(filePath).suffix().toLower() != "mcz") {
+        Settings::instance().setLastProjectPath(QFileInfo(actualChartPath).absolutePath());
+    }
+
+    // 加载音频
+    QString chartDir = QFileInfo(actualChartPath).absolutePath();
+    QString audioFile = d->chartController->chart()->meta().audioFile;
+    if (!audioFile.isEmpty()) {
+        QString audioPath = chartDir + "/" + audioFile;
+        if (QFile::exists(audioPath)) {
+            d->playbackController->audioPlayer()->load(audioPath);
+        }
+    }
+
+    d->canvas->update();
+    statusBar()->showMessage(tr("Loaded: %1").arg(QFileInfo(actualChartPath).fileName()), 3000);
+}
+
+// ==================== 从列表中选择谱面 ====================
+QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>>& charts, const QString& title)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(title);
+    dialog.setMinimumWidth(350);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(tr("Select a chart:")));
+
+    QListWidget* list = new QListWidget();
+    for (const auto& chart : charts) {
+        QString display = chart.second;
+        QListWidgetItem* item = new QListWidgetItem(display, list);
+        item->setData(Qt::UserRole, chart.first);
+        item->setToolTip(chart.first);
+    }
+    layout->addWidget(list);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted || list->currentItem() == nullptr)
+        return QString();
+
+    return list->currentItem()->data(Qt::UserRole).toString();
+}
+
+// ==================== 切换难度 ====================
+void MainWindow::switchDifficulty()
+{
+    if (!d->chartController || !d->chartController->chart()) {
+        QMessageBox::information(this, tr("No Chart"), tr("No chart is currently open."));
+        return;
+    }
+
+    QString currentDir = QFileInfo(d->currentChartPath).absolutePath();
+    QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(currentDir);
+    if (charts.size() <= 1) {
+        QMessageBox::information(this, tr("No Other Charts"), tr("No other difficulties found in this directory."));
+        return;
+    }
+
+    QList<QPair<QString, QString>> otherCharts;
+    for (const auto& chart : charts) {
+        if (chart.first != d->currentChartPath)
+            otherCharts.append(chart);
+    }
+    if (otherCharts.isEmpty()) {
+        QMessageBox::information(this, tr("No Other Charts"), tr("No other difficulties found."));
+        return;
+    }
+
+    QString newPath = selectChartFromList(otherCharts, tr("Switch Difficulty"));
+    if (newPath.isEmpty()) return;
+
+    loadChartFile(newPath);
+}
+
+// ==================== 保存谱面 ====================
+void MainWindow::saveChart()
+{
+    Logger::info("Save chart requested");
+    QString currentPath = Settings::instance().lastOpenPath() + "/" + d->chartController->chart()->meta().difficulty + ".mc";
+    if (d->chartController->saveChart(currentPath)) {
+        statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
+        Logger::info("Chart saved: " + currentPath);
+    } else {
+        Logger::error("Failed to save chart: " + currentPath);
+        QMessageBox::critical(this, tr("Error"), tr("Failed to save chart."));
+    }
+}
+
+void MainWindow::saveChartAs()
+{
+    Logger::info("Save chart as requested");
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Save Chart As"), Settings::instance().lastOpenPath(),
+                                                    tr("Malody Catch Chart (*.mc);;All Files (*.*)"));
+    if (fileName.isEmpty()) {
+        Logger::debug("Save as cancelled");
+        return;
+    }
+    if (d->chartController->saveChart(fileName)) {
+        statusBar()->showMessage(tr("Saved: %1").arg(fileName), 2000);
+        Logger::info("Chart saved as: " + fileName);
+    } else {
+        Logger::error("Failed to save chart as: " + fileName);
+        QMessageBox::critical(this, tr("Error"), tr("Failed to save chart."));
+    }
+}
+
+// ==================== 导出 MCZ ====================
+void MainWindow::exportMcz()
+{
+    Logger::info("Export .mcz requested");
+
+    if (d->currentChartPath.isEmpty()) {
+        QMessageBox::information(this, tr("No Chart"), tr("Please open a chart first before exporting."));
+        return;
+    }
+
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export .mcz"), Settings::instance().lastOpenPath(),
+                                                    tr("Malody Catch Pack (*.mcz);;All Files (*.*)"));
+    if (fileName.isEmpty()) {
+        Logger::debug("Export .mcz cancelled");
+        return;
+    }
+
+    try {
+        Logger::info(QString("MainWindow::exportMcz - Exporting to: %1").arg(fileName));
+
+        if (ProjectIO::exportToMcz(fileName, d->currentChartPath)) {
+            statusBar()->showMessage(tr("Exported: %1").arg(fileName), 3000);
+            Logger::info(QString("MainWindow::exportMcz - Successfully exported to: %1").arg(fileName));
+            QMessageBox::information(this, tr("Success"), tr("Chart exported successfully to:\n%1").arg(fileName));
+        } else {
+            Logger::error(QString("MainWindow::exportMcz - Failed to export to: %1").arg(fileName));
+            QMessageBox::critical(this, tr("Error"), tr("Failed to export chart to MCZ format."));
+        }
+    } catch (const std::exception& e) {
+        Logger::error(QString("MainWindow::exportMcz - Exception: %1").arg(e.what()));
+        QMessageBox::critical(this, tr("Error"), tr("Exception during export: %1").arg(e.what()));
+    } catch (...) {
+        Logger::error("MainWindow::exportMcz - Unknown exception");
+        QMessageBox::critical(this, tr("Error"), tr("Unknown exception during export."));
+    }
+}
+
+// ==================== Undo / Redo ====================
+void MainWindow::undo()
+{
+    if (d->chartController) {
+        Logger::debug("Undo triggered");
+        d->chartController->undo();
+    }
+}
+
+void MainWindow::redo()
+{
+    if (d->chartController) {
+        Logger::debug("Redo triggered");
+        d->chartController->redo();
+    }
+}
+
+// ==================== 视图模式切换 ====================
+void MainWindow::toggleColorMode(bool on)
+{
+    Logger::info(QString("Color mode toggled to %1").arg(on));
+    Settings::instance().setColorNoteEnabled(on);
+    d->canvas->setColorMode(on);
+}
+
+void MainWindow::toggleHyperfruitMode(bool on)
+{
+    Logger::info(QString("Hyperfruit mode toggled to %1").arg(on));
+    Settings::instance().setHyperfruitOutlineEnabled(on);
+    d->canvas->setHyperfruitEnabled(on);
+}
+
+void MainWindow::toggleVerticalFlip(bool flipped)
+{
+    Logger::info(QString("Vertical flip toggled to %1").arg(flipped));
+    Settings::instance().setVerticalFlip(flipped);
+    d->canvas->setVerticalFlip(flipped);
+}
+
+// ==================== 播放控制 ====================
+void MainWindow::togglePlayback()
+{
+    if (d->playbackController->state() == PlaybackController::Playing) {
+        Logger::debug("Playback paused");
+        d->playbackController->pause();
+    } else {
+        Logger::debug("Playback started");
+        double startTime = d->canvas->currentPlayTime();
+        const Chart* chart = d->chartController->chart();
+        if (chart) {
+            const QVector<BpmEntry>& bpmList = chart->bpmList();
+            int offset = chart->meta().offset;
+            int timeDivision = 4;
+            startTime = MathUtils::snapTimeToGrid(startTime, bpmList, offset, timeDivision);
+        }
+        d->playbackController->playFromTime(startTime);
+    }
+}
+
+// ==================== 界面翻译 ====================
+void MainWindow::changeEvent(QEvent* event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        retranslateUi();
+    }
+    QMainWindow::changeEvent(event);
+}
+
+void MainWindow::retranslateUi()
+{
+    setWindowTitle(tr("Catch Chart Editor"));
+    populateSkinMenu();
+    Logger::debug("UI retranslated");
+}
+
+// ==================== 日志设置 ====================
+void MainWindow::openLogSettings()
+{
+    Logger::info("Log settings dialog opened");
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Log Settings"));
+    dialog.setMinimumSize(400, 300);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+    QCheckBox* jsonLoggingCheck = new QCheckBox(tr("Enable JSON Logging"));
+    jsonLoggingCheck->setChecked(Logger::isJsonLoggingEnabled());
+    layout->addWidget(jsonLoggingCheck);
+
+    QCheckBox* verboseCheck = new QCheckBox(tr("Enable Verbose Logging"));
+    verboseCheck->setChecked(Logger::isVerbose());
+    layout->addWidget(verboseCheck);
+
+    QHBoxLayout* logPathLayout = new QHBoxLayout;
+    QLabel* pathLabel = new QLabel(tr("Log File:"));
+    QLineEdit* pathEdit = new QLineEdit;
+    pathEdit->setText(Logger::logFilePath());
+    pathEdit->setReadOnly(true);
+    QPushButton* openLogBtn = new QPushButton(tr("Open Log Folder"));
+    connect(openLogBtn, &QPushButton::clicked, [this]() {
+        QString logDir = QFileInfo(Logger::logFilePath()).absolutePath();
+        QDesktopServices::openUrl(QUrl::fromLocalFile(logDir));
+        Logger::debug("Opened log folder");
+    });
+    logPathLayout->addWidget(pathLabel);
+    logPathLayout->addWidget(pathEdit);
+    logPathLayout->addWidget(openLogBtn);
+    layout->addLayout(logPathLayout);
+
+    QHBoxLayout* jsonPathLayout = new QHBoxLayout;
+    QLabel* jsonPathLabel = new QLabel(tr("JSON Log File:"));
+    QLineEdit* jsonPathEdit = new QLineEdit;
+    jsonPathEdit->setText(Logger::jsonLogFilePath());
+    jsonPathEdit->setReadOnly(true);
+    jsonPathLayout->addWidget(jsonPathLabel);
+    jsonPathLayout->addWidget(jsonPathEdit);
+    layout->addLayout(jsonPathLayout);
+
+    layout->addStretch();
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        Logger::setJsonLoggingEnabled(jsonLoggingCheck->isChecked());
+        Logger::setVerbose(verboseCheck->isChecked());
+        Logger::info(QString("Log settings changed - JSON logging: %1, Verbose: %2")
+                     .arg(jsonLoggingCheck->isChecked() ? "enabled" : "disabled")
+                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled"));
+        dialog.accept();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    dialog.exec();
+}
+
+// ==================== 导出诊断报告 ====================
+void MainWindow::exportDiagnosticsReport()
+{
+    Logger::info("Diagnostics report export requested");
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Diagnostics Report"),
+                                                    Settings::instance().lastOpenPath(),
+                                                    tr("Text Files (*.txt);;JSON Files (*.json);;All Files (*.*)"));
+    if (fileName.isEmpty()) {
+        Logger::debug("Export diagnostics cancelled");
+        return;
+    }
+
+    try {
+        DiagnosticCollector& collector = DiagnosticCollector::instance();
+        DiagnosticCollector::DiagnosticReport report = collector.generateReport();
+
+        if (fileName.endsWith(".json")) {
+            QJsonDocument doc = collector.toJsonDocument();
+            QFile file(fileName);
+            if (file.open(QIODevice::WriteOnly)) {
+                file.write(doc.toJson());
+                file.close();
+                Logger::info("Diagnostics report exported to JSON: " + fileName);
+                QMessageBox::information(this, tr("Export Successful"),
+                                       tr("Diagnostics report exported to:\n%1").arg(fileName));
+            } else {
+                Logger::error("Failed to open file for writing: " + fileName);
+                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
+            }
+        } else {
+            QFile file(fileName);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream stream(&file);
+                stream << report.toFormattedString();
+                file.close();
+                Logger::info("Diagnostics report exported to text: " + fileName);
+                QMessageBox::information(this, tr("Export Successful"),
+                                       tr("Diagnostics report exported to:\n%1").arg(fileName));
+            } else {
+                Logger::error("Failed to open file for writing: " + fileName);
+                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
+            }
+        }
+    } catch (const std::exception& e) {
+        Logger::error(QString("Exception during diagnostics export: %1").arg(e.what()));
+        QMessageBox::critical(this, tr("Error"), tr("Exception during export:\n%1").arg(e.what()));
+    }
+}
+
+// ==================== 音符大小调整 ====================
 void MainWindow::adjustNoteSize()
 {
     QDialog dialog(this);
@@ -270,7 +817,6 @@ void MainWindow::adjustNoteSize()
     dialog.setMinimumSize(400, 300);
     QVBoxLayout* layout = new QVBoxLayout(&dialog);
 
-    // 大小选择
     QHBoxLayout* sizeLayout = new QHBoxLayout;
     QLabel* label = new QLabel(tr("Size (pixels):"));
     QSpinBox* sizeSpin = new QSpinBox;
@@ -280,24 +826,20 @@ void MainWindow::adjustNoteSize()
     sizeLayout->addWidget(sizeSpin);
     layout->addLayout(sizeLayout);
 
-    // 预览区域
     QLabel* previewLabel = new QLabel;
     previewLabel->setFixedSize(128, 128);
     previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
     previewLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(previewLabel, 0, Qt::AlignCenter);
 
-    // 实时更新预览，使用当前皮肤
     auto updatePreview = [previewLabel, sizeSpin, this]() {
         int sz = sizeSpin->value();
         QPixmap pix(sz, sz);
         pix.fill(Qt::white);
         QPainter painter(&pix);
-        // 使用当前皮肤绘制一个示例音符（假设分母=4，普通note）
         Note exampleNote(0, 1, 4, 256);
-        QPointF center(sz/2, sz/2);
         if (d->skin && d->skin->isValid()) {
-            const QPixmap* notePix = d->skin->getNotePixmap(2); // type 2 = 1/4
+            const QPixmap* notePix = d->skin->getNotePixmap(2);
             if (notePix && !notePix->isNull()) {
                 QPixmap scaled = notePix->scaled(sz, sz, Qt::KeepAspectRatio, Qt::SmoothTransformation);
                 painter.drawPixmap((sz - scaled.width())/2, (sz - scaled.height())/2, scaled);
@@ -327,6 +869,7 @@ void MainWindow::adjustNoteSize()
     }
 }
 
+// ==================== 皮肤校准 ====================
 void MainWindow::calibrateSkin()
 {
     if (!d->skin) {
@@ -409,6 +952,7 @@ void MainWindow::calibrateSkin()
     dialog.exec();
 }
 
+// ==================== 轮廓设置 ====================
 void MainWindow::configureOutline()
 {
     QDialog dialog(this);
@@ -445,6 +989,7 @@ void MainWindow::configureOutline()
     }
 }
 
+// ==================== 皮肤菜单 ====================
 void MainWindow::populateSkinMenu()
 {
     d->skinMenu->clear();
@@ -501,573 +1046,4 @@ void MainWindow::setSkin(Skin* skin)
     d->skin = skin;
     if (d->canvas) d->canvas->setSkin(skin);
     Logger::debug("Skin set externally");
-}
-
-void MainWindow::createCentralArea()
-{
-    Logger::debug("Creating central area...");
-
-    // ========== 左侧面板 ==========
-    LeftPanel* leftPanel = new LeftPanel(this);
-    leftPanel->setChartController(d->chartController);
-    leftPanel->setPlaybackController(d->playbackController);
-
-    // ========== 画布 + 滚动条容器 ==========
-    d->canvas = new ChartCanvas(this);
-    d->canvas->setChartController(d->chartController);
-    d->canvas->setSelectionController(d->selectionController);
-    d->canvas->setPlaybackController(d->playbackController);
-    d->canvas->setColorMode(Settings::instance().colorNoteEnabled());
-    d->canvas->setHyperfruitEnabled(Settings::instance().hyperfruitOutlineEnabled());
-    if (d->skin) d->canvas->setSkin(d->skin);
-    d->canvas->setNoteSize(Settings::instance().noteSize());
-
-    // 将画布传递给左侧面板（用于缩放控制）
-    leftPanel->setChartCanvas(d->canvas);
-
-    // 创建垂直滚动条
-    d->verticalScrollBar = new QScrollBar(Qt::Vertical);
-    d->verticalScrollBar->setRange(0, 100000);
-    d->verticalScrollBar->setValue(0);
-    d->verticalScrollBar->setSingleStep(100);
-    d->verticalScrollBar->setPageStep(5000);
-
-    QWidget* canvasContainer = new QWidget(this);
-    QHBoxLayout* canvasLayout = new QHBoxLayout(canvasContainer);
-    canvasLayout->setContentsMargins(0, 0, 0, 0);
-    canvasLayout->setSpacing(0);
-    canvasLayout->addWidget(d->canvas, 1);
-    canvasLayout->addWidget(d->verticalScrollBar, 0);
-
-    // 连接滚动条到画布
-    auto updateScrollPos = [this](int value) {
-        if (d->canvas && d->chartController && d->chartController->chart()) {
-            qint64 duration = 300000;
-            if (d->playbackController && d->playbackController->audioPlayer()) {
-                duration = d->playbackController->audioPlayer()->duration();
-                if (duration <= 0) duration = 300000;
-            }
-            double scrollPos = (value / 100000.0) * duration;
-            d->canvas->setScrollPos(scrollPos);
-        }
-    };
-    connect(d->verticalScrollBar, QOverload<int>::of(&QScrollBar::valueChanged), this, updateScrollPos);
-
-    // 双向同步：画布滚动位置变化 -> 滚动条
-    connect(d->canvas, &ChartCanvas::scrollPositionChanged, this, [this](double beat) {
-        if (d->playbackController && d->playbackController->audioPlayer()) {
-            qint64 duration = d->playbackController->audioPlayer()->duration();
-            if (duration > 0 && d->chartController && d->chartController->chart()) {
-                const auto& bpmList = d->chartController->chart()->bpmList();
-                int offset = d->chartController->chart()->meta().offset;
-                int beatNum, numerator, denominator;
-                MathUtils::floatToBeat(beat, beatNum, numerator, denominator);
-                double timeMs = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
-                int value = static_cast<int>((timeMs / duration) * 100000);
-                d->verticalScrollBar->blockSignals(true);
-                d->verticalScrollBar->setValue(value);
-                d->verticalScrollBar->blockSignals(false);
-            }
-        }
-    });
-
-    // 音频时长变化时重置滚动条
-    if (d->playbackController && d->playbackController->audioPlayer()) {
-        connect(d->playbackController->audioPlayer(), &AudioPlayer::durationChanged, this, [this](qint64 duration) {
-            if (duration > 0) {
-                Logger::debug(QString("Audio duration changed: %1 ms").arg(duration));
-                d->verticalScrollBar->setValue(0);
-            }
-        });
-    }
-
-    // ========== 右侧面板容器 ==========
-    d->rightPanelContainer = new QWidget(this);
-    QVBoxLayout* rightLayout = new QVBoxLayout(d->rightPanelContainer);
-    rightLayout->setContentsMargins(0, 0, 0, 0);
-
-    d->notePanel = new NoteEditPanel(d->rightPanelContainer);
-    d->bpmPanel = new BPMTimePanel(d->rightPanelContainer);
-    d->metaPanel = new MetaEditPanel(d->rightPanelContainer);
-    d->currentRightPanel = d->notePanel;
-    rightLayout->addWidget(d->notePanel);
-    rightLayout->addWidget(d->bpmPanel);
-    rightLayout->addWidget(d->metaPanel);
-    d->bpmPanel->setVisible(false);
-    d->metaPanel->setVisible(false);
-
-    d->notePanel->setChartController(d->chartController);
-    d->notePanel->setSelectionController(d->selectionController);
-    d->bpmPanel->setChartController(d->chartController);
-    d->metaPanel->setChartController(d->chartController);
-
-    connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
-    connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
-    connect(d->notePanel, &NoteEditPanel::gridSnapChanged, d->canvas, [this](bool on) {
-        Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));
-        d->canvas->setGridSnap(on);
-    });
-    connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode) {
-        d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode));
-    });
-
-    // ========== 主分割器（左 / 中 / 右） ==========
-    d->splitter = new QSplitter(Qt::Horizontal, this);
-    d->splitter->addWidget(leftPanel);          // 左侧面板
-    d->splitter->addWidget(canvasContainer);    // 画布+滚动条
-    d->splitter->addWidget(d->rightPanelContainer); // 右侧面板
-    d->splitter->setSizes({150, 800, 300});     // 左:中:右 = 150:800:300
-    setCentralWidget(d->splitter);
-
-    // ========== 工具栏（右侧面板切换） ==========
-    QToolBar* toolBar = addToolBar(tr("Tools"));
-    toolBar->addAction(tr("Note"), [this]() {
-        d->notePanel->setVisible(true);
-        d->bpmPanel->setVisible(false);
-        d->metaPanel->setVisible(false);
-        d->currentRightPanel = d->notePanel;
-    });
-    toolBar->addAction(tr("BPM"), [this]() {
-        d->notePanel->setVisible(false);
-        d->bpmPanel->setVisible(true);
-        d->metaPanel->setVisible(false);
-        d->currentRightPanel = d->bpmPanel;
-    });
-    toolBar->addAction(tr("Meta"), [this]() {
-        d->notePanel->setVisible(false);
-        d->bpmPanel->setVisible(false);
-        d->metaPanel->setVisible(true);
-        d->currentRightPanel = d->metaPanel;
-    });
-
-    Logger::debug("Central area created with LeftPanel.");
-}
-
-void MainWindow::openChart()
-{
-    Logger::info("Open chart requested");
-    try {
-        QString fileName = QFileDialog::getOpenFileName(this, tr("Open Chart"), Settings::instance().lastOpenPath(),
-                                                        tr("Malody Charts (*.mc *.mcz);;Malody Catch Chart (*.mc);;Malody Catch Pack (*.mcz);;All Files (*.*)"));
-        if (fileName.isEmpty()) {
-            Logger::debug("Open chart cancelled");
-            return;
-        }
-        
-        Logger::info(QString("MainWindow::openChart - Opening file: %1").arg(fileName));
-        
-        QString chartFileToLoad = fileName;
-        QFileInfo fileInfo(fileName);
-        QString suffix = fileInfo.suffix().toLower();
-        
-        // Handle MCZ files
-        if (suffix == "mcz") {
-            Logger::debug("MainWindow::openChart - Detected MCZ file format");
-            
-            if (d->mczTempDir) {
-                Logger::debug("MainWindow::openChart - Cleaning up previous MCZ temp directory");
-                delete d->mczTempDir;
-                d->mczTempDir = nullptr;
-            }
-            
-            d->mczTempDir = new QTemporaryDir();
-            if (!d->mczTempDir->isValid()) {
-                Logger::error("MainWindow::openChart - Failed to create temporary directory for MCZ");
-                QMessageBox::critical(this, tr("Error"), tr("Failed to create temporary directory for MCZ."));
-                return;
-            }
-            
-            Logger::debug(QString("MainWindow::openChart - Created temp directory: %1").arg(d->mczTempDir->path()));
-            
-            QString importDir = d->mczTempDir->path() + "/" + fileInfo.baseName();
-            QString extractedChart;
-            
-            if (!ProjectIO::importMcz(fileName, importDir, extractedChart)) {
-                Logger::error(QString("MainWindow::openChart - Failed to import MCZ: %1").arg(fileName));
-                QMessageBox::critical(this, tr("Error"), tr("Failed to import MCZ file."));
-                return;
-            }
-            
-            Logger::debug("MainWindow::openChart - MCZ imported successfully");
-            
-            // Check if there are multiple .mc files
-            QList<QPair<QString, QString>> charts = ProjectIO::findChartsInMcz(importDir);
-            Logger::debug(QString("MainWindow::openChart - Found %1 charts in MCZ").arg(charts.size()));
-            
-            if (charts.isEmpty()) {
-                Logger::error("MainWindow::openChart - No .mc files found in MCZ");
-                QMessageBox::critical(this, tr("Error"), tr("No chart files found in MCZ."));
-                return;
-            }
-            
-            if (charts.size() > 1) {
-                // Show selection dialog for multiple charts
-                Logger::debug("MainWindow::openChart - Multiple charts detected, showing selection dialog");
-                QDialog selectDialog(this);
-                selectDialog.setWindowTitle(tr("Select Chart"));
-                selectDialog.setMinimumWidth(300);
-                
-                QVBoxLayout* layout = new QVBoxLayout(&selectDialog);
-                layout->addWidget(new QLabel(tr("Multiple charts found. Please select one:")));
-                
-                QListWidget* chartList = new QListWidget();
-                int selectedIndex = 0;
-                for (int i = 0; i < charts.size(); ++i) {
-                    const auto& chart = charts[i];
-                    QString displayText = QString("%1 (%2)").arg(QFileInfo(chart.first).baseName(), chart.second);
-                    chartList->addItem(displayText);
-                    if (i == 0) {
-                        chartList->setCurrentRow(0);
-                    }
-                }
-                
-                layout->addWidget(chartList);
-                
-                QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-                connect(buttons, &QDialogButtonBox::accepted, &selectDialog, &QDialog::accept);
-                connect(buttons, &QDialogButtonBox::rejected, &selectDialog, &QDialog::reject);
-                layout->addWidget(buttons);
-                
-                if (selectDialog.exec() != QDialog::Accepted) {
-                    Logger::debug("MainWindow::openChart - Chart selection cancelled");
-                    return;
-                }
-                
-                selectedIndex = chartList->currentRow();
-                if (selectedIndex < 0 || selectedIndex >= charts.size()) {
-                    selectedIndex = 0;
-                }
-                
-                chartFileToLoad = charts[selectedIndex].first;
-                Logger::info(QString("MainWindow::openChart - Selected chart: %1").arg(chartFileToLoad));
-            } else {
-                chartFileToLoad = charts.first().first;
-                Logger::debug(QString("MainWindow::openChart - Only one chart found: %1").arg(chartFileToLoad));
-            }
-        }
-        
-        // Load the chart file
-        if (d->chartController->loadChart(chartFileToLoad)) {
-            Logger::debug("MainWindow::openChart - Chart loaded successfully");
-            d->currentChartPath = chartFileToLoad;
-            Settings::instance().setLastOpenPath(QFileInfo(fileName).path());
-            
-            // Try to load audio file
-            try {
-                QString chartDir = QFileInfo(chartFileToLoad).absolutePath();
-                QString audioFile = d->chartController->chart()->meta().audioFile;
-                
-                Logger::debug(QString("MainWindow::openChart - Audio file from meta: %1").arg(audioFile));
-                
-                if (!audioFile.isEmpty()) {
-                    QString audioPath = chartDir + "/" + audioFile;
-                    Logger::debug(QString("MainWindow::openChart - Full audio path: %1").arg(audioPath));
-                    
-                    if (QFile::exists(audioPath)) {
-                        Logger::info(QString("MainWindow::openChart - Found audio file: %1").arg(audioPath));
-                        if (d->playbackController->audioPlayer()->load(audioPath)) {
-                            Logger::info(QString("MainWindow::openChart - Audio loaded successfully: %1").arg(audioPath));
-                        } else {
-                            Logger::warn(QString("MainWindow::openChart - Failed to load audio file: %1").arg(audioPath));
-                        }
-                    } else {
-                        Logger::warn(QString("MainWindow::openChart - Audio file not found: %1").arg(audioPath));
-                    }
-                } else {
-                    Logger::debug("MainWindow::openChart - No audio file specified in chart meta");
-                }
-            } catch (const std::exception& e) {
-                Logger::error(QString("MainWindow::openChart - Exception loading audio: %1").arg(e.what()));
-            } catch (...) {
-                Logger::error("MainWindow::openChart - Unknown exception loading audio");
-            }
-            
-            // If no audio is loaded, estimate duration from chart data
-            if (d->playbackController && d->playbackController->audioPlayer()) {
-                qint64 audioDuration = d->playbackController->audioPlayer()->duration();
-                if (audioDuration <= 0 && d->chartController && d->chartController->chart()) {
-                    // Estimate from last note's beat + 2 seconds buffer
-                    // This ensures scrollbar range covers the entire chart even without audio
-                    const QVector<Note>& notes = d->chartController->chart()->notes();
-                    if (!notes.isEmpty()) {
-                        Logger::debug("MainWindow::openChart - No audio duration, using chart notes to estimate");
-                    }
-                }
-            }
-            
-            d->canvas->update();
-            Logger::info(QString("MainWindow::openChart - Canvas update called for: %1").arg(chartFileToLoad));
-            
-            // Force process events to ensure paint happens
-            QApplication::processEvents();
-            Logger::info(QString("MainWindow::openChart - Events processed successfully"));
-            
-            Logger::info("Chart loaded: " + chartFileToLoad);
-        } else {
-            Logger::error("Failed to load chart: " + chartFileToLoad);
-            QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
-            Logger::error(QString("MainWindow::openChart - Exiting with error"));
-            return;
-        }
-    } catch (const std::exception& e) {
-        Logger::error(QString("MainWindow::openChart - Exception: %1").arg(e.what()));
-        QMessageBox::critical(this, tr("Error"), tr("Exception opening chart: %1").arg(e.what()));
-    } catch (...) {
-        Logger::error("MainWindow::openChart - Unknown exception");
-        QMessageBox::critical(this, tr("Error"), tr("Unknown exception opening chart."));
-    }
-}
-
-void MainWindow::saveChart()
-{
-    Logger::info("Save chart requested");
-    QString currentPath = Settings::instance().lastOpenPath() + "/" + d->chartController->chart()->meta().difficulty + ".mc";
-    if (d->chartController->saveChart(currentPath)) {
-        statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
-        Logger::info("Chart saved: " + currentPath);
-    } else {
-        Logger::error("Failed to save chart: " + currentPath);
-        QMessageBox::critical(this, tr("Error"), tr("Failed to save chart."));
-    }
-}
-
-void MainWindow::saveChartAs()
-{
-    Logger::info("Save chart as requested");
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Save Chart As"), Settings::instance().lastOpenPath(),
-                                                    tr("Malody Catch Chart (*.mc);;All Files (*.*)"));
-    if (fileName.isEmpty()) {
-        Logger::debug("Save as cancelled");
-        return;
-    }
-    if (d->chartController->saveChart(fileName)) {
-        statusBar()->showMessage(tr("Saved: %1").arg(fileName), 2000);
-        Logger::info("Chart saved as: " + fileName);
-    } else {
-        Logger::error("Failed to save chart as: " + fileName);
-        QMessageBox::critical(this, tr("Error"), tr("Failed to save chart."));
-    }
-}
-
-void MainWindow::exportMcz()
-{
-    Logger::info("Export .mcz requested");
-    
-    if (d->currentChartPath.isEmpty()) {
-        QMessageBox::information(this, tr("No Chart"), tr("Please open a chart first before exporting."));
-        return;
-    }
-    
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Export .mcz"), Settings::instance().lastOpenPath(),
-                                                    tr("Malody Catch Pack (*.mcz);;All Files (*.*)"));
-    if (fileName.isEmpty()) {
-        Logger::debug("Export .mcz cancelled");
-        return;
-    }
-    
-    try {
-        Logger::info(QString("MainWindow::exportMcz - Exporting to: %1").arg(fileName));
-        
-        if (ProjectIO::exportToMcz(fileName, d->currentChartPath)) {
-            statusBar()->showMessage(tr("Exported: %1").arg(fileName), 3000);
-            Logger::info(QString("MainWindow::exportMcz - Successfully exported to: %1").arg(fileName));
-            QMessageBox::information(this, tr("Success"), tr("Chart exported successfully to:\n%1").arg(fileName));
-        } else {
-            Logger::error(QString("MainWindow::exportMcz - Failed to export to: %1").arg(fileName));
-            QMessageBox::critical(this, tr("Error"), tr("Failed to export chart to MCZ format."));
-        }
-    } catch (const std::exception& e) {
-        Logger::error(QString("MainWindow::exportMcz - Exception: %1").arg(e.what()));
-        QMessageBox::critical(this, tr("Error"), tr("Exception during export: %1").arg(e.what()));
-    } catch (...) {
-        Logger::error("MainWindow::exportMcz - Unknown exception");
-        QMessageBox::critical(this, tr("Error"), tr("Unknown exception during export."));
-    }
-}
-
-void MainWindow::undo()
-{
-    if (d->chartController) {
-        Logger::debug("Undo triggered");
-        d->chartController->undo();
-    }
-}
-
-void MainWindow::redo()
-{
-    if (d->chartController) {
-        Logger::debug("Redo triggered");
-        d->chartController->redo();
-    }
-}
-
-void MainWindow::toggleColorMode(bool on)
-{
-    Logger::info(QString("Color mode toggled to %1").arg(on));
-    Settings::instance().setColorNoteEnabled(on);
-    d->canvas->setColorMode(on);
-}
-
-void MainWindow::toggleHyperfruitMode(bool on)
-{
-    Logger::info(QString("Hyperfruit mode toggled to %1").arg(on));
-    Settings::instance().setHyperfruitOutlineEnabled(on);
-    d->canvas->setHyperfruitEnabled(on);
-}
-
-void MainWindow::toggleVerticalFlip(bool flipped)
-{
-    Logger::info(QString("Vertical flip toggled to %1").arg(flipped));
-    Settings::instance().setVerticalFlip(flipped);
-    d->canvas->setVerticalFlip(flipped);
-}
-
-void MainWindow::togglePlayback()
-{
-    if (d->playbackController->state() == PlaybackController::Playing) {
-        Logger::debug("Playback paused");
-        d->playbackController->pause();
-    } else {
-        Logger::debug("Playback started");
-        // 获取当前参考线位置（使用画布参考线时间点）
-        double startTime = d->canvas->currentPlayTime();
-        // 对齐到网格（如果谱面存在）
-        const Chart* chart = d->chartController->chart();
-        if (chart) {
-            const QVector<BpmEntry>& bpmList = chart->bpmList();
-            int offset = chart->meta().offset;
-            int timeDivision = 4; // 默认网格分度（1/4拍）
-            startTime = MathUtils::snapTimeToGrid(startTime, bpmList, offset, timeDivision);
-        }
-        d->playbackController->playFromTime(startTime);
-    }
-}
-
-void MainWindow::changeEvent(QEvent* event)
-{
-    if (event->type() == QEvent::LanguageChange) {
-        retranslateUi();
-    }
-    QMainWindow::changeEvent(event);
-}
-
-void MainWindow::retranslateUi()
-{
-    setWindowTitle(tr("Catch Chart Editor"));
-    populateSkinMenu();
-    Logger::debug("UI retranslated");
-}
-
-void MainWindow::openLogSettings()
-{
-    Logger::info("Log settings dialog opened");
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Log Settings"));
-    dialog.setMinimumSize(400, 300);
-    QVBoxLayout* layout = new QVBoxLayout(&dialog);
-
-    // JSON logging enable/disable
-    QCheckBox* jsonLoggingCheck = new QCheckBox(tr("Enable JSON Logging"));
-    jsonLoggingCheck->setChecked(Logger::isJsonLoggingEnabled());
-    layout->addWidget(jsonLoggingCheck);
-
-    // Verbose logging enable/disable
-    QCheckBox* verboseCheck = new QCheckBox(tr("Enable Verbose Logging"));
-    verboseCheck->setChecked(Logger::isVerbose());
-    layout->addWidget(verboseCheck);
-
-    // Log file location display
-    QHBoxLayout* logPathLayout = new QHBoxLayout;
-    QLabel* pathLabel = new QLabel(tr("Log File:"));
-    QLineEdit* pathEdit = new QLineEdit;
-    pathEdit->setText(Logger::logFilePath());
-    pathEdit->setReadOnly(true);
-    QPushButton* openLogBtn = new QPushButton(tr("Open Log Folder"));
-    connect(openLogBtn, &QPushButton::clicked, [this]() {
-        QString logDir = QFileInfo(Logger::logFilePath()).absolutePath();
-        QDesktopServices::openUrl(QUrl::fromLocalFile(logDir));
-        Logger::debug("Opened log folder");
-    });
-    logPathLayout->addWidget(pathLabel);
-    logPathLayout->addWidget(pathEdit);
-    logPathLayout->addWidget(openLogBtn);
-    layout->addLayout(logPathLayout);
-
-    // JSON log file location display
-    QHBoxLayout* jsonPathLayout = new QHBoxLayout;
-    QLabel* jsonPathLabel = new QLabel(tr("JSON Log File:"));
-    QLineEdit* jsonPathEdit = new QLineEdit;
-    jsonPathEdit->setText(Logger::jsonLogFilePath());
-    jsonPathEdit->setReadOnly(true);
-    jsonPathLayout->addWidget(jsonPathLabel);
-    jsonPathLayout->addWidget(jsonPathEdit);
-    layout->addLayout(jsonPathLayout);
-
-    layout->addStretch();
-
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
-        Logger::setJsonLoggingEnabled(jsonLoggingCheck->isChecked());
-        Logger::setVerbose(verboseCheck->isChecked());
-        Logger::info(QString("Log settings changed - JSON logging: %1, Verbose: %2")
-                     .arg(jsonLoggingCheck->isChecked() ? "enabled" : "disabled")
-                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled"));
-        dialog.accept();
-    });
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-
-    dialog.exec();
-}
-
-void MainWindow::exportDiagnosticsReport()
-{
-    Logger::info("Diagnostics report export requested");
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Diagnostics Report"),
-                                                    Settings::instance().lastOpenPath(),
-                                                    tr("Text Files (*.txt);;JSON Files (*.json);;All Files (*.*)"));
-    if (fileName.isEmpty()) {
-        Logger::debug("Export diagnostics cancelled");
-        return;
-    }
-
-    try {
-        // Get diagnostics report from DiagnosticCollector
-        DiagnosticCollector& collector = DiagnosticCollector::instance();
-        DiagnosticCollector::DiagnosticReport report = collector.generateReport();
-
-        // Export based on file extension
-        if (fileName.endsWith(".json")) {
-            // Export as JSON
-            QJsonDocument doc = collector.toJsonDocument();
-            QFile file(fileName);
-            if (file.open(QIODevice::WriteOnly)) {
-                file.write(doc.toJson());
-                file.close();
-                Logger::info("Diagnostics report exported to JSON: " + fileName);
-                QMessageBox::information(this, tr("Export Successful"), 
-                                       tr("Diagnostics report exported to:\n%1").arg(fileName));
-            } else {
-                Logger::error("Failed to open file for writing: " + fileName);
-                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
-            }
-        } else {
-            // Export as formatted text
-            QFile file(fileName);
-            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                QTextStream stream(&file);
-                stream << report.toFormattedString();
-                file.close();
-                Logger::info("Diagnostics report exported to text: " + fileName);
-                QMessageBox::information(this, tr("Export Successful"), 
-                                       tr("Diagnostics report exported to:\n%1").arg(fileName));
-            } else {
-                Logger::error("Failed to open file for writing: " + fileName);
-                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
-            }
-        }
-    } catch (const std::exception& e) {
-        Logger::error(QString("Exception during diagnostics export: %1").arg(e.what()));
-        QMessageBox::critical(this, tr("Error"), tr("Exception during export:\n%1").arg(e.what()));
-    }
 }

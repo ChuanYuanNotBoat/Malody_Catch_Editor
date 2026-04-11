@@ -1,4 +1,6 @@
 #include "Settings.h"
+#include <QDir>
+#include <QCoreApplication>
 
 Settings::Settings() : m_settings("CatchEditor", "CatchChartEditor") {}
 
@@ -12,6 +14,14 @@ QString Settings::lastOpenPath() const {
 }
 void Settings::setLastOpenPath(const QString& path) {
     m_settings.setValue("lastOpenPath", path);
+}
+
+QString Settings::lastProjectPath() const {
+    QString defaultPath = QCoreApplication::applicationDirPath() + "/beatmap";
+    return m_settings.value("lastProjectPath", defaultPath).toString();
+}
+void Settings::setLastProjectPath(const QString& path) {
+    m_settings.setValue("lastProjectPath", path);
 }
 
 bool Settings::colorNoteEnabled() const {
@@ -83,13 +93,11 @@ void Settings::setLanguage(const QString& languageCode) {
     m_settings.setValue("language", languageCode);
 }
 
-bool Settings::verticalFlip() const
-{
-    return m_settings.value("view/verticalFlip", true).toBool();  // 默认开启翻转
+bool Settings::verticalFlip() const {
+    return m_settings.value("view/verticalFlip", true).toBool();
 }
 
-void Settings::setVerticalFlip(bool flipped)
-{
+void Settings::setVerticalFlip(bool flipped) {
     m_settings.setValue("view/verticalFlip", flipped);
 }
 

@@ -1,315 +1,16 @@
 #include "ProjectIO.h"
 #include "utils/Logger.h"
-#include "file/ChartIO.h"
-#include <QTemporaryDir>
 #include <QDir>
 #include <QFile>
 #include <QProcess>
-#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
-#include <functional>
+#include <QTemporaryDir>
+#include <QTemporaryFile>
+#include <QDateTime>      // 用于生成安全临时文件名
 
-bool ProjectIO::importMcz(const QString& mczPath, const QString& outputDir, QString& outChartPath)
-{
-    Logger::info(QString("ProjectIO::importMcz - Importing MCZ: %1 to %2").arg(mczPath, outputDir));
-    
-    if (!QFile::exists(mczPath)) {
-        Logger::error(QString("ProjectIO::importMcz - MCZ file not found: %1").arg(mczPath));
-        return false;
-    }
-
-    QDir outDir(outputDir);
-    if (!outDir.exists() && !outDir.mkpath(".")) {
-        Logger::error(QString("ProjectIO::importMcz - Failed to create output directory: %1").arg(outputDir));
-        return false;
-    }
-
-    try {
-        QProcess process;
-        process.setWorkingDirectory(outputDir);
-
-        #ifdef Q_OS_WIN
-            // PowerShell doesn't recognize .mcz extension, need to convert to .zip
-            QString tempZipPath = outputDir + "/temp_extract.zip";
-            Logger::debug(QString("ProjectIO::importMcz - Creating temporary .zip copy"));
-            
-            // Copy .mcz to temporary .zip file
-            if (!QFile::copy(mczPath, tempZipPath)) {
-                Logger::error(QString("ProjectIO::importMcz - Failed to copy MCZ file to temporary ZIP"));
-                return false;
-            }
-            
-            QStringList args;
-            args << "-NoProfile" << "-NonInteractive" << "-Command"
-                 << QString("Expand-Archive -Path '%1' -DestinationPath '%2' -Force; Remove-Item '%1'")
-                    .arg(tempZipPath, outputDir);
-            process.start("powershell.exe", args);
-        #else
-            process.start("unzip", QStringList() << "-o" << mczPath << "-d" << outputDir);
-        #endif
-
-        if (!process.waitForFinished(30000)) {
-            Logger::error(QString("ProjectIO::importMcz - Unzip process timeout"));
-            process.kill();
-            #ifdef Q_OS_WIN
-                QFile::remove(outputDir + "/temp_extract.zip");
-            #endif
-            return false;
-        }
-
-        if (process.exitCode() != 0) {
-            QString errMsg = QString::fromLocal8Bit(process.readAllStandardError());
-            Logger::error(QString("ProjectIO::importMcz - Unzip failed: %1").arg(errMsg));
-            #ifdef Q_OS_WIN
-                QFile::remove(outputDir + "/temp_extract.zip");
-            #endif
-            return false;
-        }
-
-        Logger::debug("ProjectIO::importMcz - Archive extracted successfully");
-
-        // 查找解压后的.mc文件（支持嵌套目录）
-        QStringList mcFiles;
-        std::function<void(const QString&)> findMcFiles = [&](const QString& dir) {
-            QDir d(dir);
-            for (const QString& item : d.entryList(QDir::Files)) {
-                if (item.endsWith(".mc", Qt::CaseInsensitive)) {
-                    mcFiles << d.absoluteFilePath(item);
-                }
-            }
-            for (const QString& item : d.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-                findMcFiles(d.absoluteFilePath(item));
-            }
-        };
-        findMcFiles(outputDir);
-
-        if (mcFiles.isEmpty()) {
-            Logger::error("ProjectIO::importMcz - No .mc files found in archive");
-            return false;
-        }
-
-        // 返回第一个.mc文件，caller需要处理多个文件的情况
-        outChartPath = mcFiles.first();
-        Logger::info(QString("ProjectIO::importMcz - Found chart file: %1").arg(outChartPath));
-        return true;
-
-    } catch (const std::exception& e) {
-        Logger::error(QString("ProjectIO::importMcz - Exception: %1").arg(e.what()));
-        return false;
-    }
-}
-
-bool ProjectIO::exportToMcz(const QString& outputMczPath, const QString& sourceChartPath)
-{
-    Logger::info(QString("ProjectIO::exportToMcz - Exporting to: %1 from %2").arg(outputMczPath, sourceChartPath));
-    
-    if (!QFile::exists(sourceChartPath)) {
-        Logger::error(QString("ProjectIO::exportToMcz - Chart file not found: %1").arg(sourceChartPath));
-        return false;
-    }
-
-    QString chartDir = QFileInfo(sourceChartPath).absolutePath();
-
-    try {
-        QTemporaryDir tempDir;
-        if (!tempDir.isValid()) {
-            Logger::error("ProjectIO::exportToMcz - Failed to create temporary directory");
-            return false;
-        }
-
-        QString packDir = tempDir.path() + "/mczpack";
-        QDir d;
-        if (!d.mkpath(packDir)) {
-            Logger::error(QString("ProjectIO::exportToMcz - Failed to create pack directory"));
-            return false;
-        }
-
-        // 复制整个目录到临时目录
-        if (!copyDir(chartDir, packDir)) {
-            Logger::error("ProjectIO::exportToMcz - Failed to copy chart directory");
-            return false;
-        }
-
-        Logger::debug("ProjectIO::exportToMcz - Copied chart directory to pack directory");
-
-        // 创建MCZ文件（ZIP格式）
-        // 先创建为.zip，然后重新命名为.mcz
-        QString tempZipPath = tempDir.path() + "/output.zip";
-        QProcess process;
-
-        #ifdef Q_OS_WIN
-            QStringList args;
-            args << "-NoProfile" << "-NonInteractive" << "-Command"
-                 << QString("Compress-Archive -Path '%1\\*' -DestinationPath '%2' -CompressionLevel Optimal -Force")
-                    .arg(packDir, tempZipPath);
-            process.start("powershell.exe", args);
-        #else
-            process.setWorkingDirectory(packDir);
-            process.start("zip", QStringList() << "-r" << "-q" 
-                         << tempZipPath << ".");
-        #endif
-
-        if (!process.waitForFinished(60000)) {
-            Logger::error("ProjectIO::exportToMcz - Zip process timeout");
-            process.kill();
-            return false;
-        }
-
-        if (process.exitCode() != 0) {
-            QString errMsg = QString::fromLocal8Bit(process.readAllStandardError());
-            Logger::error(QString("ProjectIO::exportToMcz - Zip failed: %1").arg(errMsg));
-            return false;
-        }
-
-        Logger::debug("ProjectIO::exportToMcz - ZIP archive created, renaming to .mcz");
-
-        // 重新命名为.mcz
-        QString mczAbsPath = QFileInfo(outputMczPath).absoluteFilePath();
-        if (QFile::exists(mczAbsPath)) {
-            if (!QFile::remove(mczAbsPath)) {
-                Logger::warn(QString("ProjectIO::exportToMcz - Failed to remove existing file: %1").arg(mczAbsPath));
-                return false;
-            }
-        }
-
-        if (!QFile::rename(tempZipPath, mczAbsPath)) {
-            Logger::error(QString("ProjectIO::exportToMcz - Failed to rename zip to mcz: %1 -> %2").arg(tempZipPath, mczAbsPath));
-            return false;
-        }
-
-        Logger::info(QString("ProjectIO::exportToMcz - Successfully exported to: %1").arg(mczAbsPath));
-        return true;
-
-    } catch (const std::exception& e) {
-        Logger::error(QString("ProjectIO::exportToMcz - Exception: %1").arg(e.what()));
-        return false;
-    }
-}
-
-bool ProjectIO::loadChartFile(const QString& filePath, QString& outChartPath)
-{
-    Logger::info(QString("ProjectIO::loadChartFile - Loading: %1").arg(filePath));
-    
-    if (!QFile::exists(filePath)) {
-        Logger::error(QString("ProjectIO::loadChartFile - File not found: %1").arg(filePath));
-        return false;
-    }
-
-    QFileInfo fileInfo(filePath);
-    QString suffix = fileInfo.suffix().toLower();
-
-    if (suffix == "mcz") {
-        QTemporaryDir tempDir;
-        if (!tempDir.isValid()) {
-            Logger::error("ProjectIO::loadChartFile - Failed to create temp directory");
-            return false;
-        }
-
-        QString projectName = fileInfo.baseName();
-        QString importDir = tempDir.path() + "/" + projectName;
-
-        if (!importMcz(filePath, importDir, outChartPath)) {
-            Logger::error(QString("ProjectIO::loadChartFile - Failed to import MCZ: %1").arg(filePath));
-            return false;
-        }
-        
-        // 检查是否有多个.mc文件
-        QList<QPair<QString, QString>> charts = findChartsInMcz(importDir);
-        if (charts.size() > 1) {
-            // 有多个谱面，返回列表让caller处理选择
-            Logger::info(QString("ProjectIO::loadChartFile - Found %1 charts in MCZ").arg(charts.size()));
-        }
-        
-        Logger::info(QString("ProjectIO::loadChartFile - MCZ imported, chart: %1").arg(outChartPath));
-        return true;
-
-    } else if (suffix == "mc") {
-        outChartPath = filePath;
-        Logger::debug("ProjectIO::loadChartFile - Loading .mc file directly");
-        return true;
-
-    } else {
-        Logger::error(QString("ProjectIO::loadChartFile - Unknown file format: %1").arg(suffix));
-        return false;
-    }
-}
-
-QList<QPair<QString, QString>> ProjectIO::findChartsInMcz(const QString& extractDir)
-{
-    QList<QPair<QString, QString>> charts;
-    
-    Logger::debug(QString("ProjectIO::findChartsInMcz - Scanning: %1").arg(extractDir));
-    
-    std::function<void(const QString&)> findMcFiles = [&](const QString& dir) {
-        QDir d(dir);
-        for (const QString& item : d.entryList(QDir::Files)) {
-            if (item.endsWith(".mc", Qt::CaseInsensitive)) {
-                QString mcPath = d.absoluteFilePath(item);
-                QString difficulty = getDifficultyFromMc(mcPath);
-                charts.append(qMakePair(mcPath, difficulty));
-            }
-        }
-        for (const QString& item : d.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-            findMcFiles(d.absoluteFilePath(item));
-        }
-    };
-    
-    findMcFiles(extractDir);
-    Logger::info(QString("ProjectIO::findChartsInMcz - Found %1 charts").arg(charts.size()));
-    
-    return charts;
-}
-
-QString ProjectIO::getDifficultyFromMc(const QString& mcPath)
-{
-    try {
-        QFile file(mcPath);
-        if (!file.open(QIODevice::ReadOnly)) {
-            Logger::warn(QString("ProjectIO::getDifficultyFromMc - Cannot open: %1").arg(mcPath));
-            return "Unknown";
-        }
-
-        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
-        file.close();
-        
-        if (doc.isObject()) {
-            QJsonObject obj = doc.object();
-            if (obj.contains("meta")) {
-                QJsonObject meta = obj["meta"].toObject();
-                QString difficulty = meta.value("difficulty").toString();
-                return difficulty.isEmpty() ? "Unknown" : difficulty;
-            }
-        }
-    } catch (const std::exception& e) {
-        Logger::warn(QString("ProjectIO::getDifficultyFromMc - Exception: %1").arg(e.what()));
-    }
-    
-    return "Unknown";
-}
-
-QStringList ProjectIO::collectDependencies(const QString& chartDir)
-{
-    QStringList dependencies;
-    QDir dir(chartDir);
-    
-    if (!dir.exists()) {
-        Logger::warn(QString("ProjectIO::collectDependencies - Directory not found: %1").arg(chartDir));
-        return dependencies;
-    }
-
-    for (const QString& file : dir.entryList(QDir::Files)) {
-        if (!file.endsWith(".mc", Qt::CaseInsensitive)) {
-            dependencies << dir.absoluteFilePath(file);
-        }
-    }
-
-    Logger::debug(QString("ProjectIO::collectDependencies - Found %1 dependencies").arg(dependencies.size()));
-    return dependencies;
-}
-
-bool ProjectIO::copyDir(const QString& srcDir, const QString& destDir)
+// 递归复制目录
+static bool copyDir(const QString& srcDir, const QString& destDir)
 {
     QDir src(srcDir);
     QDir dest(destDir);
@@ -322,7 +23,7 @@ bool ProjectIO::copyDir(const QString& srcDir, const QString& destDir)
         QString srcFile = src.absoluteFilePath(file);
         QString destFile = dest.absoluteFilePath(file);
         if (!QFile::copy(srcFile, destFile)) {
-            Logger::warn(QString("ProjectIO::copyDir - Failed to copy: %1").arg(file));
+            Logger::warn(QString("copyDir - Failed to copy: %1").arg(file));
             return false;
         }
     }
@@ -338,25 +39,212 @@ bool ProjectIO::copyDir(const QString& srcDir, const QString& destDir)
     return true;
 }
 
-bool ProjectIO::removeDir(const QString& dirPath)
+bool ProjectIO::extractMcz(const QString& mczPath, const QString& outputDir, QString& outExtractedDir)
 {
+    Logger::info(QString("ProjectIO::extractMcz - Extracting %1 to %2").arg(mczPath, outputDir));
+
+    QDir outDir(outputDir);
+    if (!outDir.exists() && !outDir.mkpath(".")) {
+        Logger::error(QString("ProjectIO::extractMcz - Failed to create output directory: %1").arg(outputDir));
+        return false;
+    }
+
+    if (!QFile::exists(mczPath)) {
+        Logger::error(QString("ProjectIO::extractMcz - Source file does not exist: %1").arg(mczPath));
+        return false;
+    }
+
+    QProcess process;
+    process.setWorkingDirectory(outputDir);
+
+#ifdef Q_OS_WIN
+    // 1. 复制 MCZ 到安全名称的临时 ZIP（Qt 能处理特殊字符）
+    QString tempZipName = "temp_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".zip";
+    QString tempZipPath = QDir::toNativeSeparators(outputDir + "/" + tempZipName);
+
+    if (!QFile::copy(mczPath, tempZipPath)) {
+        Logger::error("ProjectIO::extractMcz - Failed to copy MCZ to temporary ZIP");
+        return false;
+    }
+
+    // 2. 创建临时 PowerShell 脚本，避免命令行解析问题
+    QString scriptPath = outputDir + "/extract.ps1";
+    QFile scriptFile(scriptPath);
+    if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        Logger::error("ProjectIO::extractMcz - Failed to create extraction script");
+        QFile::remove(tempZipPath);
+        return false;
+    }
+
+    QTextStream out(&scriptFile);
+    // 对路径中的单引号进行转义（PowerShell 中单引号字符串内的单引号需写为两个）
+    QString safeZipPath = tempZipPath;
+    safeZipPath.replace('\'', "''");
+    QString safeOutputDir = QDir::toNativeSeparators(outputDir);
+    safeOutputDir.replace('\'', "''");
+
+    out << QString("Expand-Archive -Path '%1' -DestinationPath '%2' -Force\n")
+               .arg(safeZipPath, safeOutputDir);
+    out << QString("Remove-Item '%1'\n").arg(safeZipPath);
+    scriptFile.close();
+
+    // 3. 执行脚本
+    QStringList args;
+    args << "-NoProfile" << "-NonInteractive" << "-File" << QDir::toNativeSeparators(scriptPath);
+    process.start("powershell.exe", args);
+#else
+    process.start("unzip", QStringList() << "-o" << mczPath << "-d" << outputDir);
+#endif
+
+    if (!process.waitForFinished(30000)) {
+        Logger::error("ProjectIO::extractMcz - Extraction timeout");
+        process.kill();
+#ifdef Q_OS_WIN
+        QFile::remove(scriptPath);
+        QFile::remove(tempZipPath);
+#endif
+        return false;
+    }
+
+    if (process.exitCode() != 0) {
+        QString errMsg = process.readAllStandardError();
+        Logger::error(QString("ProjectIO::extractMcz - Extraction failed: %1").arg(errMsg));
+#ifdef Q_OS_WIN
+        QFile::remove(scriptPath);
+        QFile::remove(tempZipPath);
+#endif
+        return false;
+    }
+
+#ifdef Q_OS_WIN
+    // 清理临时文件
+    QFile::remove(scriptPath);
+    // tempZipPath 已由脚本中的 Remove-Item 删除，但为确保，再次检查
+    if (QFile::exists(tempZipPath)) QFile::remove(tempZipPath);
+#endif
+
+    outExtractedDir = outputDir;
+    Logger::info(QString("ProjectIO::extractMcz - Successfully extracted to %1").arg(outputDir));
+    return true;
+}
+
+bool ProjectIO::exportToMcz(const QString& outputMczPath, const QString& sourceChartPath)
+{
+    Logger::info(QString("ProjectIO::exportToMcz - Exporting to %1 from %2").arg(outputMczPath, sourceChartPath));
+
+    if (!QFile::exists(sourceChartPath)) {
+        Logger::error(QString("ProjectIO::exportToMcz - Chart file not found: %1").arg(sourceChartPath));
+        return false;
+    }
+
+    QString chartDir = QFileInfo(sourceChartPath).absolutePath();
+
+    QTemporaryDir tempDir;
+    if (!tempDir.isValid()) {
+        Logger::error("ProjectIO::exportToMcz - Failed to create temporary directory");
+        return false;
+    }
+
+    QString packDir = tempDir.path() + "/mczpack";
+    QDir().mkpath(packDir);
+
+    // 复制整个目录内容到打包目录
+    if (!copyDir(chartDir, packDir)) {
+        Logger::error("ProjectIO::exportToMcz - Failed to copy chart directory");
+        return false;
+    }
+
+    QString tempZipPath = tempDir.path() + "/output.zip";
+    QProcess process;
+
+#ifdef Q_OS_WIN
+    // 同样使用脚本方式避免转义问题
+    QString scriptPath = tempDir.path() + "/compress.ps1";
+    QFile scriptFile(scriptPath);
+    if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        Logger::error("ProjectIO::exportToMcz - Failed to create compression script");
+        return false;
+    }
+
+    QTextStream out(&scriptFile);
+    QString safePackDir = QDir::toNativeSeparators(packDir);
+    safePackDir.replace('\'', "''");
+    QString safeTempZip = QDir::toNativeSeparators(tempZipPath);
+    safeTempZip.replace('\'', "''");
+    out << QString("Compress-Archive -Path '%1\\*' -DestinationPath '%2' -CompressionLevel Optimal -Force\n")
+               .arg(safePackDir, safeTempZip);
+    scriptFile.close();
+
+    QStringList args;
+    args << "-NoProfile" << "-NonInteractive" << "-File" << QString("\"%1\"").arg(scriptPath);
+    process.start("powershell.exe", args);
+#else
+    process.setWorkingDirectory(packDir);
+    process.start("zip", QStringList() << "-r" << "-q" << tempZipPath << ".");
+#endif
+
+    if (!process.waitForFinished(60000)) {
+        Logger::error("ProjectIO::exportToMcz - Zip process timeout");
+        process.kill();
+        return false;
+    }
+
+    if (process.exitCode() != 0) {
+        QString errMsg = process.readAllStandardError();
+        Logger::error(QString("ProjectIO::exportToMcz - Zip failed: %1").arg(errMsg));
+        return false;
+    }
+
+    // 移除已存在的输出文件
+    if (QFile::exists(outputMczPath)) {
+        QFile::remove(outputMczPath);
+    }
+
+    if (!QFile::rename(tempZipPath, outputMczPath)) {
+        Logger::error("ProjectIO::exportToMcz - Failed to rename zip to mcz");
+        return false;
+    }
+
+    Logger::info("ProjectIO::exportToMcz - Export successful");
+    return true;
+}
+
+QList<QPair<QString, QString>> ProjectIO::findChartsInDirectory(const QString& dirPath)
+{
+    QList<QPair<QString, QString>> charts;
     QDir dir(dirPath);
-    if (!dir.exists()) {
-        return true;
+    if (!dir.exists()) return charts;
+
+    // 扫描当前目录下的 .mc 文件
+    QStringList mcFiles = dir.entryList(QStringList() << "*.mc", QDir::Files);
+    for (const QString& file : mcFiles) {
+        QString fullPath = dir.absoluteFilePath(file);
+        QString difficulty = getDifficultyFromMc(fullPath);
+        if (difficulty.isEmpty())
+            difficulty = QFileInfo(fullPath).baseName();
+        charts.append(qMakePair(fullPath, difficulty));
     }
 
-    for (const QString& file : dir.entryList(QDir::Files)) {
-        if (!dir.remove(file)) {
-            Logger::warn(QString("ProjectIO::removeDir - Failed to remove file: %1").arg(file));
-            return false;
-        }
+    // 递归子目录
+    QStringList subDirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString& subDir : subDirs) {
+        charts.append(findChartsInDirectory(dir.absoluteFilePath(subDir)));
     }
 
-    for (const QString& subDir : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-        if (!removeDir(dir.absoluteFilePath(subDir))) {
-            return false;
-        }
-    }
+    return charts;
+}
 
-    return dir.rmdir(dirPath);
+QString ProjectIO::getDifficultyFromMc(const QString& mcPath)
+{
+    QFile file(mcPath);
+    if (!file.open(QIODevice::ReadOnly)) return QString();
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+    if (doc.isObject()) {
+        QJsonObject root = doc.object();
+        QJsonObject meta = root.value("meta").toObject();
+        // Malody 使用 "version" 字段存储难度名
+        return meta.value("version").toString();
+    }
+    return QString();
 }
