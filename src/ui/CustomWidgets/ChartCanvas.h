@@ -150,6 +150,7 @@ private:
     int m_cachedHeight;
     bool m_cachedVerticalFlip;
 
+    // 固定边距：左右各占画布宽度的 1/20
     int leftMargin() const;
     int rightMargin() const;
 
