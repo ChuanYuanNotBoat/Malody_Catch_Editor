@@ -4,9 +4,10 @@
 #include <QStringList>
 #include "model/Skin.h"
 
-class SkinIO {
+class SkinIO
+{
 public:
-    static bool loadSkin(const QString& folderPath, Skin& outSkin);
-    static QStringList getSkinList(const QString& skinsDir);
-    static QString getSkinDisplayName(const QString& skinPath);
+    static bool loadSkin(const QString &folderPath, Skin &outSkin);
+    static QStringList getSkinList(const QString &skinsDir);
+    static QString getSkinDisplayName(const QString &skinPath);
 };

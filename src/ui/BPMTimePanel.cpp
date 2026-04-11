@@ -11,7 +11,7 @@
 #include <QMessageBox>
 #include <QStringList>
 
-BPMTimePanel::BPMTimePanel(QWidget* parent)
+BPMTimePanel::BPMTimePanel(QWidget *parent)
     : RightPanel(parent), m_chartController(nullptr), m_selectedIndex(-1)
 {
     setupUi();
@@ -19,7 +19,7 @@ BPMTimePanel::BPMTimePanel(QWidget* parent)
 
 void BPMTimePanel::setupUi()
 {
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
     // BPM 列表
     m_bpmListWidget = new QListWidget(this);
@@ -27,14 +27,14 @@ void BPMTimePanel::setupUi()
     connect(m_bpmListWidget, &QListWidget::currentRowChanged, this, &BPMTimePanel::onItemSelected);
 
     // 编辑区域
-    QHBoxLayout* timeLayout = new QHBoxLayout;
+    QHBoxLayout *timeLayout = new QHBoxLayout;
     timeLayout->addWidget(new QLabel(tr("Time:")));
     m_timeEdit = new QLineEdit(this);
     m_timeEdit->setPlaceholderText("0:1/1");
     timeLayout->addWidget(m_timeEdit);
     mainLayout->addLayout(timeLayout);
 
-    QHBoxLayout* bpmLayout = new QHBoxLayout;
+    QHBoxLayout *bpmLayout = new QHBoxLayout;
     bpmLayout->addWidget(new QLabel(tr("BPM:")));
     m_bpmSpin = new QDoubleSpinBox(this);
     m_bpmSpin->setRange(1, 999);
@@ -43,7 +43,7 @@ void BPMTimePanel::setupUi()
     bpmLayout->addWidget(m_bpmSpin);
     mainLayout->addLayout(bpmLayout);
 
-    QHBoxLayout* btnLayout = new QHBoxLayout;
+    QHBoxLayout *btnLayout = new QHBoxLayout;
     m_addBtn = new QPushButton(tr("Add/Update"), this);
     m_removeBtn = new QPushButton(tr("Remove"), this);
     btnLayout->addWidget(m_addBtn);
@@ -59,32 +59,36 @@ void BPMTimePanel::setupUi()
 
 void BPMTimePanel::refreshBpmList()
 {
-    if (!m_chartController) return;
+    if (!m_chartController)
+        return;
     m_bpmListWidget->clear();
-    const auto& bpmList = m_chartController->chart()->bpmList();
-    for (int i = 0; i < bpmList.size(); ++i) {
-        const BpmEntry& bpm = bpmList[i];
+    const auto &bpmList = m_chartController->chart()->bpmList();
+    for (int i = 0; i < bpmList.size(); ++i)
+    {
+        const BpmEntry &bpm = bpmList[i];
         QString text = QString("%1:%2/%3\t%4")
-            .arg(bpm.beatNum)
-            .arg(bpm.numerator)
-            .arg(bpm.denominator)
-            .arg(bpm.bpm, 0, 'f', 3);
+                           .arg(bpm.beatNum)
+                           .arg(bpm.numerator)
+                           .arg(bpm.denominator)
+                           .arg(bpm.bpm, 0, 'f', 3);
         m_bpmListWidget->addItem(text);
     }
 }
 
 void BPMTimePanel::onItemSelected(int row)
 {
-    if (row < 0) {
+    if (row < 0)
+    {
         m_selectedIndex = -1;
         m_timeEdit->clear();
         m_bpmSpin->setValue(120);
         return;
     }
     m_selectedIndex = row;
-    const auto& bpmList = m_chartController->chart()->bpmList();
-    if (row < bpmList.size()) {
-        const BpmEntry& bpm = bpmList[row];
+    const auto &bpmList = m_chartController->chart()->bpmList();
+    if (row < bpmList.size())
+    {
+        const BpmEntry &bpm = bpmList[row];
         m_timeEdit->setText(QString("%1:%2/%3").arg(bpm.beatNum).arg(bpm.numerator).arg(bpm.denominator));
         m_bpmSpin->setValue(bpm.bpm);
     }
@@ -92,32 +96,42 @@ void BPMTimePanel::onItemSelected(int row)
 
 void BPMTimePanel::onAddClicked()
 {
-    if (!m_chartController) return;
+    if (!m_chartController)
+        return;
     // 解析时间
     QString timeStr = m_timeEdit->text();
     int beat = 0, num = 1, den = 1;
-    if (timeStr.contains(':')) {
+    if (timeStr.contains(':'))
+    {
         QStringList parts = timeStr.split(':');
-        if (parts.size() >= 2) {
+        if (parts.size() >= 2)
+        {
             beat = parts[0].toInt();
             QString fraction = parts[1];
-            if (fraction.contains('/')) {
+            if (fraction.contains('/'))
+            {
                 QStringList fracParts = fraction.split('/');
-                if (fracParts.size() == 2) {
+                if (fracParts.size() == 2)
+                {
                     num = fracParts[0].toInt();
                     den = fracParts[1].toInt();
                 }
-            } else {
+            }
+            else
+            {
                 num = fraction.toInt();
                 den = 1;
             }
         }
     }
     BpmEntry newBpm(beat, num, den, m_bpmSpin->value());
-    if (m_selectedIndex >= 0) {
+    if (m_selectedIndex >= 0)
+    {
         m_chartController->updateBpm(m_selectedIndex, newBpm);
         m_selectedIndex = -1;
-    } else {
+    }
+    else
+    {
         m_chartController->addBpm(newBpm);
     }
     refreshBpmList();
@@ -127,8 +141,10 @@ void BPMTimePanel::onAddClicked()
 
 void BPMTimePanel::onRemoveClicked()
 {
-    if (!m_chartController) return;
-    if (m_selectedIndex >= 0) {
+    if (!m_chartController)
+        return;
+    if (m_selectedIndex >= 0)
+    {
         m_chartController->removeBpm(m_selectedIndex);
         m_selectedIndex = -1;
         refreshBpmList();
@@ -140,14 +156,14 @@ void BPMTimePanel::onBpmChanged(double)
     // 可实时预览，但暂时不做
 }
 
-void BPMTimePanel::setChartController(ChartController* controller)
+void BPMTimePanel::setChartController(ChartController *controller)
 {
     m_chartController = controller;
     connect(m_chartController, &ChartController::chartChanged, this, &BPMTimePanel::refreshBpmList);
     refreshBpmList();
 }
 
-void BPMTimePanel::setSelectionController(SelectionController* controller)
+void BPMTimePanel::setSelectionController(SelectionController *controller)
 {
     Q_UNUSED(controller);
 }

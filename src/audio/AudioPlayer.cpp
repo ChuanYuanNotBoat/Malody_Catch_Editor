@@ -11,14 +11,14 @@
 #include <QTemporaryFile>
 #include <QDir>
 
-AudioPlayer::AudioPlayer(QObject* parent) : QObject(parent),
-    m_loaded(false),
-    m_lastError(),
-    m_loadingState(LoadingState::Idle),
-    m_loadTimeoutTimer(nullptr),
-    m_currentLoadPath(),
-    m_audioLatency(0),
-    m_userOffset(0)
+AudioPlayer::AudioPlayer(QObject *parent) : QObject(parent),
+                                            m_loaded(false),
+                                            m_lastError(),
+                                            m_loadingState(LoadingState::Idle),
+                                            m_loadTimeoutTimer(nullptr),
+                                            m_currentLoadPath(),
+                                            m_audioLatency(0),
+                                            m_userOffset(0)
 {
     m_player = new QMediaPlayer(this);
     m_audioOutput = new QAudioOutput(this);
@@ -31,7 +31,8 @@ AudioPlayer::AudioPlayer(QObject* parent) : QObject(parent),
     // 创建超时定时器
     m_loadTimeoutTimer = new QTimer(this);
     m_loadTimeoutTimer->setSingleShot(true);
-    connect(m_loadTimeoutTimer, &QTimer::timeout, this, [this]() {
+    connect(m_loadTimeoutTimer, &QTimer::timeout, this, [this]()
+            {
         if (m_loadingState == LoadingState::Loading) {
             m_lastError = QString("音频加载超时 (5秒)");
             Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
@@ -40,8 +41,7 @@ AudioPlayer::AudioPlayer(QObject* parent) : QObject(parent),
             disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
             setLoadingState(LoadingState::Error);
             emit errorOccurred(m_lastError);
-        }
-    });
+        } });
 
     // 从设置加载音频延迟和全局偏移
     m_audioLatency = Settings::instance().audioLatency();
@@ -59,7 +59,8 @@ AudioPlayer::LoadingState AudioPlayer::loadingState() const
 
 void AudioPlayer::setLoadingState(LoadingState state)
 {
-    if (m_loadingState != state) {
+    if (m_loadingState != state)
+    {
         m_loadingState = state;
         emit loadingStateChanged(state);
         // 同步更新 m_loaded 状态
@@ -67,64 +68,70 @@ void AudioPlayer::setLoadingState(LoadingState state)
     }
 }
 
-bool AudioPlayer::load(const QString& filePath)
+bool AudioPlayer::load(const QString &filePath)
 {
     PerformanceTimer loadTimer("AudioPlayer::load", "audio");
-    
+
     Logger::info(QString("AudioPlayer::load - Loading audio from: %1").arg(filePath));
-    
+
     // 重置状态
     setLoadingState(LoadingState::Idle);
     m_lastError.clear();
     m_currentLoadPath.clear();
-    
+
     // 检查文件是否存在
     QFileInfo fileInfo(filePath);
-    if (!fileInfo.exists()) {
+    if (!fileInfo.exists())
+    {
         m_lastError = QString("文件不存在: %1").arg(filePath);
         Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
         emit errorOccurred(m_lastError);
         return false;
     }
-    if (!fileInfo.isReadable()) {
+    if (!fileInfo.isReadable())
+    {
         m_lastError = QString("文件不可读: %1").arg(filePath);
         Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
         emit errorOccurred(m_lastError);
         return false;
     }
-    
+
     Logger::debug(QString("AudioPlayer::load - 文件大小: %1 字节, 扩展名: %2").arg(fileInfo.size()).arg(fileInfo.suffix()));
-    
+
     // 路径规范化：如果路径包含非ASCII字符，复制到临时文件
     QString actualPath = normalizeAudioPath(filePath);
-    if (actualPath.isEmpty()) {
+    if (actualPath.isEmpty())
+    {
         m_lastError = QString("路径规范化失败");
         Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
         emit errorOccurred(m_lastError);
         return false;
     }
-    
+
     Logger::debug(QString("AudioPlayer::load - 实际加载路径: %1").arg(actualPath));
-    
-    try {
+
+    try
+    {
         QUrl url = QUrl::fromLocalFile(actualPath);
         Logger::debug(QString("AudioPlayer::load - URL: %1").arg(url.toString()));
-        
+
         // 停止任何正在进行的加载
-        if (m_loadingState == LoadingState::Loading) {
+        if (m_loadingState == LoadingState::Loading)
+        {
             Logger::debug("AudioPlayer::load - 取消之前的加载");
             m_loadTimeoutTimer->stop();
             // 断开之前的连接
             disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
             disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
         }
-        
+
         // 设置加载状态
         setLoadingState(LoadingState::Loading);
         m_currentLoadPath = filePath;
-        
+
         // 连接媒体状态变化信号
-        connect(m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status) {
+        connect(m_player, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus status)
+                {
             Logger::debug(QString("AudioPlayer::mediaStatusChanged - MediaStatus: %1").arg(static_cast<int>(status)));
             if (status == QMediaPlayer::LoadedMedia || status == QMediaPlayer::BufferedMedia) {
                 // 加载成功
@@ -152,35 +159,38 @@ bool AudioPlayer::load(const QString& filePath)
                 emit errorOccurred(m_lastError);
                 disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
                 disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
-            }
-        });
-        
+            } });
+
         // 连接错误信号
-        connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error error, const QString& errorString) {
+        connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error error, const QString &errorString)
+                {
             Logger::error(QString("AudioPlayer::load - 媒体错误: %1, %2").arg(int(error)).arg(errorString));
             m_loadTimeoutTimer->stop();
             m_lastError = QString("媒体错误 %1: %2").arg(int(error)).arg(errorString);
             setLoadingState(LoadingState::Error);
             emit errorOccurred(m_lastError);
             disconnect(m_player, &QMediaPlayer::mediaStatusChanged, this, nullptr);
-            disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr);
-        });
-        
+            disconnect(m_player, &QMediaPlayer::errorOccurred, this, nullptr); });
+
         // 开始加载
         m_player->setSource(url);
-        
+
         // 启动超时定时器
         m_loadTimeoutTimer->start(5000); // 5秒超时
-        
+
         Logger::debug("AudioPlayer::load - 异步加载已启动");
         return true; // 表示加载已开始
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         m_lastError = QString("异常: %1").arg(e.what());
         Logger::error(QString("AudioPlayer::load - %1").arg(m_lastError));
         emit errorOccurred(m_lastError);
         setLoadingState(LoadingState::Error);
         return false;
-    } catch (...) {
+    }
+    catch (...)
+    {
         m_lastError = QString("未知异常");
         Logger::error("AudioPlayer::load - Unknown exception");
         emit errorOccurred(m_lastError);
@@ -189,35 +199,40 @@ bool AudioPlayer::load(const QString& filePath)
     }
 }
 
-QString AudioPlayer::normalizeAudioPath(const QString& originalPath)
+QString AudioPlayer::normalizeAudioPath(const QString &originalPath)
 {
     // 检查路径是否包含非ASCII字符
     bool hasNonAscii = false;
-    for (const QChar& ch : originalPath) {
-        if (ch.unicode() > 127) {
+    for (const QChar &ch : originalPath)
+    {
+        if (ch.unicode() > 127)
+        {
             hasNonAscii = true;
             break;
         }
     }
-    
-    if (!hasNonAscii) {
+
+    if (!hasNonAscii)
+    {
         return originalPath;
     }
-    
+
     // 复制到临时文件
     QTemporaryFile tempFile(QDir::tempPath() + "/audio_XXXXXX.ogg");
     tempFile.setAutoRemove(false); // 程序运行期间保留
-    if (tempFile.open()) {
+    if (tempFile.open())
+    {
         QString tempPath = tempFile.fileName();
         tempFile.close();
-        
-        if (QFile::copy(originalPath, tempPath)) {
+
+        if (QFile::copy(originalPath, tempPath))
+        {
             Logger::info(QString("AudioPlayer::normalizeAudioPath - Audio file copied to temporary path: %1").arg(tempPath));
             m_tempAudioFiles.append(tempPath); // 记录以便清理
             return tempPath;
         }
     }
-    
+
     Logger::warn(QString("AudioPlayer::normalizeAudioPath - Failed to copy audio file to temp path, using original"));
     return originalPath;
 }

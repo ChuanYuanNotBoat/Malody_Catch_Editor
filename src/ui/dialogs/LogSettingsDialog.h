@@ -7,7 +7,7 @@
 
 /**
  * @brief 日志设置对话框
- * 
+ *
  * 允许用户在运行时动态调整：
  * - 日志级别（DEBUG/INFO/WARN/ERROR）
  * - JSON日志输出
@@ -15,15 +15,16 @@
  * - 详细模式
  * - 清除日志
  */
-class LogSettingsDialog : public QDialog {
+class LogSettingsDialog : public QDialog
+{
     Q_OBJECT
 
 public:
-    explicit LogSettingsDialog(QWidget* parent = nullptr);
+    explicit LogSettingsDialog(QWidget *parent = nullptr);
     ~LogSettingsDialog() = default;
 
 protected:
-    void closeEvent(QCloseEvent* event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void onVerboseModeChanged(int state);
@@ -41,13 +42,13 @@ private:
     void displayDiagnosticInfo();
 
     // UI组件
-    QComboBox* m_logLevelCombo;
-    QCheckBox* m_verboseModeCheckbox;
-    QCheckBox* m_jsonLoggingCheckbox;
-    QCheckBox* m_performanceTimingCheckbox;
-    QPushButton* m_clearLogsButton;
-    QPushButton* m_showLogButton;
-    QPushButton* m_exportButton;
-    QPushButton* m_okButton;
-    QPushButton* m_cancelButton;
+    QComboBox *m_logLevelCombo;
+    QCheckBox *m_verboseModeCheckbox;
+    QCheckBox *m_jsonLoggingCheckbox;
+    QCheckBox *m_performanceTimingCheckbox;
+    QPushButton *m_clearLogsButton;
+    QPushButton *m_showLogButton;
+    QPushButton *m_exportButton;
+    QPushButton *m_okButton;
+    QPushButton *m_cancelButton;
 };

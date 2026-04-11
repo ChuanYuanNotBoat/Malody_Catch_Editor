@@ -14,17 +14,24 @@ class HyperfruitDetector;
 class Skin;
 class PlaybackController;
 
-class ChartCanvas : public QWidget {
+class ChartCanvas : public QWidget
+{
     Q_OBJECT
 public:
-    enum Mode { PlaceNote, PlaceRain, Delete, Select };
-    explicit ChartCanvas(QWidget* parent = nullptr);
+    enum Mode
+    {
+        PlaceNote,
+        PlaceRain,
+        Delete,
+        Select
+    };
+    explicit ChartCanvas(QWidget *parent = nullptr);
     ~ChartCanvas();
 
-    void setChartController(ChartController* controller);
-    void setSelectionController(SelectionController* controller);
-    void setSkin(Skin* skin);
-    void setPlaybackController(PlaybackController* controller);
+    void setChartController(ChartController *controller);
+    void setSelectionController(SelectionController *controller);
+    void setSkin(Skin *skin);
+    void setPlaybackController(PlaybackController *controller);
     void setColorMode(bool enabled);
     void setHyperfruitEnabled(bool enabled);
     void setTimeDivision(int division);
@@ -34,7 +41,7 @@ public:
     void setNoteSize(int size);
     void setMode(Mode mode);
     void paste();
-    
+
     bool isVerticalFlip() const;
     void setVerticalFlip(bool flip);
     double currentPlayTime() const;
@@ -54,29 +61,29 @@ signals:
     void timeScaleChanged(double scale);
 
 protected:
-    void paintEvent(QPaintEvent* event) override;
-    void mousePressEvent(QMouseEvent* event) override;
-    void mouseMoveEvent(QMouseEvent* event) override;
-    void mouseReleaseEvent(QMouseEvent* event) override;
-    void wheelEvent(QWheelEvent* event) override;
-    void keyPressEvent(QKeyEvent* event) override;
-    void timerEvent(QTimerEvent* event) override;
-    void resizeEvent(QResizeEvent* event) override;
+    void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void timerEvent(QTimerEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
-    void drawGrid(QPainter& painter);
-    QPointF noteToPos(const Note& note) const;
-    Note posToNote(const QPointF& pos) const;
+    void drawGrid(QPainter &painter);
+    QPointF noteToPos(const Note &note) const;
+    Note posToNote(const QPointF &pos) const;
     double yPosFromTime(double timeMs) const;
     double beatToY(double beat) const;
     double yToBeat(double y) const;
-    int hitTestNote(const QPointF& pos) const;
-    QRectF getRainNoteRect(const Note& note) const;
+    int hitTestNote(const QPointF &pos) const;
+    QRectF getRainNoteRect(const Note &note) const;
     void updateNotePosCacheIfNeeded();
     void invalidateCache();
 
-    void beginMoveSelection(const QPointF& startPos, int referenceIndex = -1);
-    void updateMoveSelection(const QPointF& currentPos);
+    void beginMoveSelection(const QPointF &startPos, int referenceIndex = -1);
+    void updateMoveSelection(const QPointF &currentPos);
     void endMoveSelection();
     void prepareMoveChanges();
 
@@ -85,16 +92,17 @@ private:
     void stopSnapTimer();
 
     // 计算实际可见拍数（应用缩放因子）
-    double effectiveVisibleBeatRange() const {
+    double effectiveVisibleBeatRange() const
+    {
         return m_baseVisibleBeatRange / m_timeScale;
     }
 
-    ChartController* m_chartController;
-    SelectionController* m_selectionController;
-    PlaybackController* m_playbackController;
-    NoteRenderer* m_noteRenderer;
-    GridRenderer* m_gridRenderer;
-    HyperfruitDetector* m_hyperfruitDetector;
+    ChartController *m_chartController;
+    SelectionController *m_selectionController;
+    PlaybackController *m_playbackController;
+    NoteRenderer *m_noteRenderer;
+    GridRenderer *m_gridRenderer;
+    HyperfruitDetector *m_hyperfruitDetector;
 
     Mode m_currentMode;
     bool m_colorMode;
@@ -103,10 +111,10 @@ private:
     int m_timeDivision;
     int m_gridDivision;
     bool m_gridSnap;
-    double m_scrollBeat;               // 滚动位置（拍）
-    double m_baseVisibleBeatRange;     // 基准可见拍数（缩放因子=1.0时的值）
-    double m_timeScale;                // 时间轴缩放因子
-    double m_currentPlayTime;          // 当前播放时间（毫秒）
+    double m_scrollBeat;           // 滚动位置（拍）
+    double m_baseVisibleBeatRange; // 基准可见拍数（缩放因子=1.0时的值）
+    double m_timeScale;            // 时间轴缩放因子
+    double m_currentPlayTime;      // 当前播放时间（毫秒）
     bool m_autoScrollEnabled;
 
     bool m_isSelecting;
@@ -137,7 +145,7 @@ private:
     int m_snapTimerId;
     bool m_isScrolling;
 
-    QTimer* m_repaintTimer;
+    QTimer *m_repaintTimer;
     bool m_repaintPending;
     bool m_forceRepaint;
     qint64 m_lastRepaintTime;

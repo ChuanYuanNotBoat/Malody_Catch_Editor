@@ -9,18 +9,15 @@
 #include <QLabel>
 #include <QDoubleSpinBox>
 
-LeftPanel::LeftPanel(QWidget* parent)
-    : QWidget(parent)
-    , m_chartController(nullptr)
-    , m_playbackController(nullptr)
-    , m_chartCanvas(nullptr)
+LeftPanel::LeftPanel(QWidget *parent)
+    : QWidget(parent), m_chartController(nullptr), m_playbackController(nullptr), m_chartCanvas(nullptr)
 {
     setupUi();
 }
 
 void LeftPanel::setupUi()
 {
-    QVBoxLayout* layout = new QVBoxLayout(this);
+    QVBoxLayout *layout = new QVBoxLayout(this);
 
     // 密度曲线
     m_densityCurve = new DensityCurve(this);
@@ -32,15 +29,15 @@ void LeftPanel::setupUi()
     connect(m_playPauseBtn, &QPushButton::clicked, this, &LeftPanel::onPlayPauseClicked);
 
     // 时间轴缩放控制
-    QHBoxLayout* zoomLayout = new QHBoxLayout;
-    QLabel* zoomLabel = new QLabel(tr("Zoom:"), this);
+    QHBoxLayout *zoomLayout = new QHBoxLayout;
+    QLabel *zoomLabel = new QLabel(tr("Zoom:"), this);
     m_zoomOutBtn = new QPushButton("-", this);
     m_zoomOutBtn->setFixedWidth(30);
     m_zoomInBtn = new QPushButton("+", this);
     m_zoomInBtn->setFixedWidth(30);
-    
+
     m_timeScaleSpin = new QDoubleSpinBox(this);
-    m_timeScaleSpin->setRange(0.1, 10.0);   // 手动输入无严格限制
+    m_timeScaleSpin->setRange(0.1, 10.0); // 手动输入无严格限制
     m_timeScaleSpin->setSingleStep(0.1);
     m_timeScaleSpin->setDecimals(2);
     m_timeScaleSpin->setValue(1.0);
@@ -62,11 +59,15 @@ void LeftPanel::setupUi()
 
 void LeftPanel::onPlayPauseClicked()
 {
-    if (!m_playbackController) return;
-    if (m_playbackController->state() == PlaybackController::Playing) {
+    if (!m_playbackController)
+        return;
+    if (m_playbackController->state() == PlaybackController::Playing)
+    {
         m_playbackController->pause();
         m_playPauseBtn->setText(tr("Play"));
-    } else {
+    }
+    else
+    {
         m_playbackController->play();
         m_playPauseBtn->setText(tr("Pause"));
     }
@@ -74,8 +75,9 @@ void LeftPanel::onPlayPauseClicked()
 
 void LeftPanel::onZoomInClicked()
 {
-    if (!m_chartCanvas) return;
-    double newScale = m_chartCanvas->timeScale() * 1.2;  // 增加 20%
+    if (!m_chartCanvas)
+        return;
+    double newScale = m_chartCanvas->timeScale() * 1.2; // 增加 20%
     m_chartCanvas->setTimeScale(newScale);
     // 更新 spinbox 显示（信号会触发更新，但为了防止循环，先 block）
     m_timeScaleSpin->blockSignals(true);
@@ -85,8 +87,9 @@ void LeftPanel::onZoomInClicked()
 
 void LeftPanel::onZoomOutClicked()
 {
-    if (!m_chartCanvas) return;
-    double newScale = m_chartCanvas->timeScale() / 1.2;  // 减少 20%
+    if (!m_chartCanvas)
+        return;
+    double newScale = m_chartCanvas->timeScale() / 1.2; // 减少 20%
     m_chartCanvas->setTimeScale(newScale);
     m_timeScaleSpin->blockSignals(true);
     m_timeScaleSpin->setValue(newScale);
@@ -95,35 +98,36 @@ void LeftPanel::onZoomOutClicked()
 
 void LeftPanel::onTimeScaleChanged(double scale)
 {
-    if (!m_chartCanvas) return;
+    if (!m_chartCanvas)
+        return;
     m_chartCanvas->setTimeScale(scale);
 }
 
-void LeftPanel::setChartController(ChartController* controller)
+void LeftPanel::setChartController(ChartController *controller)
 {
     m_chartController = controller;
     if (m_densityCurve)
         m_densityCurve->setChart(controller->chart());
 }
 
-void LeftPanel::setPlaybackController(PlaybackController* controller)
+void LeftPanel::setPlaybackController(PlaybackController *controller)
 {
     m_playbackController = controller;
-    connect(controller, &PlaybackController::stateChanged, this, [this](PlaybackController::State state) {
-        m_playPauseBtn->setText(state == PlaybackController::Playing ? tr("Pause") : tr("Play"));
-    });
+    connect(controller, &PlaybackController::stateChanged, this, [this](PlaybackController::State state)
+            { m_playPauseBtn->setText(state == PlaybackController::Playing ? tr("Pause") : tr("Play")); });
 }
 
-void LeftPanel::setChartCanvas(ChartCanvas* canvas)
+void LeftPanel::setChartCanvas(ChartCanvas *canvas)
 {
     m_chartCanvas = canvas;
-    if (canvas) {
+    if (canvas)
+    {
         // 当画布缩放改变时，同步更新 spinbox 显示
-        connect(canvas, &ChartCanvas::timeScaleChanged, this, [this](double scale) {
+        connect(canvas, &ChartCanvas::timeScaleChanged, this, [this](double scale)
+                {
             m_timeScaleSpin->blockSignals(true);
             m_timeScaleSpin->setValue(scale);
-            m_timeScaleSpin->blockSignals(false);
-        });
+            m_timeScaleSpin->blockSignals(false); });
         // 初始化 spinbox 为当前缩放值
         m_timeScaleSpin->setValue(canvas->timeScale());
     }

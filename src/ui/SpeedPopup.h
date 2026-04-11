@@ -5,10 +5,11 @@
 class QPushButton;
 class QButtonGroup;
 
-class SpeedPopup : public QWidget {
+class SpeedPopup : public QWidget
+{
     Q_OBJECT
 public:
-    explicit SpeedPopup(QWidget* parent = nullptr);
+    explicit SpeedPopup(QWidget *parent = nullptr);
     void setSpeed(double speed);
     double speed() const { return m_currentSpeed; }
 
@@ -19,6 +20,6 @@ private slots:
     void onSpeedSelected(int id);
 
 private:
-    QButtonGroup* m_buttonGroup;
+    QButtonGroup *m_buttonGroup;
     double m_currentSpeed;
 };

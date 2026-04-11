@@ -5,25 +5,26 @@
 #include "BpmEntry.h"
 #include "MetaData.h"
 
-class Chart {
+class Chart
+{
 public:
     Chart();
 
-    void addNote(const Note& note);
+    void addNote(const Note &note);
     void removeNote(int index);
-    void removeNote(const Note& note);
+    void removeNote(const Note &note);
     void clearNotes();
-    const QVector<Note>& notes() const;
-    QVector<Note>& notes();
+    const QVector<Note> &notes() const;
+    QVector<Note> &notes();
 
-    void addBpm(const BpmEntry& bpm);
+    void addBpm(const BpmEntry &bpm);
     void removeBpm(int index);
-    void updateBpm(int index, const BpmEntry& bpm);
-    const QVector<BpmEntry>& bpmList() const;
-    QVector<BpmEntry>& bpmList();
+    void updateBpm(int index, const BpmEntry &bpm);
+    const QVector<BpmEntry> &bpmList() const;
+    QVector<BpmEntry> &bpmList();
 
-    MetaData& meta();
-    const MetaData& meta() const;
+    MetaData &meta();
+    const MetaData &meta() const;
 
     void sortNotes();
     bool isValid() const;

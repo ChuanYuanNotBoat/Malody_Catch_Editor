@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QFileDialog>
 
-MetaEditPanel::MetaEditPanel(QWidget* parent)
+MetaEditPanel::MetaEditPanel(QWidget *parent)
     : RightPanel(parent), m_chartController(nullptr)
 {
     setupUi();
@@ -19,8 +19,8 @@ MetaEditPanel::MetaEditPanel(QWidget* parent)
 
 void MetaEditPanel::setupUi()
 {
-    QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    QFormLayout* form = new QFormLayout;
+    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    QFormLayout *form = new QFormLayout;
 
     m_titleEdit = new QLineEdit(this);
     form->addRow(tr("Title:"), m_titleEdit);
@@ -36,26 +36,26 @@ void MetaEditPanel::setupUi()
     form->addRow(tr("Chart Author:"), m_chartAuthorEdit);
     m_audioFileEdit = new QLineEdit(this);
     form->addRow(tr("Audio File:"), m_audioFileEdit);
-    QPushButton* audioBrowse = new QPushButton(tr("Browse..."), this);
-    QHBoxLayout* audioLayout = new QHBoxLayout;
+    QPushButton *audioBrowse = new QPushButton(tr("Browse..."), this);
+    QHBoxLayout *audioLayout = new QHBoxLayout;
     audioLayout->addWidget(m_audioFileEdit);
     audioLayout->addWidget(audioBrowse);
     form->addRow(tr("Audio (ogg):"), audioLayout);
-    connect(audioBrowse, &QPushButton::clicked, [this]() {
+    connect(audioBrowse, &QPushButton::clicked, [this]()
+            {
         QString fileName = QFileDialog::getOpenFileName(this, tr("Select Audio"), QString(), tr("OGG Files (*.ogg)"));
-        if (!fileName.isEmpty()) m_audioFileEdit->setText(fileName);
-    });
+        if (!fileName.isEmpty()) m_audioFileEdit->setText(fileName); });
 
     m_backgroundFileEdit = new QLineEdit(this);
-    QPushButton* bgBrowse = new QPushButton(tr("Browse..."), this);
-    QHBoxLayout* bgLayout = new QHBoxLayout;
+    QPushButton *bgBrowse = new QPushButton(tr("Browse..."), this);
+    QHBoxLayout *bgLayout = new QHBoxLayout;
     bgLayout->addWidget(m_backgroundFileEdit);
     bgLayout->addWidget(bgBrowse);
     form->addRow(tr("Background (jpg):"), bgLayout);
-    connect(bgBrowse, &QPushButton::clicked, [this]() {
+    connect(bgBrowse, &QPushButton::clicked, [this]()
+            {
         QString fileName = QFileDialog::getOpenFileName(this, tr("Select Background"), QString(), tr("JPEG Files (*.jpg)"));
-        if (!fileName.isEmpty()) m_backgroundFileEdit->setText(fileName);
-    });
+        if (!fileName.isEmpty()) m_backgroundFileEdit->setText(fileName); });
 
     m_previewTimeSpin = new QSpinBox(this);
     m_previewTimeSpin->setRange(0, 999999);
@@ -87,10 +87,14 @@ void MetaEditPanel::setupUi()
 void MetaEditPanel::refreshMeta()
 {
     Logger::info("MetaEditPanel::refreshMeta called");
-    if (!m_chartController) return;
-    const MetaData& meta = m_chartController->chart()->meta();
+    if (!m_chartController)
+        return;
+    const MetaData &meta = m_chartController->chart()->meta();
     Logger::info(QString("MetaEditPanel::refreshMeta - title='%1', artist='%2', difficulty='%3', speed=%4")
-                  .arg(meta.title).arg(meta.artist).arg(meta.difficulty).arg(meta.speed));
+                     .arg(meta.title)
+                     .arg(meta.artist)
+                     .arg(meta.difficulty)
+                     .arg(meta.speed));
     m_titleEdit->setText(meta.title);
     m_titleOrgEdit->setText(meta.titleOrg);
     m_artistEdit->setText(meta.artist);
@@ -107,7 +111,8 @@ void MetaEditPanel::refreshMeta()
 
 void MetaEditPanel::onSaveClicked()
 {
-    if (!m_chartController) return;
+    if (!m_chartController)
+        return;
     MetaData meta;
     meta.title = m_titleEdit->text();
     meta.titleOrg = m_titleOrgEdit->text();
@@ -124,7 +129,7 @@ void MetaEditPanel::onSaveClicked()
     m_chartController->setMetaData(meta);
 }
 
-void MetaEditPanel::setChartController(ChartController* controller)
+void MetaEditPanel::setChartController(ChartController *controller)
 {
     m_chartController = controller;
     connect(m_chartController, &ChartController::chartChanged, this, &MetaEditPanel::refreshMeta);
@@ -132,7 +137,7 @@ void MetaEditPanel::setChartController(ChartController* controller)
     refreshMeta();
 }
 
-void MetaEditPanel::setSelectionController(SelectionController* controller)
+void MetaEditPanel::setSelectionController(SelectionController *controller)
 {
     Q_UNUSED(controller);
 }

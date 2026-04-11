@@ -15,10 +15,11 @@
  * - SOUND = 1: 音效音符
  * - RAIN = 3: Rain音符
  */
-enum class NoteType : int {
-    NORMAL = 0,    // 普通音符
-    SOUND = 1,     // 音效音符
-    RAIN = 3       // Rain音符
+enum class NoteType : int
+{
+    NORMAL = 0, // 普通音符
+    SOUND = 1,  // 音效音符
+    RAIN = 3    // Rain音符
 };
 
 /**
@@ -29,13 +30,14 @@ enum class NoteType : int {
  * - Rain音符：type = NoteType::RAIN，有起始和结束拍号
  * - 音效音符：type = NoteType::SOUND，有声音相关属性
  */
-struct Note {
+struct Note
+{
     // 起始拍号（整数拍 + 分子/分母）
-    int beatNum;      // 从0开始的整数拍
-    int numerator;    // 分子（1-...）
-    int denominator;  // 分母（1,2,3,4...）
+    int beatNum;     // 从0开始的整数拍
+    int numerator;   // 分子（1-...）
+    int denominator; // 分母（1,2,3,4...）
 
-    QString id;       // 唯一标识符
+    QString id; // 唯一标识符
 
     // 音符类型（使用枚举提高类型安全性）
     NoteType type;
@@ -52,9 +54,9 @@ struct Note {
     int endDenominator;
 
     // 音效音符专属属性
-    QString sound;    // 音效文件名
-    int vol;          // 音量（0-100）
-    int offset;       // 偏移量（毫秒）
+    QString sound; // 音效文件名
+    int vol;       // 音量（0-100）
+    int offset;    // 偏移量（毫秒）
 
     /**
      * @brief 默认构造函数，生成无效音符
@@ -77,7 +79,7 @@ struct Note {
      * @brief 音效音符构造函数
      */
     Note(int beatNum, int numerator, int denominator,
-         const QString& sound, int vol, int offset);
+         const QString &sound, int vol, int offset);
 
     /**
      * @brief 判断 rain 音符是否有效（结束时间不早于开始时间）
@@ -117,11 +119,11 @@ struct Note {
     bool isNormal() const { return type == NoteType::NORMAL; }
     bool isSound() const { return type == NoteType::SOUND; }
     bool isRainNote() const { return type == NoteType::RAIN; }
-    
+
     // 边界检查辅助方法
     bool isXValid() const;
     bool isTimeValid() const;
-    
+
     // 静态转换方法（保持与现有代码的兼容性）
     static NoteType intToNoteType(int type);
     static int noteTypeToInt(NoteType type);
