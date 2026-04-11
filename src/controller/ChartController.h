@@ -21,6 +21,9 @@ public:
     // 获取当前谱面（只读）
     const Chart *chart() const { return &m_chart; }
 
+    // 获取当前谱面文件路径
+    QString chartFilePath() const { return m_currentChartPath; }
+
     // 编辑操作（都会自动压入撤销栈）
     void addNote(const Note &note);
     void removeNote(const Note &note);
@@ -51,9 +54,9 @@ private:
     class ChartCommand;
     class AddNoteCommand;
     class RemoveNoteCommand;
-    class RemoveNotesCommand; // 新增复合删除命令
+    class RemoveNotesCommand;
     class MoveNoteCommand;
-    class MoveNotesCommand; // 新增复合移动命令
+    class MoveNotesCommand;
     class AddBpmCommand;
     class RemoveBpmCommand;
     class UpdateBpmCommand;
@@ -61,4 +64,5 @@ private:
 
     Chart m_chart;
     QUndoStack *m_undoStack;
+    QString m_currentChartPath; // 当前加载的谱面文件路径
 };

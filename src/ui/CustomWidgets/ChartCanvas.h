@@ -11,6 +11,7 @@ class SelectionController;
 class NoteRenderer;
 class GridRenderer;
 class HyperfruitDetector;
+class BackgroundRenderer;
 class Skin;
 class PlaybackController;
 
@@ -46,7 +47,6 @@ public:
     void setVerticalFlip(bool flip);
     double currentPlayTime() const;
 
-    // 时间轴缩放
     void setTimeScale(double scale);
     double timeScale() const { return m_timeScale; }
 
@@ -71,6 +71,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
+    void drawBackground(QPainter &painter);
     void drawGrid(QPainter &painter);
     QPointF noteToPos(const Note &note) const;
     Note posToNote(const QPointF &pos) const;
@@ -91,7 +92,6 @@ private:
     void startSnapTimer();
     void stopSnapTimer();
 
-    // 计算实际可见拍数（应用缩放因子）
     double effectiveVisibleBeatRange() const
     {
         return m_baseVisibleBeatRange / m_timeScale;
@@ -103,6 +103,7 @@ private:
     NoteRenderer *m_noteRenderer;
     GridRenderer *m_gridRenderer;
     HyperfruitDetector *m_hyperfruitDetector;
+    BackgroundRenderer *m_backgroundRenderer; // 新增
 
     Mode m_currentMode;
     bool m_colorMode;
@@ -111,10 +112,10 @@ private:
     int m_timeDivision;
     int m_gridDivision;
     bool m_gridSnap;
-    double m_scrollBeat;           // 滚动位置（拍）
-    double m_baseVisibleBeatRange; // 基准可见拍数（缩放因子=1.0时的值）
-    double m_timeScale;            // 时间轴缩放因子
-    double m_currentPlayTime;      // 当前播放时间（毫秒）
+    double m_scrollBeat;
+    double m_baseVisibleBeatRange;
+    double m_timeScale;
+    double m_currentPlayTime;
     bool m_autoScrollEnabled;
 
     bool m_isSelecting;
@@ -158,7 +159,6 @@ private:
     int m_cachedHeight;
     bool m_cachedVerticalFlip;
 
-    // 固定边距：左右各占画布宽度的 1/20
     int leftMargin() const;
     int rightMargin() const;
 

@@ -49,6 +49,15 @@ public:
     QKeySequence shortcut(const QString &action) const;
     void setShortcut(const QString &action, const QKeySequence &seq);
 
+    bool pasteUse288Division() const;
+    void setPasteUse288Division(bool enabled);
+
+    bool backgroundImageEnabled() const;
+    void setBackgroundImageEnabled(bool enabled);
+
+    QColor backgroundColor() const;
+    void setBackgroundColor(const QColor &color);
+
 private:
     Settings();
     QSettings m_settings;

@@ -5,6 +5,7 @@
 #include "render/NoteRenderer.h"
 #include "render/GridRenderer.h"
 #include "render/HyperfruitDetector.h"
+#include "render/BackgroundRenderer.h"
 #include "utils/MathUtils.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
@@ -26,6 +27,9 @@
 #include <QAction>
 #include <QDebug>
 #include <chrono>
+#include <QDir>
+#include <QFileInfo>
+#include <QDateTime>
 
 ChartCanvas::ChartCanvas(QWidget *parent)
     : QWidget(parent),
@@ -35,6 +39,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_noteRenderer(new NoteRenderer),
       m_gridRenderer(new GridRenderer),
       m_hyperfruitDetector(new HyperfruitDetector),
+      m_backgroundRenderer(new BackgroundRenderer), // 新增
       m_currentMode(PlaceNote),
       m_colorMode(true),
       m_hyperfruitEnabled(true),
@@ -43,7 +48,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_gridDivision(20),
       m_gridSnap(true),
       m_scrollBeat(0),
-      m_baseVisibleBeatRange(10), // 初始可见 10 拍
+      m_baseVisibleBeatRange(10),
       m_timeScale(1.0),
       m_currentPlayTime(0),
       m_autoScrollEnabled(true),
@@ -84,6 +89,7 @@ ChartCanvas::~ChartCanvas()
     delete m_noteRenderer;
     delete m_gridRenderer;
     delete m_hyperfruitDetector;
+    delete m_backgroundRenderer; // 新增
 }
 
 void ChartCanvas::setChartController(ChartController *controller)
@@ -267,13 +273,11 @@ void ChartCanvas::showGridSettings()
     }
 }
 
-// 设置时间轴缩放因子
 void ChartCanvas::setTimeScale(double scale)
 {
     if (qFuzzyCompare(m_timeScale, scale))
         return;
 
-    // 保持参考线位置不变（以屏幕 80% 高度处为基准）
     double baselineRatio = 0.8;
     double baselineBeat;
     if (m_verticalFlip)
@@ -287,7 +291,6 @@ void ChartCanvas::setTimeScale(double scale)
 
     m_timeScale = scale;
 
-    // 重新计算 m_scrollBeat 使基准线拍号不变
     if (m_verticalFlip)
     {
         m_scrollBeat = baselineBeat - (1.0 - baselineRatio) * effectiveVisibleBeatRange();
@@ -330,6 +333,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
             return;
         }
 
+        drawBackground(painter);
         drawGrid(painter);
     }
     catch (const std::exception &e)
@@ -357,10 +361,11 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     MathUtils::floatToBeat(endBeat, endBeatNum, endNum, endDen);
     double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
 
+    // 超果检测
     if (m_hyperfruitEnabled && !bpmList.isEmpty())
     {
-        QSet<int> hyperSet = m_hyperfruitDetector->detect(notes);
-        m_noteRenderer->setHyperfruitSet(hyperSet);
+        QSet<int> hyperSet = m_hyperfruitDetector->detect(notes, bpmList, offset);
+        m_noteRenderer->setHyperfruitIndices(hyperSet); // 注意：需在 NoteRenderer 中添加对应方法
     }
 
     int renderedNotesCount = 0;
@@ -405,7 +410,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
                     continue;
                 bool selected = m_selectionController && m_selectionController->selectedIndices().contains(i);
                 QPointF pos = noteToPos(note);
-                m_noteRenderer->drawNote(painter, note, pos, selected);
+                m_noteRenderer->drawNote(painter, note, pos, selected, i); // 传递索引 i
                 renderedNotesCount++;
             }
         }
@@ -429,7 +434,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
             if (note.type == NoteType::SOUND)
                 continue;
             QPointF pos = noteToPos(note) + m_pasteOffset;
-            m_noteRenderer->drawNote(painter, note, pos, false);
+            m_noteRenderer->drawNote(painter, note, pos, false, -1); // 粘贴预览不需要索引
         }
         painter.setOpacity(1.0);
         painter.fillRect(QRect(10, 10, 100, 30), QColor(200, 200, 200));
@@ -463,6 +468,30 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     auto frameEndTime = std::chrono::high_resolution_clock::now();
     qint64 frameTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(frameEndTime - frameStartTime).count();
     DiagnosticCollector::instance().recordRenderMetrics(frameTimeMs, renderedNotesCount);
+}
+
+// 完整背景绘制实现
+void ChartCanvas::drawBackground(QPainter &painter)
+{
+    if (!m_chartController || !m_chartController->chart())
+    {
+        painter.fillRect(rect(), Settings::instance().backgroundColor());
+        return;
+    }
+
+    const MetaData &meta = m_chartController->chart()->meta();
+    QString bgPath = meta.backgroundFile;
+    if (!bgPath.isEmpty() && !QDir::isAbsolutePath(bgPath))
+    {
+        // 需要 ChartController 提供当前谱面文件路径，此处假设有 chartFilePath() 方法
+        QString chartDir = QFileInfo(m_chartController->chartFilePath()).absolutePath();
+        bgPath = chartDir + "/" + bgPath;
+    }
+
+    m_backgroundRenderer->setBackgroundImage(bgPath);
+    m_backgroundRenderer->setBackgroundColor(Settings::instance().backgroundColor());
+    m_backgroundRenderer->setImageEnabled(Settings::instance().backgroundImageEnabled());
+    m_backgroundRenderer->drawBackground(painter, rect());
 }
 
 void ChartCanvas::drawGrid(QPainter &painter)
@@ -833,35 +862,97 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
     {
         if (m_isPasting)
         {
+            // 确认粘贴按钮区域
             if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40)
             {
                 const auto &bpmList = m_chartController->chart()->bpmList();
                 int offset = m_chartController->chart()->meta().offset;
-                double startBeat = m_scrollBeat;
-                double endBeat = startBeat + effectiveVisibleBeatRange();
-                int startBeatNum, startNum, startDen;
-                MathUtils::floatToBeat(startBeat, startBeatNum, startNum, startDen);
-                double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmList, offset);
-                int endBeatNum, endNum, endDen;
-                MathUtils::floatToBeat(endBeat, endBeatNum, endNum, endDen);
-                double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
-                double visibleRangeMs = endTime - startTime;
+
+                // 计算参考线对应的时间（基线位置 80%）
+                double baselineRatio = 0.8;
+                double baselineBeat;
+                if (m_verticalFlip)
+                {
+                    baselineBeat = m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange();
+                }
+                else
+                {
+                    baselineBeat = m_scrollBeat + baselineRatio * effectiveVisibleBeatRange();
+                }
+                int refBeatNum, refNum, refDen;
+                MathUtils::floatToBeat(baselineBeat, refBeatNum, refNum, refDen);
+                double referenceTime = MathUtils::beatToMs(refBeatNum, refNum, refDen, bpmList, offset);
+
+                // 找到剪贴板中最早的非音效音符作为基准
+                Note *baseNote = nullptr;
+                double minTime = std::numeric_limits<double>::max();
+                for (Note &note : m_pasteNotes)
+                {
+                    if (note.type == NoteType::SOUND)
+                        continue;
+                    double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+                    if (t < minTime)
+                    {
+                        minTime = t;
+                        baseNote = &note;
+                    }
+                }
+                if (!baseNote)
+                {
+                    m_isPasting = false;
+                    update();
+                    return;
+                }
+                double baseTime = minTime;
+                double timeShift = referenceTime - baseTime;
+
                 for (const Note &note : m_pasteNotes)
                 {
                     Note newNote = note;
                     newNote.id = Note::generateId();
                     newNote.x += static_cast<int>(m_pasteOffset.x() / width() * 512);
-                    double timeDelta = m_pasteOffset.y() / height() * visibleRangeMs;
-                    double newTime = MathUtils::beatToMs(newNote.beatNum, newNote.numerator, newNote.denominator,
-                                                         m_chartController->chart()->bpmList(),
-                                                         m_chartController->chart()->meta().offset) +
-                                     timeDelta;
+
+                    double originalTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+                    double newTime = originalTime + timeShift;
+
                     int beat, num, den;
-                    MathUtils::msToBeat(newTime, m_chartController->chart()->bpmList(),
-                                        m_chartController->chart()->meta().offset, beat, num, den);
+                    MathUtils::msToBeat(newTime, bpmList, offset, beat, num, den);
                     newNote.beatNum = beat;
                     newNote.numerator = num;
                     newNote.denominator = den;
+
+                    if (note.type == NoteType::RAIN)
+                    {
+                        double originalEndTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
+                        double newEndTime = originalEndTime + timeShift;
+                        int endBeat, endNumBeat, endDenBeat;
+                        MathUtils::msToBeat(newEndTime, bpmList, offset, endBeat, endNumBeat, endDenBeat);
+                        newNote.endBeatNum = endBeat;
+                        newNote.endNumerator = endNumBeat;
+                        newNote.endDenominator = endDenBeat;
+                    }
+
+                    // 288分度转换开关
+                    if (Settings::instance().pasteUse288Division())
+                    {
+                        double beatFloat = MathUtils::beatToFloat(newNote.beatNum, newNote.numerator, newNote.denominator);
+                        int newBeatNum, newNum, newDen;
+                        MathUtils::floatToBeat(beatFloat, newBeatNum, newNum, newDen, 288);
+                        newNote.beatNum = newBeatNum;
+                        newNote.numerator = newNum;
+                        newNote.denominator = newDen;
+
+                        if (newNote.type == NoteType::RAIN)
+                        {
+                            double endBeatFloat = MathUtils::beatToFloat(newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
+                            int newEndBeatNum, newEndNum, newEndDen;
+                            MathUtils::floatToBeat(endBeatFloat, newEndBeatNum, newEndNum, newEndDen, 288);
+                            newNote.endBeatNum = newEndBeatNum;
+                            newNote.endNumerator = newEndNum;
+                            newNote.endDenominator = newEndDen;
+                        }
+                    }
+
                     if (newNote.x < 0 || newNote.x > 512)
                     {
                         QMessageBox::StandardButton reply = QMessageBox::question(this, tr("Out of Bounds"),
@@ -1073,15 +1164,13 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
 
 void ChartCanvas::wheelEvent(QWheelEvent *event)
 {
-    // Ctrl + 滚轮：缩放时间轴
     if (event->modifiers() & Qt::ControlModifier)
     {
         double delta = event->angleDelta().y();
         if (delta != 0)
         {
-            double factor = (delta > 0) ? 1.2 : 1.0 / 1.2; // 每次 ±20%
+            double factor = (delta > 0) ? 1.2 : 1.0 / 1.2;
             double newScale = m_timeScale * factor;
-            // 限制缩放范围（仅通过滚轮时限制，手动输入无限制）
             const double minScale = 0.2;
             const double maxScale = 5.0;
             newScale = qBound(minScale, newScale, maxScale);
@@ -1091,7 +1180,6 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
         return;
     }
 
-    // 普通滚轮：滚动
     m_isScrolling = true;
     stopSnapTimer();
 
@@ -1107,7 +1195,6 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
         update();
         emit scrollPositionChanged(m_scrollBeat);
 
-        // 同步更新参考线时间
         if (m_chartController && m_chartController->chart())
         {
             const auto &bpmList = m_chartController->chart()->bpmList();
@@ -1137,7 +1224,6 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
         double factor = 1.0 + deltaX / 1200.0;
         if (factor < 0.1)
             factor = 0.1;
-        // 水平滚轮调整缩放（保留原行为作为备选）
         setTimeScale(m_timeScale * factor);
     }
 
@@ -1288,13 +1374,11 @@ void ChartCanvas::keyPressEvent(QKeyEvent *event)
 
 int ChartCanvas::leftMargin() const
 {
-    // 固定左边距为画布宽度的 1/20
     return width() / 20;
 }
 
 int ChartCanvas::rightMargin() const
 {
-    // 固定右边距为画布宽度的 1/20
     return width() / 20;
 }
 

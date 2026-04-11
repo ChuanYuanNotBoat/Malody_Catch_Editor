@@ -53,6 +53,7 @@ private slots:
     void configureOutline();
     void openLogSettings();
     void exportDiagnosticsReport();
+    void togglePaste288Division(bool enabled);
 
 private:
     void setupUi();
