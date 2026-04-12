@@ -4,6 +4,8 @@
 #include <QPointF>
 #include <QSet>
 #include <QTimer>
+#include <QDateTime>
+#include <QVector>
 #include "model/Note.h"
 
 class ChartController;
@@ -80,8 +82,9 @@ private:
     double yToBeat(double y) const;
     int hitTestNote(const QPointF &pos) const;
     QRectF getRainNoteRect(const Note &note) const;
-    void updateNotePosCacheIfNeeded();
-    void invalidateCache();
+    void invalidateCache();            // 保留接口，实际为空操作
+    void updateNotePosCacheIfNeeded(); // 已废弃，仅用于兼容旧代码
+    void updateBackgroundCache();
 
     void beginMoveSelection(const QPointF &startPos, int referenceIndex = -1);
     void updateMoveSelection(const QPointF &currentPos);
@@ -92,10 +95,23 @@ private:
     void startSnapTimer();
     void stopSnapTimer();
 
+    double getNoteTimeMs(const Note &note) const;
+    void confirmPaste();
+
+    void rebuildNoteTimesCache(); // 重建音符预计算数据
+
     double effectiveVisibleBeatRange() const
     {
         return m_baseVisibleBeatRange / m_timeScale;
     }
+
+    // 预计算缓存数据
+    QVector<double> m_noteBeatPositions;    // 起始拍浮点数
+    QVector<double> m_noteEndBeatPositions; // rain 结束拍浮点数
+    QVector<double> m_noteXPositions;       // X 坐标比例 (0~1)
+    QVector<NoteType> m_noteTypes;          // 音符类型
+    bool m_noteDataDirty;                   // 谱面数据变更标志
+    bool m_timesDirty;                      // 时间缓存脏标志
 
     ChartController *m_chartController;
     SelectionController *m_selectionController;
@@ -103,7 +119,7 @@ private:
     NoteRenderer *m_noteRenderer;
     GridRenderer *m_gridRenderer;
     HyperfruitDetector *m_hyperfruitDetector;
-    BackgroundRenderer *m_backgroundRenderer; // 新增
+    BackgroundRenderer *m_backgroundRenderer;
 
     Mode m_currentMode;
     bool m_colorMode;
@@ -129,9 +145,10 @@ private:
     QVector<Note> m_pasteNotes;
     QPointF m_pasteOffset;
 
-    bool m_isMovingSelection = false;
+    bool m_isMovingSelection;
     QPointF m_moveStartPos;
-    QList<QPair<Note, Note>> m_moveChanges;
+    QPointF m_moveCurrentPos;               // 当前鼠标位置，用于绘制预览
+    QList<QPair<Note, Note>> m_moveChanges; // 实际移动变更（提交时使用）
     QSet<int> m_originalSelectedIndices;
     int m_dragReferenceIndex;
 
@@ -151,13 +168,13 @@ private:
     bool m_forceRepaint;
     qint64 m_lastRepaintTime;
 
-    QVector<QPointF> m_notePosCache;
-    bool m_cacheValid;
-    double m_cachedScrollBeat;
-    double m_cachedVisibleBeatRange;
-    int m_cachedWidth;
-    int m_cachedHeight;
-    bool m_cachedVerticalFlip;
+    // 超果检测缓存
+    QSet<int> m_cachedHyperSet;
+    bool m_hyperCacheValid;
+
+    // 背景缓存
+    QPixmap m_backgroundCache;
+    bool m_backgroundCacheDirty;
 
     int leftMargin() const;
     int rightMargin() const;
