@@ -56,6 +56,9 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_isSelecting(false),
       m_isDragging(false),
       m_isPasting(false),
+      m_useCursorPaste(false),
+      m_intervalState(IntervalNone),
+      m_intervalStartTime(0.0),
       m_isMovingSelection(false),
       m_gridSnapBackup(false),
       m_wasGridSnapEnabled(false),
@@ -74,7 +77,12 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_timesDirty(true),
       m_frameCount(0),
       m_currentFps(0.0),
-      m_isPlaying(false)
+      m_isPlaying(false),
+      m_isDraggingPaste(false),
+      m_pasteTimeOffset(0.0),
+      m_pasteXOffset(0.0),
+      m_pasteRefBeat(0.0),
+      m_pasteDragReferenceIndex(-1)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -303,20 +311,361 @@ void ChartCanvas::setMode(Mode mode)
     update();
 }
 
+// ==================== 复制粘贴核心功能 ====================
+
+void ChartCanvas::handleCopy()
+{
+    if (!m_selectionController)
+        return;
+
+    QSet<int> selected = m_selectionController->selectedIndices();
+    if (!selected.isEmpty())
+    {
+        m_selectionController->copySelected(m_chartController->chart()->notes());
+        emit statusMessage(tr("Copied %1 notes").arg(selected.size()));
+        if (m_intervalState != IntervalNone)
+            cancelIntervalSelection();
+        return;
+    }
+
+    if (m_intervalState == IntervalNone)
+    {
+        startIntervalSelection();
+    }
+    else if (m_intervalState == IntervalWaitingEnd)
+    {
+        completeIntervalSelection();
+    }
+}
+
+void ChartCanvas::startIntervalSelection()
+{
+    double refTime = calculatePasteReferenceTime();
+    m_intervalStartTime = refTime;
+    m_intervalState = IntervalWaitingEnd;
+
+    emit statusMessage(tr("Interval start at %1 ms. Adjust view and press Copy again to set end (Esc to cancel).").arg(refTime, 0, 'f', 0));
+    setCursor(Qt::CrossCursor);
+    update();
+}
+
+void ChartCanvas::completeIntervalSelection()
+{
+    if (m_intervalState != IntervalWaitingEnd)
+        return;
+
+    double endTime = calculatePasteReferenceTime();
+    double startTime = m_intervalStartTime;
+    if (startTime > endTime)
+        std::swap(startTime, endTime);
+
+    const auto &notes = m_chartController->chart()->notes();
+    const auto &bpmList = m_chartController->chart()->bpmList();
+    int offset = m_chartController->chart()->meta().offset;
+
+    m_intervalNotes.clear();
+    for (const Note &note : notes)
+    {
+        if (note.type == NoteType::SOUND)
+            continue;
+        double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+        if (t >= startTime && t <= endTime)
+            m_intervalNotes.append(note);
+    }
+
+    m_intervalState = IntervalNone;
+    setCursor(Qt::ArrowCursor);
+
+    if (m_intervalNotes.isEmpty())
+    {
+        emit statusMessage(tr("No notes found in interval."));
+        return;
+    }
+
+    m_selectionController->clearClipboard();
+    for (const Note &note : m_intervalNotes)
+        m_selectionController->getClipboard().append(note);
+
+    beginPastePreview(m_intervalNotes);
+    emit statusMessage(tr("Interval copied (%1 notes). Drag preview to adjust position, then click Confirm.").arg(m_intervalNotes.size()));
+}
+
+void ChartCanvas::cancelIntervalSelection()
+{
+    if (m_intervalState != IntervalNone)
+    {
+        m_intervalState = IntervalNone;
+        setCursor(Qt::ArrowCursor);
+        emit statusMessage(tr("Interval selection cancelled."));
+        update();
+    }
+}
+
+void ChartCanvas::cancelOperation()
+{
+    if (m_isPasting)
+        cancelPaste();
+    if (m_intervalState != IntervalNone)
+        cancelIntervalSelection();
+}
+
 void ChartCanvas::paste()
 {
     if (!m_selectionController)
         return;
     QVector<Note> clipboard = m_selectionController->getClipboard();
     if (clipboard.isEmpty())
+    {
+        emit statusMessage(tr("Clipboard is empty."));
         return;
+    }
+    beginPastePreview(clipboard);
+}
 
-    m_pasteNotes = clipboard;
-    m_pasteOffset = QPointF(0, 0);
+void ChartCanvas::pasteAtCursor(const QPoint &pos)
+{
+    if (!m_selectionController)
+        return;
+    QVector<Note> clipboard = m_selectionController->getClipboard();
+    if (clipboard.isEmpty())
+    {
+        emit statusMessage(tr("Clipboard is empty."));
+        return;
+    }
+    m_pasteCursorPos = pos;
+    m_useCursorPaste = true;
+    beginPastePreview(clipboard);
+}
+
+void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cursorPos)
+{
+    m_pasteNotes = notes;
     m_isPasting = true;
+    m_pasteTimeOffset = 0.0;
+    m_pasteXOffset = 0.0;
+    m_isDraggingPaste = false;
+
+    if (!cursorPos.isNull())
+    {
+        m_pasteCursorPos = cursorPos;
+        m_useCursorPaste = true;
+    }
+    else
+    {
+        m_useCursorPaste = false;
+    }
+
+    // 计算最早音符的原始拍数（用于吸附）
+    if (!m_pasteNotes.isEmpty())
+    {
+        const auto &bpmList = m_chartController->chart()->bpmList();
+        int offset = m_chartController->chart()->meta().offset;
+        double minBeat = std::numeric_limits<double>::max();
+        int refIdx = 0;
+        for (int i = 0; i < m_pasteNotes.size(); ++i)
+        {
+            const Note &note = m_pasteNotes[i];
+            if (note.type == NoteType::SOUND)
+                continue;
+            double beat = MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator);
+            if (beat < minBeat)
+            {
+                minBeat = beat;
+                refIdx = i;
+            }
+        }
+        m_pasteRefBeat = minBeat;
+        m_pasteDragReferenceIndex = refIdx;
+    }
+
     setFocus();
     update();
 }
+
+double ChartCanvas::calculatePasteReferenceTime() const
+{
+    if (!m_chartController || !m_chartController->chart())
+        return 0.0;
+
+    const auto &bpmList = m_chartController->chart()->bpmList();
+    int offset = m_chartController->chart()->meta().offset;
+
+    if (m_useCursorPaste)
+    {
+        double y = m_pasteCursorPos.y();
+        double beat = yToBeat(y);
+        int beatNum, num, den;
+        MathUtils::floatToBeat(beat, beatNum, num, den);
+        return MathUtils::beatToMs(beatNum, num, den, bpmList, offset);
+    }
+    else
+    {
+        double baselineRatio = 0.8;
+        double baselineBeat;
+        if (m_verticalFlip)
+            baselineBeat = m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange();
+        else
+            baselineBeat = m_scrollBeat + baselineRatio * effectiveVisibleBeatRange();
+        int beatNum, num, den;
+        MathUtils::floatToBeat(baselineBeat, beatNum, num, den);
+        return MathUtils::beatToMs(beatNum, num, den, bpmList, offset);
+    }
+}
+
+double ChartCanvas::snapPasteTimeOffset(double offsetBeat) const
+{
+    if (m_timeDivision <= 0 || m_pasteDragReferenceIndex < 0 || m_pasteDragReferenceIndex >= m_pasteNotes.size())
+        return offsetBeat;
+
+    const Note &refNote = m_pasteNotes[m_pasteDragReferenceIndex];
+    double refOriginalBeat = MathUtils::beatToFloat(refNote.beatNum, refNote.numerator, refNote.denominator);
+    double refNewBeat = refOriginalBeat + offsetBeat;
+
+    Note tempNote = refNote;
+    MathUtils::floatToBeat(refNewBeat, tempNote.beatNum, tempNote.numerator, tempNote.denominator);
+    tempNote = MathUtils::snapNoteToTimeWithBoundary(tempNote, m_timeDivision);
+    double refSnappedBeat = MathUtils::beatToFloat(tempNote.beatNum, tempNote.numerator, tempNote.denominator);
+    return refSnappedBeat - refOriginalBeat;
+}
+
+void ChartCanvas::beginDragPaste(const QPointF &startPos)
+{
+    if (!m_isPasting)
+        return;
+    m_isDraggingPaste = true;
+    m_pasteDragStartPos = startPos;
+}
+
+void ChartCanvas::updateDragPaste(const QPointF &currentPos)
+{
+    if (!m_isDraggingPaste)
+        return;
+
+    QPointF delta = currentPos - m_pasteDragStartPos;
+    double deltaY = delta.y();
+    if (m_verticalFlip)
+        deltaY = -deltaY;
+
+    // 时间偏移（拍数）
+    double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
+    // X 偏移（像素转 X 坐标）
+    double deltaX = delta.x() / width() * 512.0;
+
+    double newTimeOffset = m_pasteTimeOffset + deltaBeat;
+    double newXOffset = m_pasteXOffset + deltaX;
+
+    // 应用时间吸附
+    double snappedTimeOffset = snapPasteTimeOffset(newTimeOffset);
+    m_pasteTimeOffset = snappedTimeOffset;
+    m_pasteXOffset = newXOffset;
+
+    m_pasteDragStartPos = currentPos;
+    update();
+}
+
+void ChartCanvas::endDragPaste()
+{
+    m_isDraggingPaste = false;
+}
+
+void ChartCanvas::confirmPaste()
+{
+    if (!m_chartController || m_pasteNotes.isEmpty())
+    {
+        m_isPasting = false;
+        return;
+    }
+
+    const auto &bpmList = m_chartController->chart()->bpmList();
+    int offset = m_chartController->chart()->meta().offset;
+
+    // 计算基准时间（参考线或光标）
+    double referenceTime = calculatePasteReferenceTime();
+
+    // 找到最早音符的原始时间
+    double baseOriginalTime = std::numeric_limits<double>::max();
+    for (const Note &note : m_pasteNotes)
+    {
+        if (note.type == NoteType::SOUND)
+            continue;
+        double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+        if (t < baseOriginalTime)
+            baseOriginalTime = t;
+    }
+    if (baseOriginalTime == std::numeric_limits<double>::max())
+    {
+        m_isPasting = false;
+        update();
+        return;
+    }
+
+    // 基准时间偏移 = 参考线时间 - 最早原始时间
+    double baseTimeShift = referenceTime - baseOriginalTime;
+
+    // 将基准时间偏移转换为拍数偏移（用于吸附）
+    int beatNum, num, den;
+    MathUtils::msToBeat(baseTimeShift, bpmList, offset, beatNum, num, den);
+    double baseBeatShift = beatNum + static_cast<double>(num) / den;
+
+    // 加上用户拖动的偏移量（拍数）
+    double totalBeatShift = baseBeatShift + m_pasteTimeOffset;
+
+    // 对总偏移应用吸附（以最早音符为基准）
+    double snappedTotalBeatShift = snapPasteTimeOffset(totalBeatShift);
+
+    // 最终时间偏移 = 吸附后的拍数偏移对应的毫秒偏移
+    MathUtils::floatToBeat(snappedTotalBeatShift, beatNum, num, den);
+    double finalTimeShiftMs = MathUtils::beatToMs(beatNum, num, den, bpmList, offset);
+    // 最终 X 偏移（像素转 X 坐标）
+    double finalXShift = m_pasteXOffset;
+
+    QVector<Note> newNotes;
+    for (const Note &originalNote : m_pasteNotes)
+    {
+        if (originalNote.type == NoteType::SOUND)
+            continue;
+        Note newNote = originalNote;
+        newNote.id = Note::generateId();
+
+        // 时间偏移
+        double originalTime = MathUtils::beatToMs(originalNote.beatNum, originalNote.numerator, originalNote.denominator, bpmList, offset);
+        double newTime = originalTime + finalTimeShiftMs;
+        int beat, num, den;
+        MathUtils::msToBeat(newTime, bpmList, offset, beat, num, den);
+        newNote.beatNum = beat;
+        newNote.numerator = num;
+        newNote.denominator = den;
+
+        if (originalNote.type == NoteType::RAIN)
+        {
+            double originalEndTime = MathUtils::beatToMs(originalNote.endBeatNum, originalNote.endNumerator, originalNote.endDenominator, bpmList, offset);
+            double newEndTime = originalEndTime + finalTimeShiftMs;
+            int endBeat, endNumBeat, endDenBeat;
+            MathUtils::msToBeat(newEndTime, bpmList, offset, endBeat, endNumBeat, endDenBeat);
+            newNote.endBeatNum = endBeat;
+            newNote.endNumerator = endNumBeat;
+            newNote.endDenominator = endDenBeat;
+        }
+
+        // X 坐标偏移（边界约束在确认时处理）
+        newNote.x = originalNote.x + static_cast<int>(finalXShift);
+        newNote.x = qBound(0, newNote.x, 512);
+
+        newNotes.append(newNote);
+    }
+
+    if (!newNotes.isEmpty())
+    {
+        m_chartController->addNotes(newNotes);
+        emit statusMessage(tr("Pasted %1 notes").arg(newNotes.size()));
+    }
+
+    m_isPasting = false;
+    m_pasteNotes.clear();
+    update();
+}
+
+// ==================== 其他原有方法（保留原有实现） ====================
 
 void ChartCanvas::showGridSettings()
 {
@@ -434,7 +783,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
 
-    // FPS 计算
     m_frameCount++;
     qint64 elapsed = m_fpsTimer.elapsed();
     if (elapsed >= 1000)
@@ -466,14 +814,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     double visibleRange = effectiveVisibleBeatRange();
     double endBeat = startBeat + visibleRange;
 
-    int startBeatNum, startNum, startDen;
-    MathUtils::floatToBeat(startBeat, startBeatNum, startNum, startDen);
-    double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmList, offset);
-    int endBeatNum, endNum, endDen;
-    MathUtils::floatToBeat(endBeat, endBeatNum, endNum, endDen);
-    double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
-    const double TIME_MARGIN = 100.0;
-
     if (m_hyperfruitEnabled && !bpmList.isEmpty())
     {
         if (!m_hyperCacheValid)
@@ -501,65 +841,101 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
 
     int renderedNotesCount = 0;
     for (int i = 0; i < notes.size(); ++i)
-{
-    NoteType type = m_noteTypes[i];
-    if (type == NoteType::SOUND)
-        continue;
-
-    double beat = m_noteBeatPositions[i];
-    double endBeatNote = m_noteEndBeatPositions[i];
-
-    // ---- 快速剔除优化 ----
-    if (type == NoteType::NORMAL) {
-        // 普通音符：起始拍不在可见区域附近则跳过
-        if (beat < startBeat - 0.5 || beat > endBeat + 0.5)
-            continue;
-    } else if (type == NoteType::RAIN) {
-        // Rain 音符：整个时间区间与可见区域无交集则跳过
-        if (endBeatNote <= startBeat || beat >= endBeat)
-            continue;
-    }
-
-    double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
-
-    if (type == NoteType::RAIN)
     {
-        // Rain 绘制（区间已确保有交集）
-        double visibleStartBeat = qMax(beat, startBeat);
-        double visibleEndBeat = qMin(endBeatNote, endBeat);
-        double yStart = baseY + sign * ((visibleStartBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
-        double yEnd = baseY + sign * ((visibleEndBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
-        double rectTop = qMin(yStart, yEnd);
-        double rectHeight = qAbs(yEnd - yStart);
-        if (rectHeight <= 0)
+        NoteType type = m_noteTypes[i];
+        if (type == NoteType::SOUND)
             continue;
-        QRectF rainRect(lmargin, rectTop, availableWidth, rectHeight);
-        bool selected = selectedSet.contains(i);
-        m_noteRenderer->drawRain(painter, notes[i], rainRect, selected);
-        renderedNotesCount++;
-    }
-    else // NORMAL
-    {
-        double x = lmargin + m_noteXPositions[i] * availableWidth;
-        QPointF pos(x, y);
-        bool selected = selectedSet.contains(i);
-        m_noteRenderer->drawNote(painter, notes[i], pos, selected, i);
-        renderedNotesCount++;
-    }
-}
 
+        double beat = m_noteBeatPositions[i];
+        double endBeatNote = m_noteEndBeatPositions[i];
+
+        if (type == NoteType::NORMAL)
+        {
+            if (beat < startBeat - 0.5 || beat > endBeat + 0.5)
+                continue;
+        }
+        else if (type == NoteType::RAIN)
+        {
+            if (endBeatNote <= startBeat || beat >= endBeat)
+                continue;
+        }
+
+        double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
+
+        if (type == NoteType::RAIN)
+        {
+            double visibleStartBeat = qMax(beat, startBeat);
+            double visibleEndBeat = qMin(endBeatNote, endBeat);
+            double yStart = baseY + sign * ((visibleStartBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
+            double yEnd = baseY + sign * ((visibleEndBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
+            double rectTop = qMin(yStart, yEnd);
+            double rectHeight = qAbs(yEnd - yStart);
+            if (rectHeight <= 0)
+                continue;
+            QRectF rainRect(lmargin, rectTop, availableWidth, rectHeight);
+            bool selected = selectedSet.contains(i);
+            m_noteRenderer->drawRain(painter, notes[i], rainRect, selected);
+            renderedNotesCount++;
+        }
+        else
+        {
+            double x = lmargin + m_noteXPositions[i] * availableWidth;
+            QPointF pos(x, y);
+            bool selected = selectedSet.contains(i);
+            m_noteRenderer->drawNote(painter, notes[i], pos, selected, i);
+            renderedNotesCount++;
+        }
+    }
+
+    // 绘制粘贴预览（支持整体拖动偏移）
     if (m_isPasting && !m_pasteNotes.isEmpty())
     {
         painter.setOpacity(0.5);
+
+        // 计算当前预览基准时间（参考线/光标时间）
+        double refTime = calculatePasteReferenceTime();
+
+        // 找到最早音符的原始时间
+        double baseOriginalTime = std::numeric_limits<double>::max();
         for (const Note &note : m_pasteNotes)
         {
             if (note.type == NoteType::SOUND)
                 continue;
-            double beat = MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator);
-            double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
-            double x = lmargin + (note.x / 512.0) * availableWidth;
-            m_noteRenderer->drawNote(painter, note, QPointF(x, y), false, -1);
+            double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+            if (t < baseOriginalTime)
+                baseOriginalTime = t;
         }
+        if (baseOriginalTime != std::numeric_limits<double>::max())
+        {
+            // 基础时间偏移（参考线 - 最早原始时间）
+            double baseTimeShift = refTime - baseOriginalTime;
+            // 转换为拍数
+            int beatNum, num, den;
+            MathUtils::msToBeat(baseTimeShift, bpmList, offset, beatNum, num, den);
+            double baseBeatShift = beatNum + static_cast<double>(num) / den;
+            // 加上用户拖动的拍数偏移
+            double totalBeatShift = baseBeatShift + m_pasteTimeOffset;
+            // 最终时间偏移（毫秒）
+            MathUtils::floatToBeat(totalBeatShift, beatNum, num, den);
+            double finalTimeShiftMs = MathUtils::beatToMs(beatNum, num, den, bpmList, offset);
+            for (const Note &note : m_pasteNotes)
+            {
+                if (note.type == NoteType::SOUND)
+                    continue;
+                double originalTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+                double newTime = originalTime + finalTimeShiftMs;
+                int beatNum, num, den;
+                MathUtils::msToBeat(newTime, bpmList, offset, beatNum, num, den);
+                double beat = beatNum + static_cast<double>(num) / den;
+                double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
+                double x = lmargin + (note.x / 512.0) * availableWidth;
+                // 应用 X 偏移
+                x += m_pasteXOffset;
+                // 预览时不进行边界裁剪
+                m_noteRenderer->drawNote(painter, note, QPointF(x, y), false, -1);
+            }
+        }
+
         painter.setOpacity(1.0);
         painter.fillRect(QRect(10, 10, 100, 30), QColor(200, 200, 200));
         painter.drawText(QRect(10, 10, 100, 30), Qt::AlignCenter, tr("Confirm"));
@@ -717,6 +1093,16 @@ double ChartCanvas::yToBeat(double y) const
     return m_scrollBeat + (y / height()) * effectiveVisibleBeatRange();
 }
 
+double ChartCanvas::yToTime(double y) const
+{
+    double beat = yToBeat(y);
+    int beatNum, num, den;
+    MathUtils::floatToBeat(beat, beatNum, num, den);
+    return MathUtils::beatToMs(beatNum, num, den,
+                               m_chartController->chart()->bpmList(),
+                               m_chartController->chart()->meta().offset);
+}
+
 QPointF ChartCanvas::noteToPos(const Note &note) const
 {
     double beat = MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator);
@@ -854,17 +1240,14 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
     if (!m_isMovingSelection)
         return;
 
-    // 计算相对于移动起点的总偏移（像素）
     QPointF delta = currentPos - m_moveStartPos;
     double deltaY = delta.y();
     if (m_verticalFlip)
         deltaY = -deltaY;
 
-    // 将像素偏移转换为拍号偏移和 X 偏移
     double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
     double deltaX = delta.x() / width() * 512.0;
 
-    // 如果启用了时间吸附，则对偏移量进行吸附（以参考音符为基准）
     double snapOffsetBeat = 0.0;
     if (m_timeDivision > 0 && m_dragReferenceIndex >= 0)
     {
@@ -879,30 +1262,25 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
         snapOffsetBeat = refSnappedBeat - refNewBeat;
     }
 
-    // 最终应用的偏移量
     double appliedDeltaBeat = deltaBeat + snapOffsetBeat;
     double appliedDeltaX = deltaX;
 
-    // 获取音符列表，基于原始位置重新计算新位置（避免累积误差）
     QVector<Note> &notes = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
     QList<int> selectedList = m_originalSelectedIndices.values();
 
     for (int idx : selectedList)
     {
-        const Note &original = m_moveChanges[idx].first; // 原始音符快照
+        const Note &original = m_moveChanges[idx].first;
         Note newNote = original;
 
-        // 起始时间偏移
         double originalBeat = MathUtils::beatToFloat(original.beatNum, original.numerator, original.denominator);
         double newBeat = originalBeat + appliedDeltaBeat;
         if (newBeat < 0)
             newBeat = 0;
         MathUtils::floatToBeat(newBeat, newNote.beatNum, newNote.numerator, newNote.denominator);
 
-        // X 坐标偏移（边界限制）
         newNote.x = qBound(0, qRound(original.x + appliedDeltaX), 512);
 
-        // Rain 音符结束时间偏移
         if (original.type == NoteType::RAIN)
         {
             double originalEndBeat = MathUtils::beatToFloat(original.endBeatNum, original.endNumerator, original.endDenominator);
@@ -915,7 +1293,6 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
         notes[idx] = newNote;
     }
 
-    // 标记缓存脏
     m_noteDataDirty = true;
     m_timesDirty = true;
     m_hyperCacheValid = false;
@@ -965,10 +1342,19 @@ void ChartCanvas::endMoveSelection()
 
 void ChartCanvas::mousePressEvent(QMouseEvent *event)
 {
+    if (m_intervalState != IntervalNone)
+    {
+        if (event->button() == Qt::RightButton)
+            cancelIntervalSelection();
+        return;
+    }
+
     if (event->button() == Qt::LeftButton)
     {
+        // 粘贴预览拖动检测
         if (m_isPasting)
         {
+            // 检查是否点击到预览按钮区域
             if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40)
             {
                 confirmPaste();
@@ -976,15 +1362,13 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
             }
             else if (event->pos().x() >= 120 && event->pos().x() <= 220 && event->pos().y() >= 10 && event->pos().y() <= 40)
             {
-                m_isPasting = false;
-                update();
+                cancelPaste();
                 return;
             }
             else
             {
-                m_isDragging = true;
-                m_dragStart = event->pos();
-                m_draggedNotes.clear();
+                // 开始拖动预览
+                beginDragPaste(event->pos());
                 return;
             }
         }
@@ -1085,122 +1469,18 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
     {
         QMenu menu(this);
         QAction *playFromRefAction = menu.addAction(tr("从参考线时间点播放"));
+        QAction *pasteAction = menu.addAction(tr("Paste"));
+        pasteAction->setEnabled(m_selectionController && !m_selectionController->getClipboard().isEmpty());
         QAction *selectedAction = menu.exec(event->globalPos());
         if (selectedAction == playFromRefAction)
         {
             playFromReferenceLine();
         }
-    }
-}
-
-void ChartCanvas::confirmPaste()
-{
-    if (!m_chartController || m_pasteNotes.isEmpty())
-        return;
-
-    const auto &bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
-
-    double baselineRatio = 0.8;
-    double baselineBeat;
-    if (m_verticalFlip)
-    {
-        baselineBeat = m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange();
-    }
-    else
-    {
-        baselineBeat = m_scrollBeat + baselineRatio * effectiveVisibleBeatRange();
-    }
-    int refBeatNum, refNum, refDen;
-    MathUtils::floatToBeat(baselineBeat, refBeatNum, refNum, refDen);
-    double referenceTime = MathUtils::beatToMs(refBeatNum, refNum, refDen, bpmList, offset);
-
-    Note *baseNote = nullptr;
-    double minTime = std::numeric_limits<double>::max();
-    for (Note &note : m_pasteNotes)
-    {
-        if (note.type == NoteType::SOUND)
-            continue;
-        double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-        if (t < minTime)
+        else if (selectedAction == pasteAction)
         {
-            minTime = t;
-            baseNote = &note;
+            pasteAtCursor(event->pos());
         }
     }
-    if (!baseNote)
-    {
-        m_isPasting = false;
-        update();
-        return;
-    }
-    double baseTime = minTime;
-    double timeShift = referenceTime - baseTime;
-
-    for (const Note &note : m_pasteNotes)
-    {
-        Note newNote = note;
-        newNote.id = Note::generateId();
-        newNote.x += static_cast<int>(m_pasteOffset.x() / width() * 512);
-
-        double originalTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-        double newTime = originalTime + timeShift;
-
-        int beat, num, den;
-        MathUtils::msToBeat(newTime, bpmList, offset, beat, num, den);
-        newNote.beatNum = beat;
-        newNote.numerator = num;
-        newNote.denominator = den;
-
-        if (note.type == NoteType::RAIN)
-        {
-            double originalEndTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
-            double newEndTime = originalEndTime + timeShift;
-            int endBeat, endNumBeat, endDenBeat;
-            MathUtils::msToBeat(newEndTime, bpmList, offset, endBeat, endNumBeat, endDenBeat);
-            newNote.endBeatNum = endBeat;
-            newNote.endNumerator = endNumBeat;
-            newNote.endDenominator = endDenBeat;
-        }
-
-        if (Settings::instance().pasteUse288Division())
-        {
-            double beatFloat = MathUtils::beatToFloat(newNote.beatNum, newNote.numerator, newNote.denominator);
-            int newBeatNum, newNum, newDen;
-            MathUtils::floatToBeat(beatFloat, newBeatNum, newNum, newDen, 288);
-            newNote.beatNum = newBeatNum;
-            newNote.numerator = newNum;
-            newNote.denominator = newDen;
-
-            if (newNote.type == NoteType::RAIN)
-            {
-                double endBeatFloat = MathUtils::beatToFloat(newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
-                int newEndBeatNum, newEndNum, newEndDen;
-                MathUtils::floatToBeat(endBeatFloat, newEndBeatNum, newEndNum, newEndDen, 288);
-                newNote.endBeatNum = newEndBeatNum;
-                newNote.endNumerator = newEndNum;
-                newNote.endDenominator = newEndDen;
-            }
-        }
-
-        if (newNote.x < 0 || newNote.x > 512)
-        {
-            QMessageBox::StandardButton reply = QMessageBox::question(this, tr("Out of Bounds"),
-                                                                      tr("Some notes are outside the playfield (x=0~512). Force fix them to edges?"),
-                                                                      QMessageBox::Yes | QMessageBox::No);
-            if (reply == QMessageBox::Yes)
-            {
-                newNote.x = qBound(0, newNote.x, 512);
-                m_chartController->addNote(newNote);
-            }
-        }
-        else
-        {
-            m_chartController->addNote(newNote);
-        }
-    }
-    m_isPasting = false;
-    update();
 }
 
 void ChartCanvas::mouseMoveEvent(QMouseEvent *event)
@@ -1214,17 +1494,9 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent *event)
     {
         updateMoveSelection(event->pos());
     }
-    else if (m_isDragging)
+    else if (m_isDraggingPaste)
     {
-        if (m_isPasting)
-        {
-            QPointF delta = event->pos() - m_dragStart;
-            m_pasteOffset += delta;
-            m_dragStart = event->pos();
-            m_repaintPending = true;
-            if (!m_repaintTimer->isActive())
-                m_repaintTimer->start(16);
-        }
+        updateDragPaste(event->pos());
     }
 }
 
@@ -1242,6 +1514,10 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
     else if (m_isMovingSelection)
     {
         endMoveSelection();
+    }
+    else if (m_isDraggingPaste)
+    {
+        endDragPaste();
     }
     else if (m_isDragging)
     {
@@ -1346,6 +1622,12 @@ void ChartCanvas::onSelectionChanged()
 
 void ChartCanvas::keyPressEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_Escape)
+    {
+        cancelOperation();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Delete)
     {
         if (m_selectionController && !m_selectionController->selectedIndices().isEmpty())
@@ -1466,5 +1748,16 @@ void ChartCanvas::showEvent(QShowEvent *event)
     if (m_isPlaying)
     {
         requestNextFrame();
+    }
+}
+
+void ChartCanvas::cancelPaste()
+{
+    if (m_isPasting)
+    {
+        m_isPasting = false;
+        m_pasteNotes.clear();
+        update();
+        emit statusMessage(tr("Paste cancelled."));
     }
 }

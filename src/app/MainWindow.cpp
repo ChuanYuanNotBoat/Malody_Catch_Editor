@@ -1,4 +1,4 @@
-// MainWindow.cpp - 修改后完整代码
+// MainWindow.cpp - 支持区间复制和右键粘贴
 #include "MainWindow.h"
 #include "ui/CustomWidgets/ChartCanvas.h"
 #include "ui/NoteEditPanel.h"
@@ -166,10 +166,8 @@ void MainWindow::createMenus()
     d->redoAction->setShortcut(QKeySequence::Redo);
     editMenu->addSeparator();
     QAction *copyAction = editMenu->addAction(tr("&Copy"));
-    connect(copyAction, &QAction::triggered, this, [this]()
-            {
-        d->selectionController->copySelected(d->chartController->chart()->notes());
-        Logger::debug("Copy action triggered"); });
+    // 连接到画布的 handleCopy 方法
+    connect(copyAction, &QAction::triggered, d->canvas, &ChartCanvas::handleCopy);
     copyAction->setShortcut(QKeySequence::Copy);
     QAction *pasteAction = editMenu->addAction(tr("&Paste"), d->canvas, &ChartCanvas::paste);
     pasteAction->setShortcut(QKeySequence::Paste);
@@ -196,7 +194,7 @@ void MainWindow::createMenus()
             Logger::debug("Deleted selected notes via menu");
         } });
 
-    // 新增：粘贴时使用288分度选项
+    // 粘贴时使用288分度选项
     editMenu->addSeparator();
     QAction *paste288Action = editMenu->addAction(tr("Paste with 288 Division"));
     paste288Action->setCheckable(true);
@@ -302,6 +300,10 @@ void MainWindow::createCentralArea()
         d->canvas->setSkin(d->skin);
     d->canvas->setNoteSize(Settings::instance().noteSize());
 
+    // 连接画布的状态栏消息信号
+    connect(d->canvas, &ChartCanvas::statusMessage, this, [this](const QString &msg)
+            { statusBar()->showMessage(msg, 2000); });
+
     d->leftPanel->setChartCanvas(d->canvas);
 
     d->verticalScrollBar = new QScrollBar(Qt::Vertical);
@@ -380,6 +382,7 @@ void MainWindow::createCentralArea()
     d->bpmPanel->setChartController(d->chartController);
     d->metaPanel->setChartController(d->chartController);
 
+    // 连接 NoteEditPanel 的信号
     connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
     connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
     connect(d->notePanel, &NoteEditPanel::gridSnapChanged, d->canvas, [this](bool on)
@@ -388,6 +391,8 @@ void MainWindow::createCentralArea()
         d->canvas->setGridSnap(on); });
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode)
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
+    // 连接复制请求信号
+    connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
 
     d->splitter = new QSplitter(Qt::Horizontal, this);
     d->splitter->addWidget(d->leftPanel);
