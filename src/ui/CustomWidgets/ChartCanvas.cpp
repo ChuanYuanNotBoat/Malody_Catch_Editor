@@ -579,18 +579,14 @@ void ChartCanvas::confirmPaste()
     const auto &bpmList = m_chartController->chart()->bpmList();
     int offset = m_chartController->chart()->meta().offset;
 
-    // 计算基准时间（参考线或光标）
     double referenceTime = calculatePasteReferenceTime();
 
-    // 找到最早音符的原始时间
     double baseOriginalTime = std::numeric_limits<double>::max();
     for (const Note &note : m_pasteNotes)
     {
-        if (note.type == NoteType::SOUND)
-            continue;
+        if (note.type == NoteType::SOUND) continue;
         double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-        if (t < baseOriginalTime)
-            baseOriginalTime = t;
+        if (t < baseOriginalTime) baseOriginalTime = t;
     }
     if (baseOriginalTime == std::numeric_limits<double>::max())
     {
@@ -599,55 +595,70 @@ void ChartCanvas::confirmPaste()
         return;
     }
 
-    // 基准时间偏移 = 参考线时间 - 最早原始时间
     double baseTimeShift = referenceTime - baseOriginalTime;
 
-    // 将基准时间偏移转换为拍数偏移（用于吸附）
     int beatNum, num, den;
     MathUtils::msToBeat(baseTimeShift, bpmList, offset, beatNum, num, den);
     double baseBeatShift = beatNum + static_cast<double>(num) / den;
 
-    // 加上用户拖动的偏移量（拍数）
     double totalBeatShift = baseBeatShift + m_pasteTimeOffset;
-
-    // 对总偏移应用吸附（以最早音符为基准）
     double snappedTotalBeatShift = snapPasteTimeOffset(totalBeatShift);
 
-    // 最终时间偏移 = 吸附后的拍数偏移对应的毫秒偏移
     MathUtils::floatToBeat(snappedTotalBeatShift, beatNum, num, den);
     double finalTimeShiftMs = MathUtils::beatToMs(beatNum, num, den, bpmList, offset);
-    // 最终 X 偏移（像素转 X 坐标）
+
     double finalXShift = m_pasteXOffset;
 
     QVector<Note> newNotes;
     for (const Note &originalNote : m_pasteNotes)
     {
-        if (originalNote.type == NoteType::SOUND)
-            continue;
+        if (originalNote.type == NoteType::SOUND) continue;
         Note newNote = originalNote;
         newNote.id = Note::generateId();
 
         // 时间偏移
         double originalTime = MathUtils::beatToMs(originalNote.beatNum, originalNote.numerator, originalNote.denominator, bpmList, offset);
         double newTime = originalTime + finalTimeShiftMs;
-        int beat, num, den;
-        MathUtils::msToBeat(newTime, bpmList, offset, beat, num, den);
-        newNote.beatNum = beat;
-        newNote.numerator = num;
-        newNote.denominator = den;
+        int b, n, d;
+        MathUtils::msToBeat(newTime, bpmList, offset, b, n, d);
+        newNote.beatNum = b;
+        newNote.numerator = n;
+        newNote.denominator = d;
 
+        // 强制转换为 288 分度（如果启用）
+        if (Settings::instance().pasteUse288Division())
+        {
+            // 将拍数转换为以 288 为分母的整数刻度
+            double startBeatFloat = MathUtils::beatToFloat(newNote.beatNum, newNote.numerator, newNote.denominator);
+            int startTicks = qRound(startBeatFloat * 288.0);
+            newNote.beatNum = startTicks / 288;
+            newNote.numerator = startTicks % 288;
+            newNote.denominator = 288;
+        }
+
+        // Rain 结束时间处理
         if (originalNote.type == NoteType::RAIN)
         {
             double originalEndTime = MathUtils::beatToMs(originalNote.endBeatNum, originalNote.endNumerator, originalNote.endDenominator, bpmList, offset);
             double newEndTime = originalEndTime + finalTimeShiftMs;
-            int endBeat, endNumBeat, endDenBeat;
-            MathUtils::msToBeat(newEndTime, bpmList, offset, endBeat, endNumBeat, endDenBeat);
-            newNote.endBeatNum = endBeat;
-            newNote.endNumerator = endNumBeat;
-            newNote.endDenominator = endDenBeat;
+            int eb, en, ed;
+            MathUtils::msToBeat(newEndTime, bpmList, offset, eb, en, ed);
+            newNote.endBeatNum = eb;
+            newNote.endNumerator = en;
+            newNote.endDenominator = ed;
+
+            // 结束时间也强制转换为 288 分度
+            if (Settings::instance().pasteUse288Division())
+            {
+                double endBeatFloat = MathUtils::beatToFloat(newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
+                int endTicks = qRound(endBeatFloat * 288.0);
+                newNote.endBeatNum = endTicks / 288;
+                newNote.endNumerator = endTicks % 288;
+                newNote.endDenominator = 288;
+            }
         }
 
-        // X 坐标偏移（边界约束在确认时处理）
+        // X 坐标偏移并边界约束
         newNote.x = originalNote.x + static_cast<int>(finalXShift);
         newNote.x = qBound(0, newNote.x, 512);
 
