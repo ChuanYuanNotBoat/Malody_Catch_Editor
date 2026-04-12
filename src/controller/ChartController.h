@@ -1,8 +1,9 @@
-// src/controller/ChartController.h - 谱面编辑核心控制器
+// src/controller/ChartController.h
 #pragma once
 
 #include <QObject>
 #include <QUndoStack>
+#include <QVector>
 #include "model/Chart.h"
 
 /**
@@ -26,6 +27,7 @@ public:
 
     // 编辑操作（都会自动压入撤销栈）
     void addNote(const Note &note);
+    void addNotes(const QVector<Note> &notes); // 批量添加，复合命令
     void removeNote(const Note &note);
     void moveNote(const Note &original, const Note &newNote);
     void moveNotes(const QList<QPair<Note, Note>> &changes); // 批量移动，复合命令
@@ -53,6 +55,7 @@ signals:
 private:
     class ChartCommand;
     class AddNoteCommand;
+    class AddNotesCommand; // 批量添加命令
     class RemoveNoteCommand;
     class RemoveNotesCommand;
     class MoveNoteCommand;

@@ -45,6 +45,11 @@ void NoteEditPanel::setupUi()
     mainLayout->addWidget(rainRadio);
     mainLayout->addWidget(deleteRadio);
 
+    // 复制按钮
+    m_copyButton = new QPushButton(tr("Copy"), this);
+    connect(m_copyButton, &QPushButton::clicked, this, &NoteEditPanel::copyRequested);
+    mainLayout->addWidget(m_copyButton);
+
     mainLayout->addWidget(new QLabel(tr("Time Division:"), this));
     m_timeDivisionCombo = new QComboBox(this);
     QStringList divisions = {"1", "2", "3", "4", "6", "8", "12", "16", "24", "32"};
@@ -71,10 +76,6 @@ void NoteEditPanel::setMode(int mode)
 {
     m_currentMode = mode;
     emit modeChanged(mode);
-    if (m_chartController && m_selectionController)
-    {
-        // 可通知画布
-    }
 }
 
 void NoteEditPanel::onNoteModeClicked() { setMode(0); }

@@ -18,10 +18,11 @@ public:
     void setSelectionController(SelectionController *controller) override;
 
 signals:
-    void modeChanged(int mode);             // 0: place note, 1: place rain, 2: delete mode
-    void timeDivisionChanged(int division); // 新增信号
-    void gridDivisionChanged(int division); // 新增网格分度信号
-    void gridSnapChanged(bool enabled);     // 新增网格吸附信号
+    void modeChanged(int mode);
+    void timeDivisionChanged(int division);
+    void gridDivisionChanged(int division);
+    void gridSnapChanged(bool enabled);
+    void copyRequested(); // 新增复制信号
 
 private slots:
     void onNoteModeClicked();
@@ -43,5 +44,6 @@ private:
     QCheckBox *m_gridSnapCheck;
     QSpinBox *m_gridDivisionSpin;
     QPushButton *m_gridSettingsBtn;
+    QPushButton *m_copyButton; // 新增复制按钮
     int m_currentMode;
 };

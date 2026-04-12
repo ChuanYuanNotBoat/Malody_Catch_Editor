@@ -17,7 +17,7 @@ protected:
     ChartController *m_controller;
 };
 
-// 添加音符命令
+// 添加单个音符命令
 class ChartController::AddNoteCommand : public ChartController::ChartCommand
 {
 public:
@@ -37,7 +37,30 @@ private:
     Note m_note;
 };
 
-// 删除音符命令
+// 批量添加音符命令（使用 QVector<Note>）
+class ChartController::AddNotesCommand : public ChartController::ChartCommand
+{
+public:
+    AddNotesCommand(ChartController *controller, const QVector<Note> &notes)
+        : ChartCommand(controller, QString("Add %1 Notes").arg(notes.size())), m_notes(notes) {}
+    void undo() override
+    {
+        for (const Note &note : m_notes)
+            m_controller->m_chart.removeNote(note);
+        m_controller->chartChanged();
+    }
+    void redo() override
+    {
+        for (const Note &note : m_notes)
+            m_controller->m_chart.addNote(note);
+        m_controller->chartChanged();
+    }
+
+private:
+    QVector<Note> m_notes;
+};
+
+// 删除单个音符命令
 class ChartController::RemoveNoteCommand : public ChartController::ChartCommand
 {
 public:
@@ -57,28 +80,22 @@ private:
     Note m_note;
 };
 
-// 复合删除多个音符命令
+// 批量删除音符命令
 class ChartController::RemoveNotesCommand : public ChartController::ChartCommand
 {
 public:
     RemoveNotesCommand(ChartController *controller, const QVector<Note> &notes)
         : ChartCommand(controller, QString("Remove %1 Notes").arg(notes.size())), m_notes(notes) {}
-
     void undo() override
     {
         for (const Note &note : m_notes)
-        {
             m_controller->m_chart.addNote(note);
-        }
         m_controller->chartChanged();
     }
-
     void redo() override
     {
         for (const Note &note : m_notes)
-        {
             m_controller->m_chart.removeNote(note);
-        }
         m_controller->chartChanged();
     }
 
@@ -109,7 +126,7 @@ private:
     Note m_original, m_new;
 };
 
-// 复合移动多个音符命令
+// 批量移动音符命令
 class ChartController::MoveNotesCommand : public ChartController::ChartCommand
 {
 public:
@@ -118,25 +135,17 @@ public:
     void undo() override
     {
         for (const auto &change : m_changes)
-        {
             m_controller->m_chart.removeNote(change.second);
-        }
         for (const auto &change : m_changes)
-        {
             m_controller->m_chart.addNote(change.first);
-        }
         m_controller->chartChanged();
     }
     void redo() override
     {
         for (const auto &change : m_changes)
-        {
             m_controller->m_chart.removeNote(change.first);
-        }
         for (const auto &change : m_changes)
-        {
             m_controller->m_chart.addNote(change.second);
-        }
         m_controller->chartChanged();
     }
 
@@ -242,6 +251,13 @@ ChartController::~ChartController()
 void ChartController::addNote(const Note &note)
 {
     m_undoStack->push(new AddNoteCommand(this, note));
+}
+
+void ChartController::addNotes(const QVector<Note> &notes)
+{
+    if (notes.isEmpty())
+        return;
+    m_undoStack->push(new AddNotesCommand(this, notes));
 }
 
 void ChartController::removeNote(const Note &note)
@@ -365,7 +381,7 @@ bool ChartController::loadChart(const QString &path)
             Logger::debug(QString("ChartController::loadChart: Chart has %1 notes").arg(newChart.notes().size()));
 
             m_chart = newChart;
-            m_currentChartPath = path; // 保存路径
+            m_currentChartPath = path;
             Logger::debug("ChartController::loadChart: Chart assigned to m_chart, path saved");
 
             m_undoStack->clear();
