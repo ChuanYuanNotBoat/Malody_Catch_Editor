@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QVector>
 #include <QElapsedTimer>
+#include <QHash>
 #include "model/Note.h"
 
 class ChartController;
@@ -72,6 +73,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void timerEvent(QTimerEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     void drawBackground(QPainter &painter);
@@ -83,8 +85,8 @@ private:
     double yToBeat(double y) const;
     int hitTestNote(const QPointF &pos) const;
     QRectF getRainNoteRect(const Note &note) const;
-    void invalidateCache();            // 保留接口，实际为空操作
-    void updateNotePosCacheIfNeeded(); // 已废弃，仅用于兼容旧代码
+    void invalidateCache();
+    void updateNotePosCacheIfNeeded(); // 已废弃
     void updateBackgroundCache();
 
     void beginMoveSelection(const QPointF &startPos, int referenceIndex = -1);
@@ -99,20 +101,20 @@ private:
     double getNoteTimeMs(const Note &note) const;
     void confirmPaste();
 
-    void rebuildNoteTimesCache(); // 重建音符预计算数据
+    void rebuildNoteTimesCache();
 
     double effectiveVisibleBeatRange() const
     {
         return m_baseVisibleBeatRange / m_timeScale;
     }
 
-    // ---------- 预计算缓存数据 ----------
-    QVector<double> m_noteBeatPositions;    // 起始拍浮点数
-    QVector<double> m_noteEndBeatPositions; // rain 结束拍浮点数
-    QVector<double> m_noteXPositions;       // X 坐标比例 (0~1)
-    QVector<NoteType> m_noteTypes;          // 音符类型
-    bool m_noteDataDirty;                   // 谱面数据变更标志
-    bool m_timesDirty;                      // 时间缓存脏标志
+    // 预计算缓存数据
+    QVector<double> m_noteBeatPositions;
+    QVector<double> m_noteEndBeatPositions;
+    QVector<double> m_noteXPositions;
+    QVector<NoteType> m_noteTypes;
+    bool m_noteDataDirty;
+    bool m_timesDirty;
 
     ChartController *m_chartController;
     SelectionController *m_selectionController;
@@ -148,8 +150,7 @@ private:
 
     bool m_isMovingSelection;
     QPointF m_moveStartPos;
-    QPointF m_moveCurrentPos;               // 当前鼠标位置，用于绘制预览
-    QList<QPair<Note, Note>> m_moveChanges; // 实际移动变更（提交时使用）
+    QHash<int, QPair<Note, Note>> m_moveChanges; // 存储原始音符快照，key=索引
     QSet<int> m_originalSelectedIndices;
     int m_dragReferenceIndex;
 
@@ -169,18 +170,17 @@ private:
     bool m_forceRepaint;
     qint64 m_lastRepaintTime;
 
-    // ---------- 超果检测缓存 ----------
     QSet<int> m_cachedHyperSet;
     bool m_hyperCacheValid;
 
-    // ---------- 背景缓存 ----------
     QPixmap m_backgroundCache;
     bool m_backgroundCacheDirty;
 
-    // ---------- FPS 计数器 ----------
     QElapsedTimer m_fpsTimer;
     int m_frameCount;
     double m_currentFps;
+
+    bool m_isPlaying;
 
     int leftMargin() const;
     int rightMargin() const;
@@ -188,4 +188,5 @@ private:
 private slots:
     void onSelectionChanged();
     void performDelayedRepaint();
+    void requestNextFrame();
 };
