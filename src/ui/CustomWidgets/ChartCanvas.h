@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QDateTime>
 #include <QVector>
+#include <QElapsedTimer>
 #include "model/Note.h"
 
 class ChartController;
@@ -105,7 +106,7 @@ private:
         return m_baseVisibleBeatRange / m_timeScale;
     }
 
-    // 预计算缓存数据
+    // ---------- 预计算缓存数据 ----------
     QVector<double> m_noteBeatPositions;    // 起始拍浮点数
     QVector<double> m_noteEndBeatPositions; // rain 结束拍浮点数
     QVector<double> m_noteXPositions;       // X 坐标比例 (0~1)
@@ -168,13 +169,18 @@ private:
     bool m_forceRepaint;
     qint64 m_lastRepaintTime;
 
-    // 超果检测缓存
+    // ---------- 超果检测缓存 ----------
     QSet<int> m_cachedHyperSet;
     bool m_hyperCacheValid;
 
-    // 背景缓存
+    // ---------- 背景缓存 ----------
     QPixmap m_backgroundCache;
     bool m_backgroundCacheDirty;
+
+    // ---------- FPS 计数器 ----------
+    QElapsedTimer m_fpsTimer;
+    int m_frameCount;
+    double m_currentFps;
 
     int leftMargin() const;
     int rightMargin() const;
