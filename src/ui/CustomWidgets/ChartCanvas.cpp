@@ -26,6 +26,8 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QAction>
+#include <QWindow>
+#include <QShowEvent>
 #include <QDebug>
 #include <chrono>
 #include <algorithm>
@@ -71,19 +73,21 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_noteDataDirty(true),
       m_timesDirty(true),
       m_frameCount(0),
-      m_currentFps(0.0)
+      m_currentFps(0.0),
+      m_isPlaying(false)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setMinimumSize(800, 400);
     setAttribute(Qt::WA_OpaquePaintEvent, true);
+    setAttribute(Qt::WA_NativeWindow);
+
     m_noteRenderer->setNoteSize(Settings::instance().noteSize());
 
     m_repaintTimer = new QTimer(this);
     m_repaintTimer->setSingleShot(true);
     connect(m_repaintTimer, &QTimer::timeout, this, &ChartCanvas::performDelayedRepaint);
 
-    // 初始化 FPS 计时器
     m_fpsTimer.start();
 }
 
@@ -137,9 +141,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         }
         else
         {
-            m_noteEndBeatPositions[i] = beat; // not used
+            m_noteEndBeatPositions[i] = beat;
         }
-        // X 坐标比例 (0~1)
         m_noteXPositions[i] = static_cast<double>(note.x) / 512.0;
     }
 
@@ -192,11 +195,14 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
         connect(m_playbackController, &PlaybackController::stateChanged,
                 this, [this](PlaybackController::State state)
                 {
-            if (state == PlaybackController::Stopped || state == PlaybackController::Paused) {
-                snapPlayheadToGrid();
-            }
             if (state == PlaybackController::Playing) {
                 m_autoScrollEnabled = true;
+                m_isPlaying = true;
+                requestNextFrame();
+            } else {
+                m_isPlaying = false;
+                snapPlayheadToGrid();
+                update();
             } });
         m_currentPlayTime = m_playbackController->currentTime();
     }
@@ -241,7 +247,6 @@ void ChartCanvas::setVerticalFlip(bool flip)
 {
     if (m_verticalFlip == flip)
         return;
-
     m_verticalFlip = flip;
     emit verticalFlipChanged(flip);
     update();
@@ -377,11 +382,59 @@ void ChartCanvas::updateBackgroundCache()
     m_backgroundCacheDirty = true;
 }
 
+void ChartCanvas::requestNextFrame()
+{
+    if (!m_isPlaying)
+        return;
+
+    if (m_playbackController)
+    {
+        m_currentPlayTime = m_playbackController->currentTime();
+    }
+
+    if (m_autoScrollEnabled && m_chartController && m_chartController->chart())
+    {
+        const auto &bpmList = m_chartController->chart()->bpmList();
+        int offset = m_chartController->chart()->meta().offset;
+        int beatNum, numerator, denominator;
+        MathUtils::msToBeat(m_currentPlayTime, bpmList, offset, beatNum, numerator, denominator);
+        double beat = beatNum + static_cast<double>(numerator) / denominator;
+
+        double baselineRatio = 0.8;
+        double targetScrollBeat;
+        if (m_verticalFlip)
+        {
+            targetScrollBeat = beat - (1.0 - baselineRatio) * effectiveVisibleBeatRange();
+        }
+        else
+        {
+            targetScrollBeat = beat - baselineRatio * effectiveVisibleBeatRange();
+        }
+
+        m_scrollBeat = targetScrollBeat;
+        if (m_scrollBeat < 0)
+            m_scrollBeat = 0;
+        emit scrollPositionChanged(m_scrollBeat);
+    }
+
+    if (QWindow *win = windowHandle())
+    {
+        win->requestUpdate();
+    }
+    else
+    {
+        update();
+        QTimer::singleShot(16, this, &ChartCanvas::requestNextFrame);
+    }
+
+    update();
+}
+
 void ChartCanvas::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
 
-    // ---------- FPS 计算 ----------
+    // FPS 计算
     m_frameCount++;
     qint64 elapsed = m_fpsTimer.elapsed();
     if (elapsed >= 1000)
@@ -398,7 +451,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         return;
     }
 
-    // 确保数据缓存最新
     if (m_timesDirty || m_noteDataDirty)
         rebuildNoteTimesCache();
 
@@ -414,7 +466,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     double visibleRange = effectiveVisibleBeatRange();
     double endBeat = startBeat + visibleRange;
 
-    // 将拍号转为时间用于 rain 剔除
     int startBeatNum, startNum, startDen;
     MathUtils::floatToBeat(startBeat, startBeatNum, startNum, startDen);
     double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmList, offset);
@@ -423,7 +474,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmList, offset);
     const double TIME_MARGIN = 100.0;
 
-    // 超果缓存
     if (m_hyperfruitEnabled && !bpmList.isEmpty())
     {
         if (!m_hyperCacheValid)
@@ -443,105 +493,61 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     const double baseY = m_verticalFlip ? canvasHeight : 0;
     const double sign = m_verticalFlip ? -1.0 : 1.0;
 
-    // 获取选区
     QSet<int> selectedSet;
     if (m_selectionController)
         selectedSet = m_selectionController->selectedIndices();
-
-    // 移动预览偏移量（绘制时使用）
-    QPointF moveDelta;
-    if (m_isMovingSelection && !m_moveStartPos.isNull())
-    {
-        QPointF delta = m_moveCurrentPos - m_moveStartPos;
-        double deltaY = delta.y();
-        if (m_verticalFlip)
-            deltaY = -deltaY;
-        double deltaBeat = (deltaY / canvasHeight) * visibleRange;
-        double deltaX = delta.x() / canvasWidth * 512.0;
-        moveDelta = QPointF(deltaX, deltaBeat);
-    }
 
     painter.setClipRect(rect());
 
     int renderedNotesCount = 0;
     for (int i = 0; i < notes.size(); ++i)
-    {
-        NoteType type = m_noteTypes[i];
-        if (type == NoteType::SOUND)
-            continue;
+{
+    NoteType type = m_noteTypes[i];
+    if (type == NoteType::SOUND)
+        continue;
 
-        double beat = m_noteBeatPositions[i];
-        // 快速剔除
+    double beat = m_noteBeatPositions[i];
+    double endBeatNote = m_noteEndBeatPositions[i];
+
+    // ---- 快速剔除优化 ----
+    if (type == NoteType::NORMAL) {
+        // 普通音符：起始拍不在可见区域附近则跳过
         if (beat < startBeat - 0.5 || beat > endBeat + 0.5)
             continue;
-
-        double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
-
-        if (type == NoteType::RAIN)
-        {
-            double endBeatNote = m_noteEndBeatPositions[i];
-            if (endBeatNote < startBeat || beat > endBeat)
-                continue;
-            double visibleStartBeat = qMax(beat, startBeat);
-            double visibleEndBeat = qMin(endBeatNote, endBeat);
-            double yStart = baseY + sign * ((visibleStartBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
-            double yEnd = baseY + sign * ((visibleEndBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
-            double rectTop = qMin(yStart, yEnd);
-            double rectHeight = qAbs(yEnd - yStart);
-            if (rectHeight <= 0)
-                continue;
-            QRectF rainRect(lmargin, rectTop, availableWidth, rectHeight);
-            bool selected = selectedSet.contains(i);
-            m_noteRenderer->drawRain(painter, notes[i], rainRect, selected);
-            renderedNotesCount++;
-        }
-        else
-        {
-            double x = lmargin + m_noteXPositions[i] * availableWidth;
-            QPointF pos(x, y);
-            bool selected = selectedSet.contains(i);
-            m_noteRenderer->drawNote(painter, notes[i], pos, selected, i);
-            renderedNotesCount++;
-        }
+    } else if (type == NoteType::RAIN) {
+        // Rain 音符：整个时间区间与可见区域无交集则跳过
+        if (endBeatNote <= startBeat || beat >= endBeat)
+            continue;
     }
 
-    // 移动预览绘制
-    if (m_isMovingSelection && !moveDelta.isNull())
+    double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
+
+    if (type == NoteType::RAIN)
     {
-        const auto &origIndices = m_originalSelectedIndices;
-        double deltaBeat = moveDelta.y();
-        double deltaX = moveDelta.x();
-        painter.setOpacity(0.5);
-        for (int idx : origIndices)
-        {
-            if (idx < 0 || idx >= notes.size())
-                continue;
-            const Note &origNote = notes[idx];
-            double origBeat = m_noteBeatPositions[idx];
-            double newBeat = origBeat + deltaBeat;
-            double newX = qBound(0.0, origNote.x + deltaX, 512.0);
-            double y = baseY + sign * ((newBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
-            double x = lmargin + (newX / 512.0) * availableWidth;
-            QPointF pos(x, y);
-            if (origNote.type == NoteType::RAIN)
-            {
-                double origEndBeat = m_noteEndBeatPositions[idx];
-                double newEndBeat = origEndBeat + deltaBeat;
-                double yEnd = baseY + sign * ((newEndBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
-                double rectTop = qMin(y, yEnd);
-                double rectHeight = qAbs(yEnd - y);
-                QRectF rainRect(lmargin, rectTop, availableWidth, rectHeight);
-                m_noteRenderer->drawRain(painter, origNote, rainRect, true);
-            }
-            else
-            {
-                m_noteRenderer->drawNote(painter, origNote, pos, true, idx);
-            }
-        }
-        painter.setOpacity(1.0);
+        // Rain 绘制（区间已确保有交集）
+        double visibleStartBeat = qMax(beat, startBeat);
+        double visibleEndBeat = qMin(endBeatNote, endBeat);
+        double yStart = baseY + sign * ((visibleStartBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
+        double yEnd = baseY + sign * ((visibleEndBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
+        double rectTop = qMin(yStart, yEnd);
+        double rectHeight = qAbs(yEnd - yStart);
+        if (rectHeight <= 0)
+            continue;
+        QRectF rainRect(lmargin, rectTop, availableWidth, rectHeight);
+        bool selected = selectedSet.contains(i);
+        m_noteRenderer->drawRain(painter, notes[i], rainRect, selected);
+        renderedNotesCount++;
     }
+    else // NORMAL
+    {
+        double x = lmargin + m_noteXPositions[i] * availableWidth;
+        QPointF pos(x, y);
+        bool selected = selectedSet.contains(i);
+        m_noteRenderer->drawNote(painter, notes[i], pos, selected, i);
+        renderedNotesCount++;
+    }
+}
 
-    // 粘贴预览
     if (m_isPasting && !m_pasteNotes.isEmpty())
     {
         painter.setOpacity(0.5);
@@ -561,12 +567,10 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.drawText(QRect(120, 10, 100, 30), Qt::AlignCenter, tr("Cancel"));
     }
 
-    // 参考线
     double baselineY = canvasHeight * 0.8;
     painter.setPen(QPen(QColor(0, 0, 255), 3));
     painter.drawLine(lmargin, baselineY, canvasWidth - rmargin, baselineY);
 
-    // 播放时间显示
     if (m_playbackController && m_currentPlayTime > 0)
     {
         painter.setPen(Qt::black);
@@ -576,7 +580,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.drawText(canvasWidth - rmargin - 200, baselineY - 5, autoScrollText);
     }
 
-    // 选区矩形
     if (m_isSelecting)
     {
         QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
@@ -585,7 +588,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.drawRect(rect);
     }
 
-    // ---------- 左下角显示 FPS ----------
     painter.setPen(Qt::white);
     painter.setBrush(QColor(0, 0, 0, 128));
     QString fpsText = QString("FPS: %1").arg(m_currentFps, 0, 'f', 1);
@@ -593,7 +595,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     painter.fillRect(fpsRect, QColor(0, 0, 0, 128));
     painter.drawText(fpsRect, Qt::AlignCenter, fpsText);
 
-    // 诊断记录
     auto now = std::chrono::high_resolution_clock::now();
     static auto lastRecord = now;
     auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRecord).count();
@@ -601,6 +602,11 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     {
         DiagnosticCollector::instance().recordRenderMetrics(elapsedMs, renderedNotesCount);
         lastRecord = now;
+    }
+
+    if (m_isPlaying)
+    {
+        QTimer::singleShot(0, this, &ChartCanvas::requestNextFrame);
     }
 }
 
@@ -820,7 +826,7 @@ void ChartCanvas::prepareMoveChanges()
     for (int idx : m_originalSelectedIndices)
     {
         if (idx >= 0 && idx < notes.size())
-            m_moveChanges.append(qMakePair(notes[idx], notes[idx]));
+            m_moveChanges.insert(idx, qMakePair(notes[idx], notes[idx]));
     }
 }
 
@@ -828,7 +834,6 @@ void ChartCanvas::beginMoveSelection(const QPointF &startPos, int referenceIndex
 {
     m_isMovingSelection = true;
     m_moveStartPos = startPos;
-    m_moveCurrentPos = startPos;
     m_originalSelectedIndices = m_selectionController->selectedIndices();
     m_dragReferenceIndex = referenceIndex;
     if (m_dragReferenceIndex == -1 && !m_originalSelectedIndices.isEmpty())
@@ -846,10 +851,76 @@ void ChartCanvas::beginMoveSelection(const QPointF &startPos, int referenceIndex
 
 void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
 {
-    m_moveCurrentPos = currentPos;
-    m_repaintPending = true;
-    if (!m_repaintTimer->isActive())
-        m_repaintTimer->start(16);
+    if (!m_isMovingSelection)
+        return;
+
+    // 计算相对于移动起点的总偏移（像素）
+    QPointF delta = currentPos - m_moveStartPos;
+    double deltaY = delta.y();
+    if (m_verticalFlip)
+        deltaY = -deltaY;
+
+    // 将像素偏移转换为拍号偏移和 X 偏移
+    double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
+    double deltaX = delta.x() / width() * 512.0;
+
+    // 如果启用了时间吸附，则对偏移量进行吸附（以参考音符为基准）
+    double snapOffsetBeat = 0.0;
+    if (m_timeDivision > 0 && m_dragReferenceIndex >= 0)
+    {
+        const Note &refOriginal = m_moveChanges[m_dragReferenceIndex].first;
+        double refOriginalBeat = MathUtils::beatToFloat(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator);
+        double refNewBeat = refOriginalBeat + deltaBeat;
+
+        Note refNote = refOriginal;
+        MathUtils::floatToBeat(refNewBeat, refNote.beatNum, refNote.numerator, refNote.denominator);
+        refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, m_timeDivision);
+        double refSnappedBeat = MathUtils::beatToFloat(refNote.beatNum, refNote.numerator, refNote.denominator);
+        snapOffsetBeat = refSnappedBeat - refNewBeat;
+    }
+
+    // 最终应用的偏移量
+    double appliedDeltaBeat = deltaBeat + snapOffsetBeat;
+    double appliedDeltaX = deltaX;
+
+    // 获取音符列表，基于原始位置重新计算新位置（避免累积误差）
+    QVector<Note> &notes = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+    QList<int> selectedList = m_originalSelectedIndices.values();
+
+    for (int idx : selectedList)
+    {
+        const Note &original = m_moveChanges[idx].first; // 原始音符快照
+        Note newNote = original;
+
+        // 起始时间偏移
+        double originalBeat = MathUtils::beatToFloat(original.beatNum, original.numerator, original.denominator);
+        double newBeat = originalBeat + appliedDeltaBeat;
+        if (newBeat < 0)
+            newBeat = 0;
+        MathUtils::floatToBeat(newBeat, newNote.beatNum, newNote.numerator, newNote.denominator);
+
+        // X 坐标偏移（边界限制）
+        newNote.x = qBound(0, qRound(original.x + appliedDeltaX), 512);
+
+        // Rain 音符结束时间偏移
+        if (original.type == NoteType::RAIN)
+        {
+            double originalEndBeat = MathUtils::beatToFloat(original.endBeatNum, original.endNumerator, original.endDenominator);
+            double newEndBeat = originalEndBeat + appliedDeltaBeat;
+            if (newEndBeat < newBeat)
+                newEndBeat = newBeat;
+            MathUtils::floatToBeat(newEndBeat, newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
+        }
+
+        notes[idx] = newNote;
+    }
+
+    // 标记缓存脏
+    m_noteDataDirty = true;
+    m_timesDirty = true;
+    m_hyperCacheValid = false;
+
+    update();
 }
 
 void ChartCanvas::endMoveSelection()
@@ -859,80 +930,36 @@ void ChartCanvas::endMoveSelection()
 
     m_isMovingSelection = false;
 
-    QPointF delta = m_moveCurrentPos - m_moveStartPos;
-    double deltaY = delta.y();
-    if (m_verticalFlip)
-        deltaY = -deltaY;
-    double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
-    double deltaX = delta.x() / width() * 512;
-
-    int refIndex = m_dragReferenceIndex;
-    if (refIndex == -1 || !m_originalSelectedIndices.contains(refIndex))
-    {
-        if (!m_originalSelectedIndices.isEmpty())
-            refIndex = *m_originalSelectedIndices.begin();
-        else
-            return;
-    }
-
-    const Note &refOriginal = m_chartController->chart()->notes()[refIndex];
-    double refOriginalBeat = MathUtils::beatToFloat(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator);
-    double refNewBeat = refOriginalBeat + deltaBeat;
-
-    Note refNote = refOriginal;
-    MathUtils::floatToBeat(refNewBeat, refNote.beatNum, refNote.numerator, refNote.denominator);
-
-    if (m_timeDivision > 0)
-        refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, m_timeDivision);
-    else
-        refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, 1);
-
-    double refSnappedBeat = MathUtils::beatToFloat(refNote.beatNum, refNote.numerator, refNote.denominator);
-    double snapOffsetBeat = refSnappedBeat - refNewBeat;
-
-    QList<QPair<Note, Note>> changes;
-    QList<int> selectedList = m_originalSelectedIndices.values();
-    for (int i = 0; i < selectedList.size(); ++i)
-    {
-        int idx = selectedList[i];
-        const Note &original = m_chartController->chart()->notes()[idx];
-        Note newNote = original;
-        double originalBeat = MathUtils::beatToFloat(original.beatNum, original.numerator, original.denominator);
-        double newBeat = originalBeat + deltaBeat + snapOffsetBeat;
-        MathUtils::floatToBeat(newBeat, newNote.beatNum, newNote.numerator, newNote.denominator);
-        if (newBeat < 0)
-            MathUtils::floatToBeat(0, newNote.beatNum, newNote.numerator, newNote.denominator);
-
-        newNote.x = qBound(0, qRound(original.x + deltaX), 512);
-
-        if (original.type == NoteType::RAIN)
-        {
-            double originalEndBeat = MathUtils::beatToFloat(original.endBeatNum, original.endNumerator, original.endDenominator);
-            double newEndBeat = originalEndBeat + deltaBeat + snapOffsetBeat;
-            MathUtils::floatToBeat(newEndBeat, newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
-            if (newEndBeat < newBeat)
-            {
-                newNote.endBeatNum = newNote.beatNum;
-                newNote.endNumerator = newNote.numerator;
-                newNote.endDenominator = newNote.denominator;
-            }
-        }
-        changes.append(qMakePair(original, newNote));
-    }
-
     if (m_wasGridSnapEnabled)
     {
         m_gridSnap = m_gridSnapBackup;
         m_wasGridSnapEnabled = false;
     }
 
-    if (!changes.isEmpty())
-        m_chartController->moveNotes(changes);
+    QList<QPair<Note, Note>> finalChanges;
+    const auto &notes = m_chartController->chart()->notes();
+    for (int idx : m_originalSelectedIndices)
+    {
+        const Note &currentNote = notes[idx];
+        auto it = m_moveChanges.find(idx);
+        if (it != m_moveChanges.end())
+        {
+            const Note &originalNote = it->first;
+            if (!(originalNote == currentNote))
+                finalChanges.append(qMakePair(originalNote, currentNote));
+        }
+    }
+
+    if (!finalChanges.isEmpty())
+        m_chartController->moveNotes(finalChanges);
 
     m_originalSelectedIndices.clear();
     m_dragReferenceIndex = -1;
+    m_moveChanges.clear();
     m_moveStartPos = QPointF();
-    m_moveCurrentPos = QPointF();
+
+    m_noteDataDirty = true;
+    m_timesDirty = true;
     update();
 }
 
@@ -1284,40 +1311,10 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
 {
     m_currentPlayTime = timeMs;
 
-    if (m_playbackController && m_playbackController->state() == PlaybackController::Playing && m_autoScrollEnabled)
+    if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing || !m_autoScrollEnabled)
     {
-        if (m_chartController && m_chartController->chart())
-        {
-            const auto &bpmList = m_chartController->chart()->bpmList();
-            int offset = m_chartController->chart()->meta().offset;
-            int beatNum, numerator, denominator;
-            MathUtils::msToBeat(timeMs, bpmList, offset, beatNum, numerator, denominator);
-            double beat = beatNum + static_cast<double>(numerator) / denominator;
-
-            double baselineRatio = 0.8;
-            double targetScrollBeat;
-            if (m_verticalFlip)
-            {
-                targetScrollBeat = beat - (1.0 - baselineRatio) * effectiveVisibleBeatRange();
-            }
-            else
-            {
-                targetScrollBeat = beat - baselineRatio * effectiveVisibleBeatRange();
-            }
-
-            m_scrollBeat = targetScrollBeat;
-            if (m_scrollBeat < 0)
-                m_scrollBeat = 0;
-            m_repaintPending = true;
-            emit scrollPositionChanged(m_scrollBeat);
-        }
-    }
-
-    m_repaintPending = true;
-    int interval = (m_playbackController && m_playbackController->state() == PlaybackController::Paused) ? 100 : 16;
-    if (!m_repaintTimer->isActive())
-    {
-        m_repaintTimer->start(interval);
+        update();
+        return;
     }
 }
 
@@ -1451,16 +1448,23 @@ void ChartCanvas::performDelayedRepaint()
 
 void ChartCanvas::invalidateCache()
 {
-    // 不再需要位置缓存失效，保留接口兼容
 }
 
 void ChartCanvas::updateNotePosCacheIfNeeded()
 {
-    // 已废弃，空实现
 }
 
 void ChartCanvas::resizeEvent(QResizeEvent *event)
 {
     m_backgroundCacheDirty = true;
     QWidget::resizeEvent(event);
+}
+
+void ChartCanvas::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    if (m_isPlaying)
+    {
+        requestNextFrame();
+    }
 }
