@@ -30,16 +30,8 @@
 #include <chrono>
 #include <algorithm>
 
-// 可选 OpenGL 支持，若定义了 USE_OPENGL 则继承自 QOpenGLWidget
-#ifdef USE_OPENGL
-#include <QOpenGLWidget>
-#define CHART_CANVAS_BASE QOpenGLWidget
-#else
-#define CHART_CANVAS_BASE QWidget
-#endif
-
 ChartCanvas::ChartCanvas(QWidget *parent)
-    : CHART_CANVAS_BASE(parent),
+    : QWidget(parent),
       m_chartController(nullptr),
       m_selectionController(nullptr),
       m_playbackController(nullptr),
@@ -77,7 +69,9 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_hyperCacheValid(false),
       m_backgroundCacheDirty(true),
       m_noteDataDirty(true),
-      m_timesDirty(true)
+      m_timesDirty(true),
+      m_frameCount(0),
+      m_currentFps(0.0)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -88,6 +82,9 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     m_repaintTimer = new QTimer(this);
     m_repaintTimer->setSingleShot(true);
     connect(m_repaintTimer, &QTimer::timeout, this, &ChartCanvas::performDelayedRepaint);
+
+    // 初始化 FPS 计时器
+    m_fpsTimer.start();
 }
 
 ChartCanvas::~ChartCanvas()
@@ -142,7 +139,7 @@ void ChartCanvas::rebuildNoteTimesCache()
         {
             m_noteEndBeatPositions[i] = beat; // not used
         }
-        // X 坐标预计算为画布比例 (0~1)，绘制时再映射到像素
+        // X 坐标比例 (0~1)
         m_noteXPositions[i] = static_cast<double>(note.x) / 512.0;
     }
 
@@ -346,7 +343,6 @@ void ChartCanvas::setTimeScale(double scale)
     if (qFuzzyCompare(m_timeScale, scale))
         return;
 
-    // 保持参考线位置不变（基线比例 0.8）
     double baselineRatio = 0.8;
     double baselineBeat;
     if (m_verticalFlip)
@@ -385,6 +381,16 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
 
+    // ---------- FPS 计算 ----------
+    m_frameCount++;
+    qint64 elapsed = m_fpsTimer.elapsed();
+    if (elapsed >= 1000)
+    {
+        m_currentFps = m_frameCount * 1000.0 / elapsed;
+        m_frameCount = 0;
+        m_fpsTimer.restart();
+    }
+
     QPainter painter(this);
     if (!m_chartController || !m_chartController->chart())
     {
@@ -401,7 +407,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     int offset = chart->meta().offset;
     const auto &notes = chart->notes();
 
-    // 背景和网格
     drawBackground(painter);
     drawGrid(painter);
 
@@ -409,7 +414,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     double visibleRange = effectiveVisibleBeatRange();
     double endBeat = startBeat + visibleRange;
 
-    // 将拍号转为时间用于 rain 剔除（精确性要求不高，可用近似）
+    // 将拍号转为时间用于 rain 剔除
     int startBeatNum, startNum, startDen;
     MathUtils::floatToBeat(startBeat, startBeatNum, startNum, startDen);
     double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmList, offset);
@@ -429,7 +434,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         m_noteRenderer->setHyperfruitIndices(m_cachedHyperSet);
     }
 
-    // 准备绘制参数
     const int canvasWidth = width();
     const int canvasHeight = height();
     const int lmargin = leftMargin();
@@ -444,27 +448,22 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     if (m_selectionController)
         selectedSet = m_selectionController->selectedIndices();
 
-    // 移动预览偏移量（用于绘制时临时偏移）
+    // 移动预览偏移量（绘制时使用）
     QPointF moveDelta;
     if (m_isMovingSelection && !m_moveStartPos.isNull())
     {
-        // 注意：移动预览不修改实际数据，仅绘制时偏移
-        // 这里我们需要计算 deltaBeat 和 deltaX，但为了简单，我们在绘制时直接应用偏移逻辑
-        // 然而为了性能，我们可以在外面计算好偏移量
         QPointF delta = m_moveCurrentPos - m_moveStartPos;
         double deltaY = delta.y();
-        if (m_verticalFlip) deltaY = -deltaY;
+        if (m_verticalFlip)
+            deltaY = -deltaY;
         double deltaBeat = (deltaY / canvasHeight) * visibleRange;
         double deltaX = delta.x() / canvasWidth * 512.0;
         moveDelta = QPointF(deltaX, deltaBeat);
     }
 
-    int renderedNotesCount = 0;
-
-    // 启用裁剪以跳过不可见区域
     painter.setClipRect(rect());
 
-    // 绘制所有音符
+    int renderedNotesCount = 0;
     for (int i = 0; i < notes.size(); ++i)
     {
         NoteType type = m_noteTypes[i];
@@ -472,24 +471,21 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
             continue;
 
         double beat = m_noteBeatPositions[i];
-        // 快速拍号剔除
+        // 快速剔除
         if (beat < startBeat - 0.5 || beat > endBeat + 0.5)
             continue;
 
-        // 计算 Y 坐标
         double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
 
         if (type == NoteType::RAIN)
         {
             double endBeatNote = m_noteEndBeatPositions[i];
-            // 剔除完全不在视口内的 rain
             if (endBeatNote < startBeat || beat > endBeat)
                 continue;
-            // 计算可见部分的矩形
             double visibleStartBeat = qMax(beat, startBeat);
             double visibleEndBeat = qMin(endBeatNote, endBeat);
             double yStart = baseY + sign * ((visibleStartBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
-            double yEnd   = baseY + sign * ((visibleEndBeat   - m_scrollBeat) * invVisibleRange * canvasHeight);
+            double yEnd = baseY + sign * ((visibleEndBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
             double rectTop = qMin(yStart, yEnd);
             double rectHeight = qAbs(yEnd - yStart);
             if (rectHeight <= 0)
@@ -501,7 +497,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         }
         else
         {
-            // 普通音符
             double x = lmargin + m_noteXPositions[i] * availableWidth;
             QPointF pos(x, y);
             bool selected = selectedSet.contains(i);
@@ -510,25 +505,24 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         }
     }
 
-    // 绘制移动预览（如果正在移动选区）
+    // 移动预览绘制
     if (m_isMovingSelection && !moveDelta.isNull())
     {
         const auto &origIndices = m_originalSelectedIndices;
         double deltaBeat = moveDelta.y();
         double deltaX = moveDelta.x();
+        painter.setOpacity(0.5);
         for (int idx : origIndices)
         {
-            if (idx < 0 || idx >= notes.size()) continue;
+            if (idx < 0 || idx >= notes.size())
+                continue;
             const Note &origNote = notes[idx];
             double origBeat = m_noteBeatPositions[idx];
             double newBeat = origBeat + deltaBeat;
-            double newX = origNote.x + deltaX;
-            newX = qBound(0.0, newX, 512.0);
+            double newX = qBound(0.0, origNote.x + deltaX, 512.0);
             double y = baseY + sign * ((newBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
             double x = lmargin + (newX / 512.0) * availableWidth;
             QPointF pos(x, y);
-            // 预览半透明绘制
-            painter.setOpacity(0.5);
             if (origNote.type == NoteType::RAIN)
             {
                 double origEndBeat = m_noteEndBeatPositions[idx];
@@ -543,8 +537,8 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
             {
                 m_noteRenderer->drawNote(painter, origNote, pos, true, idx);
             }
-            painter.setOpacity(1.0);
         }
+        painter.setOpacity(1.0);
     }
 
     // 粘贴预览
@@ -555,7 +549,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         {
             if (note.type == NoteType::SOUND)
                 continue;
-            // 简单预览，忽略偏移
             double beat = MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator);
             double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
             double x = lmargin + (note.x / 512.0) * availableWidth;
@@ -573,6 +566,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     painter.setPen(QPen(QColor(0, 0, 255), 3));
     painter.drawLine(lmargin, baselineY, canvasWidth - rmargin, baselineY);
 
+    // 播放时间显示
     if (m_playbackController && m_currentPlayTime > 0)
     {
         painter.setPen(Qt::black);
@@ -591,13 +585,21 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.drawRect(rect);
     }
 
+    // ---------- 左下角显示 FPS ----------
+    painter.setPen(Qt::white);
+    painter.setBrush(QColor(0, 0, 0, 128));
+    QString fpsText = QString("FPS: %1").arg(m_currentFps, 0, 'f', 1);
+    QRect fpsRect(10, canvasHeight - 30, 80, 20);
+    painter.fillRect(fpsRect, QColor(0, 0, 0, 128));
+    painter.drawText(fpsRect, Qt::AlignCenter, fpsText);
+
     // 诊断记录
     auto now = std::chrono::high_resolution_clock::now();
     static auto lastRecord = now;
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRecord).count();
-    if (elapsed > 500)
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRecord).count();
+    if (elapsedMs > 500)
     {
-        DiagnosticCollector::instance().recordRenderMetrics(elapsed, renderedNotesCount);
+        DiagnosticCollector::instance().recordRenderMetrics(elapsedMs, renderedNotesCount);
         lastRecord = now;
     }
 }
@@ -845,7 +847,6 @@ void ChartCanvas::beginMoveSelection(const QPointF &startPos, int referenceIndex
 void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
 {
     m_moveCurrentPos = currentPos;
-    // 仅触发重绘，在 paintEvent 中绘制预览
     m_repaintPending = true;
     if (!m_repaintTimer->isActive())
         m_repaintTimer->start(16);
@@ -858,10 +859,10 @@ void ChartCanvas::endMoveSelection()
 
     m_isMovingSelection = false;
 
-    // 计算最终偏移量并应用到实际数据
     QPointF delta = m_moveCurrentPos - m_moveStartPos;
     double deltaY = delta.y();
-    if (m_verticalFlip) deltaY = -deltaY;
+    if (m_verticalFlip)
+        deltaY = -deltaY;
     double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
     double deltaX = delta.x() / width() * 512;
 
@@ -919,7 +920,6 @@ void ChartCanvas::endMoveSelection()
         changes.append(qMakePair(original, newNote));
     }
 
-    // 恢复网格设置
     if (m_wasGridSnapEnabled)
     {
         m_gridSnap = m_gridSnapBackup;
@@ -1345,7 +1345,6 @@ double ChartCanvas::currentPlayTime() const
 
 void ChartCanvas::onSelectionChanged()
 {
-    // nothing needed
 }
 
 void ChartCanvas::keyPressEvent(QKeyEvent *event)
@@ -1452,12 +1451,12 @@ void ChartCanvas::performDelayedRepaint()
 
 void ChartCanvas::invalidateCache()
 {
-    // 不再需要位置缓存失效，但保留接口兼容性
+    // 不再需要位置缓存失效，保留接口兼容
 }
 
 void ChartCanvas::updateNotePosCacheIfNeeded()
 {
-    // 已废弃，由 rebuildNoteTimesCache 替代
+    // 已废弃，空实现
 }
 
 void ChartCanvas::resizeEvent(QResizeEvent *event)
