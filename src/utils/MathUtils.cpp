@@ -5,6 +5,68 @@
 #include <numeric> // for std::gcd
 #include <QDebug>
 
+// 构建 BPM 累计时间缓存（优化1：将 O(N*M) 降为 O(N + M*log M)）
+QVector<MathUtils::BpmCacheEntry> MathUtils::buildBpmTimeCache(const QVector<BpmEntry> &bpmList, int offsetMs)
+{
+    QVector<BpmCacheEntry> cache;
+    if (bpmList.isEmpty())
+        return cache;
+
+    double accumulated = -offsetMs; // 累计毫秒数（含 offset）
+    for (int i = 0; i < bpmList.size(); ++i)
+    {
+        const BpmEntry &entry = bpmList[i];
+        double beatPos = entry.beatNum + static_cast<double>(entry.numerator) / entry.denominator;
+
+        BpmCacheEntry cacheEntry;
+        cacheEntry.beatPos = beatPos;
+        cacheEntry.accumulatedMs = accumulated;
+        cacheEntry.bpm = entry.bpm;
+        cache.append(cacheEntry);
+
+        // 计算到下一段的时长，累加到 accumulated（最后一段后面无下一段，无需累加）
+        if (i + 1 < bpmList.size())
+        {
+            const BpmEntry &next = bpmList[i + 1];
+            double nextBeatPos = next.beatNum + static_cast<double>(next.numerator) / next.denominator;
+            double beatLen = nextBeatPos - beatPos;
+            if (entry.bpm > 0)
+                accumulated += beatLen * (60000.0 / entry.bpm);
+        }
+    }
+    return cache;
+}
+
+// 使用缓存的高效 beatToMs（二分查找）
+double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
+                           const QVector<BpmCacheEntry> &cache)
+{
+    if (cache.isEmpty())
+        return 0.0;
+
+    double targetBeat = beatNum + static_cast<double>(numerator) / denominator;
+
+    // 二分查找最后一个 beatPos <= targetBeat 的段
+    int lo = 0, hi = cache.size() - 1;
+    while (lo < hi)
+    {
+        int mid = (lo + hi + 1) / 2;
+        if (cache[mid].beatPos <= targetBeat)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+
+    const BpmCacheEntry &seg = cache[lo];
+    double beatDelta = targetBeat - seg.beatPos;
+    if (seg.bpm <= 0)
+        return seg.accumulatedMs;
+
+    double ms = seg.accumulatedMs + beatDelta * (60000.0 / seg.bpm);
+    return ms;
+}
+
+// 原始 beatToMs（保留兼容，内部临时构建缓存）
 double MathUtils::beatToMs(int beatNum, int numerator, int denominator,
                            const QVector<BpmEntry> &bpmList, int offsetMs)
 {

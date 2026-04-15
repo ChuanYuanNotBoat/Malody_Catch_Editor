@@ -7,7 +7,7 @@
 
 void GridRenderer::drawGrid(QPainter &painter, const QRect &rect, int xDivisions,
                             double startTime, double endTime, double timeDivision,
-                            const QVector<BpmEntry> &bpmList, int offset,
+                            const QVector<MathUtils::BpmCacheEntry> &bpmCache,
                             bool verticalFlip)
 {
     try
@@ -21,23 +21,36 @@ void GridRenderer::drawGrid(QPainter &painter, const QRect &rect, int xDivisions
             painter.drawLine(x, rect.top(), x, rect.bottom());
         }
 
-        if (bpmList.isEmpty())
+        if (bpmCache.isEmpty())
             return;
 
         double totalDuration = endTime - startTime;
         if (totalDuration <= 0)
             return;
 
-        // 将起止时间转换为拍数（仅两次调用）
-        int startBeatNum, startNum, startDen;
-        MathUtils::msToBeat(startTime, bpmList, offset, startBeatNum, startNum, startDen);
-        double startBeatPos = startBeatNum + static_cast<double>(startNum) / startDen;
+        // 1. 根据 startTime 在缓存中找到对应段，计算 startBeatPos
+        auto findBeatFromTime = [&](double timeMs) -> double
+        {
+            if (bpmCache.isEmpty())
+                return 0.0;
+            // 二分查找最后一个 accumulatedMs <= timeMs 的段
+            int lo = 0, hi = bpmCache.size() - 1;
+            while (lo < hi)
+            {
+                int mid = (lo + hi + 1) / 2;
+                if (bpmCache[mid].accumulatedMs <= timeMs)
+                    lo = mid;
+                else
+                    hi = mid - 1;
+            }
+            const auto &seg = bpmCache[lo];
+            double beatOffset = (timeMs - seg.accumulatedMs) * (seg.bpm / 60000.0);
+            return seg.beatPos + beatOffset;
+        };
 
-        int endBeatNum, endNum, endDen;
-        MathUtils::msToBeat(endTime, bpmList, offset, endBeatNum, endNum, endDen);
-        double endBeatPos = endBeatNum + static_cast<double>(endNum) / endDen;
+        double startBeatPos = findBeatFromTime(startTime);
+        double endBeatPos = findBeatFromTime(endTime);
 
-        // 以 timeDivision 的倍数作为网格刻度
         int timeDivInt = static_cast<int>(timeDivision);
         if (timeDivInt <= 0)
             timeDivInt = 1;
@@ -45,18 +58,26 @@ void GridRenderer::drawGrid(QPainter &painter, const QRect &rect, int xDivisions
         int startTick = static_cast<int>(std::ceil(startBeatPos * timeDivInt));
         int endTick = static_cast<int>(std::floor(endBeatPos * timeDivInt));
 
+        // LOD 优化：若相邻刻度间距小于 5 像素，则跳过中间刻度（仅绘制整数拍）
+        double pixelsPerMs = rect.height() / totalDuration;
+        double minPixelStep = 5.0;
+        double msPerTick = (60000.0 / 120.0) / timeDivInt; // 估算 120 BPM 下每刻度毫秒
+        bool skipDenseTicks = (msPerTick * pixelsPerMs < minPixelStep);
+
         painter.setPen(QPen(Qt::gray, 1));
         QFont font = painter.font();
         font.setPointSize(8);
         painter.setFont(font);
 
+        int lastDrawnY = -9999;
         for (int tick = startTick; tick <= endTick; ++tick)
         {
             int beatNum = tick / timeDivInt;
             int numerator = tick % timeDivInt;
             int denominator = timeDivInt;
 
-            double ms = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
+            // 使用缓存快速计算毫秒时间
+            double ms = MathUtils::beatToMs(beatNum, numerator, denominator, bpmCache);
             if (ms < startTime || ms > endTime)
                 continue;
 
@@ -69,6 +90,18 @@ void GridRenderer::drawGrid(QPainter &painter, const QRect &rect, int xDivisions
             {
                 y = rect.bottom() - static_cast<int>((ms - startTime) / totalDuration * rect.height());
             }
+
+            // LOD 简化：如果密度过高且不是整数拍，跳过
+            if (skipDenseTicks && numerator != 0)
+            {
+                // 仍然绘制整数拍
+                continue;
+            }
+
+            // 避免完全重叠的线条（当像素间距为0时）
+            if (qAbs(y - lastDrawnY) < 1)
+                continue;
+            lastDrawnY = y;
 
             painter.drawLine(rect.left(), y, rect.right(), y);
 

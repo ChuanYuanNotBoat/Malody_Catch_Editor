@@ -152,6 +152,7 @@ private:
     QVector<double> m_noteBeatPositions;
     QVector<double> m_noteEndBeatPositions;
     QVector<double> m_noteXPositions;
+    QVector<double> m_noteTimesMs; // 优化2：预计算音符的毫秒时间（含 offset）
     QVector<NoteType> m_noteTypes;
     bool m_noteDataDirty;
     bool m_timesDirty;
@@ -208,6 +209,7 @@ private:
     bool m_isScrolling;
 
     QTimer *m_repaintTimer;
+    QTimer *m_playbackTimer; // 优化4：播放驱动定时器（16ms 间隔）
     bool m_repaintPending;
     bool m_forceRepaint;
     qint64 m_lastRepaintTime;
