@@ -384,7 +384,7 @@ void MainWindow::createCentralArea()
 
     // 连接 NoteEditPanel 的信号
     connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
-    connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
+    // connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
     connect(d->notePanel, &NoteEditPanel::gridSnapChanged, d->canvas, [this](bool on)
             {
         Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));

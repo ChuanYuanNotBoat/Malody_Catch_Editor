@@ -26,8 +26,7 @@ void Chart::removeNote(const Note &note)
         return;
     }
 
-    // 如果相等性查找失败，可能是由于分数表示不同（如 1/2 与 2/4）
-    // 回退到通过 ID 查找，因为每个音符都有唯一 ID
+    // 如果相等性查找失败，仅通过 ID 精确查找
     if (!note.id.isEmpty())
     {
         for (int i = 0; i < m_notes.size(); ++i)
@@ -40,47 +39,9 @@ void Chart::removeNote(const Note &note)
         }
     }
 
-    // 如果仍然找不到，尝试通过时间和位置近似匹配（容错处理）
-    // 这主要为了处理撤销/重做时由于时间转换精度问题导致的微小差异
-    const double epsilon = 1e-4;
-    for (int i = 0; i < m_notes.size(); ++i)
-    {
-        const Note &existing = m_notes[i];
-        if (existing.type != note.type)
-            continue;
-
-        // 检查时间是否近似相等
-        double existingStart = existing.getStartBeat();
-        double noteStart = note.getStartBeat();
-        if (std::abs(existingStart - noteStart) > epsilon)
-            continue;
-
-        // 对于 rain 音符，还需要检查结束时间
-        if (existing.type == NoteType::RAIN)
-        {
-            double existingEnd = existing.getEndBeat();
-            double noteEnd = note.getEndBeat();
-            if (std::abs(existingEnd - noteEnd) > epsilon)
-                continue;
-        }
-
-        // 检查 x 坐标（普通和 rain 音符）
-        if (existing.type != NoteType::SOUND && existing.x != note.x)
-            continue;
-
-        // 音效音符检查声音属性
-        if (existing.type == NoteType::SOUND)
-        {
-            if (existing.sound != note.sound || existing.vol != note.vol || existing.offset != note.offset)
-                continue;
-        }
-
-        // 匹配成功，移除
-        qDebug() << "[Chart] removeNote: approximate match used for note at beat" << noteStart;
-        m_notes.removeAt(i);
-        return;
-    }
-    qDebug() << "[Chart] removeNote: failed to find note for removal, beat" << note.getStartBeat();
+    // 找不到匹配项，输出警告但不执行删除，避免误删相邻音符
+    qDebug() << "[Chart] removeNote: failed to find note with id" << note.id
+             << "for removal, beat" << note.getStartBeat();
 }
 
 void Chart::clearNotes() { m_notes.clear(); }

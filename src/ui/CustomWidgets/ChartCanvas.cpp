@@ -57,6 +57,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_isDragging(false),
       m_isPasting(false),
       m_useCursorPaste(false),
+      m_pasteCursorPos(0, 0),
       m_intervalState(IntervalNone),
       m_intervalStartTime(0.0),
       m_isMovingSelection(false),
@@ -122,6 +123,19 @@ void ChartCanvas::rebuildNoteTimesCache()
     const auto &notes = m_chartController->chart()->notes();
     const auto &bpmList = m_chartController->chart()->bpmList();
     int offset = m_chartController->chart()->meta().offset;
+
+    // 防御性检查：若 BPM 列表为空，无法计算时间，清空缓存并返回
+    if (bpmList.isEmpty())
+    {
+        qWarning() << "ChartCanvas::rebuildNoteTimesCache: BPM list is empty, cannot compute times.";
+        m_noteBeatPositions.clear();
+        m_noteEndBeatPositions.clear();
+        m_noteXPositions.clear();
+        m_noteTypes.clear();
+        m_timesDirty = false;
+        m_noteDataDirty = false;
+        return;
+    }
 
     const int N = notes.size();
     m_noteBeatPositions.resize(N);
@@ -424,6 +438,7 @@ void ChartCanvas::paste()
 
 void ChartCanvas::pasteAtCursor(const QPoint &pos)
 {
+    Q_ASSERT_X(!pos.isNull(), "ChartCanvas::pasteAtCursor", "Cursor position must be valid");
     if (!m_selectionController)
         return;
     QVector<Note> clipboard = m_selectionController->getClipboard();
@@ -584,9 +599,11 @@ void ChartCanvas::confirmPaste()
     double baseOriginalTime = std::numeric_limits<double>::max();
     for (const Note &note : m_pasteNotes)
     {
-        if (note.type == NoteType::SOUND) continue;
+        if (note.type == NoteType::SOUND)
+            continue;
         double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-        if (t < baseOriginalTime) baseOriginalTime = t;
+        if (t < baseOriginalTime)
+            baseOriginalTime = t;
     }
     if (baseOriginalTime == std::numeric_limits<double>::max())
     {
@@ -612,7 +629,8 @@ void ChartCanvas::confirmPaste()
     QVector<Note> newNotes;
     for (const Note &originalNote : m_pasteNotes)
     {
-        if (originalNote.type == NoteType::SOUND) continue;
+        if (originalNote.type == NoteType::SOUND)
+            continue;
         Note newNote = originalNote;
         newNote.id = Note::generateId();
 

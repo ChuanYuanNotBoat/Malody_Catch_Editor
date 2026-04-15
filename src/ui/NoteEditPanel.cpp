@@ -18,7 +18,7 @@
 #include <QDebug>
 
 NoteEditPanel::NoteEditPanel(QWidget *parent)
-    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_gridDivisionSpin(nullptr), m_currentMode(0)
+    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0)
 {
     setupUi();
 }
@@ -90,9 +90,11 @@ void NoteEditPanel::onGridSettingsClicked()
 
     QCheckBox *snapCheck = new QCheckBox(tr("Enable Grid Snap"));
     snapCheck->setChecked(m_gridSnapCheck->isChecked());
+
     QSpinBox *divisionSpin = new QSpinBox;
     divisionSpin->setRange(4, 64);
-    divisionSpin->setValue(m_gridDivisionSpin ? m_gridDivisionSpin->value() : 20);
+    divisionSpin->setValue(20); // 默认值，实际应由外部同步，此处发出信号后由外部更新
+
     form.addRow(tr("Snap to Grid:"), snapCheck);
     form.addRow(tr("Grid Divisions (4-64):"), divisionSpin);
 
@@ -104,16 +106,10 @@ void NoteEditPanel::onGridSettingsClicked()
     if (dialog.exec() == QDialog::Accepted)
     {
         m_gridSnapCheck->setChecked(snapCheck->isChecked());
-        if (m_gridDivisionSpin)
-        {
-            m_gridDivisionSpin->setValue(divisionSpin->value());
-        }
+        int newDivision = divisionSpin->value();
+        emit gridDivisionChanged(newDivision);
+        Logger::info(QString("[Grid] NoteEditPanel: grid division changed to %1").arg(newDivision));
     }
-}
-
-void NoteEditPanel::onGridDivisionChanged(int value)
-{
-    emit gridDivisionChanged(value);
 }
 
 void NoteEditPanel::onGridSnapToggled(bool on)

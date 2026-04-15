@@ -22,14 +22,14 @@ signals:
     void timeDivisionChanged(int division);
     void gridDivisionChanged(int division);
     void gridSnapChanged(bool enabled);
-    void copyRequested(); // 新增复制信号
+    void copyRequested();
 
 private slots:
     void onNoteModeClicked();
     void onRainModeClicked();
     void onDeleteModeClicked();
     void onGridSettingsClicked();
-    void onGridDivisionChanged(int value);
+    // void onGridDivisionChanged(int value);
     void onGridSnapToggled(bool on);
     void onTimeDivisionChanged(int index);
 
@@ -42,8 +42,7 @@ private:
     QButtonGroup *m_modeGroup;
     QComboBox *m_timeDivisionCombo;
     QCheckBox *m_gridSnapCheck;
-    QSpinBox *m_gridDivisionSpin;
     QPushButton *m_gridSettingsBtn;
-    QPushButton *m_copyButton; // 新增复制按钮
+    QPushButton *m_copyButton;
     int m_currentMode;
 };
