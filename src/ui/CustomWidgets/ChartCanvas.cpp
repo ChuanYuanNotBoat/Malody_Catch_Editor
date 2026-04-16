@@ -87,6 +87,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_pasteXOffset(0.0),
       m_pasteTimeOffsetRaw(0.0),
       m_pasteXOffsetRaw(0.0),
+      m_pasteAnchorBeat(0.0),
       m_pasteRefBeat(0.0),
       m_pasteDragReferenceIndex(-1),
       m_pasteBaseOriginalTimeMs(std::numeric_limits<double>::max()),
@@ -533,6 +534,7 @@ void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cu
     m_pasteNotes = notes;
     m_pasteOriginalTimesMs.clear();
     m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
+    m_pasteAnchorBeat = 0.0;
     m_isPasting = true;
     m_pasteTimeOffset = 0.0;
     m_pasteXOffset = 0.0;
@@ -548,6 +550,19 @@ void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cu
     else
     {
         m_useCursorPaste = false;
+    }
+
+    if (m_useCursorPaste)
+    {
+        m_pasteAnchorBeat = yToBeat(m_pasteCursorPos.y());
+    }
+    else
+    {
+        const double baselineRatio = 0.8;
+        if (m_verticalFlip)
+            m_pasteAnchorBeat = m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange();
+        else
+            m_pasteAnchorBeat = m_scrollBeat + baselineRatio * effectiveVisibleBeatRange();
     }
 
     // 璁＄畻鏈€鏃╅煶绗︾殑鍘熷鎷嶆暟锛堢敤浜庡惛闄勶級
@@ -693,6 +708,7 @@ void ChartCanvas::confirmPaste()
         m_pasteNotes.clear();
         m_pasteOriginalTimesMs.clear();
         m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
+        m_pasteAnchorBeat = 0.0;
         return;
     }
 
@@ -737,8 +753,6 @@ void ChartCanvas::confirmPaste()
         outDen = targetDen;
     };
 
-    double referenceTime = calculatePasteReferenceTime();
-
     QVector<double> fallbackOriginalTimes;
     bool usingCachedOriginalTimes =
         (m_pasteOriginalTimesMs.size() == m_pasteNotes.size()) &&
@@ -773,12 +787,13 @@ void ChartCanvas::confirmPaste()
         m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
         m_pasteTimeOffsetRaw = 0.0;
         m_pasteXOffsetRaw = 0.0;
+        m_pasteAnchorBeat = 0.0;
         update();
         return;
     }
 
     const double baseOriginalBeat = beatFromTimeMs(baseOriginalTime);
-    const double referenceBeat = beatFromTimeMs(referenceTime);
+    const double referenceBeat = m_pasteAnchorBeat;
     const double baseBeatShift = referenceBeat - baseOriginalBeat;
     const double snappedTotalBeatShift = snapPasteTimeOffset(baseBeatShift + m_pasteTimeOffset);
 
@@ -840,6 +855,7 @@ void ChartCanvas::confirmPaste()
     m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
     m_pasteTimeOffsetRaw = 0.0;
     m_pasteXOffsetRaw = 0.0;
+    m_pasteAnchorBeat = 0.0;
     update();
 }
 
@@ -1105,8 +1121,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.setOpacity(0.5);
 
         // 璁＄畻褰撳墠棰勮鍩哄噯鏃堕棿锛堝弬鑰冪嚎/鍏夋爣鏃堕棿锟?
-        double refTime = calculatePasteReferenceTime();
-
         // 鎵惧埌鏈€鏃╅煶绗︾殑鍘熷鏃堕棿
         QVector<double> fallbackOriginalTimes;
         bool usingCachedOriginalTimes =
@@ -1166,7 +1180,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
                 return MathUtils::beatToFloat(b, n, d);
             };
             const double baseOriginalBeat = previewBeatFromTimeMs(baseOriginalTime);
-            const double referenceBeat = previewBeatFromTimeMs(refTime);
+            const double referenceBeat = m_pasteAnchorBeat;
             const double baseBeatShift = referenceBeat - baseOriginalBeat;
             const double totalBeatShift = snapPasteTimeOffset(baseBeatShift + m_pasteTimeOffset);
             auto previewAssignBeatWithDen = [](double beatFloat, int targetDen, int &outBeatNum, int &outNum, int &outDen)
@@ -2076,6 +2090,7 @@ void ChartCanvas::cancelPaste()
         m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
         m_pasteTimeOffsetRaw = 0.0;
         m_pasteXOffsetRaw = 0.0;
+        m_pasteAnchorBeat = 0.0;
         update();
         emit statusMessage(tr("Paste cancelled."));
     }

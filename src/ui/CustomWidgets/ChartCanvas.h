@@ -145,6 +145,7 @@ private:
     double m_pasteXOffset;
     double m_pasteTimeOffsetRaw;                         // 粘贴预览原始时间偏移（未吸附）
     double m_pasteXOffsetRaw;                            // 粘贴预览原始 X 偏移
+    double m_pasteAnchorBeat;                            // 进入预览时锁定的参考拍
     double m_pasteRefBeat;
     int m_pasteDragReferenceIndex;
     void cancelPaste();
