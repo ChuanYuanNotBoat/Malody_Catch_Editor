@@ -9,6 +9,7 @@ SpeedPopup::SpeedPopup(QWidget *parent)
     QHBoxLayout *layout = new QHBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
     m_buttonGroup = new QButtonGroup(this);
+    m_buttonGroup->setExclusive(true);
     QList<double> speeds = {0.25, 0.5, 0.75, 1.0};
     for (double sp : speeds)
     {
@@ -26,11 +27,17 @@ SpeedPopup::SpeedPopup(QWidget *parent)
 void SpeedPopup::setSpeed(double speed)
 {
     m_currentSpeed = speed;
+    m_buttonGroup->setExclusive(true);
     int id = static_cast<int>(speed * 100);
     if (QAbstractButton *btn = m_buttonGroup->button(id))
+    {
         btn->setChecked(true);
+    }
     else
-        m_buttonGroup->setExclusive(false);
+    {
+        if (QAbstractButton *checked = m_buttonGroup->checkedButton())
+            checked->setChecked(false);
+    }
 }
 
 void SpeedPopup::onSpeedSelected(int id)

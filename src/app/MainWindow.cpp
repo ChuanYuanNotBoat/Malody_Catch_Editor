@@ -29,6 +29,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QFileInfo>
 #include <QDir>
@@ -106,6 +107,7 @@ public:
     QAction *hyperfruitAction;
     QAction *verticalFlipAction;
     QAction *playAction;
+    QActionGroup *speedActionGroup;
     QMenu *skinMenu;
     QAction *noteSizeAction;
     QAction *calibrateSkinAction;
@@ -129,6 +131,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->playbackController = playCtrl;
     d->skin = skin;
     d->leftPanel = nullptr;
+    d->speedActionGroup = nullptr;
     d->currentChartPath.clear();
     d->isModified = false;
 
@@ -290,6 +293,8 @@ void MainWindow::createMenus()
     d->playAction->setShortcut(Qt::Key_Space);
     playMenu->addSeparator();
     QMenu *speedMenu = playMenu->addMenu(tr("&Speed"));
+    d->speedActionGroup = new QActionGroup(this);
+    d->speedActionGroup->setExclusive(true);
     for (double sp : {0.25, 0.5, 0.75, 1.0})
     {
         QAction *act = speedMenu->addAction(tr("%1x").arg(sp), [this, sp]()
@@ -298,8 +303,19 @@ void MainWindow::createMenus()
             Settings::instance().setPlaybackSpeed(sp);
             Logger::info(QString("Playback speed set to %1x").arg(sp)); });
         act->setCheckable(true);
+        act->setData(sp);
+        act->setActionGroup(d->speedActionGroup);
         act->setChecked(qFuzzyCompare(sp, Settings::instance().playbackSpeed()));
     }
+    connect(d->playbackController, &PlaybackController::speedChanged, this, [this](double speed)
+            {
+        if (!d->speedActionGroup)
+            return;
+        for (QAction *action : d->speedActionGroup->actions())
+        {
+            const double actionSpeed = action->data().toDouble();
+            action->setChecked(qFuzzyCompare(actionSpeed, speed));
+        } });
 
     // 工具菜单
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
