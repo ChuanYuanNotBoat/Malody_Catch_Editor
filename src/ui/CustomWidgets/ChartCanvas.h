@@ -10,6 +10,7 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include "model/Note.h"
+#include "utils/MathUtils.h"
 
 class ChartController;
 class SelectionController;
@@ -110,6 +111,9 @@ private:
     double getNoteTimeMs(const Note &note) const;
     void confirmPaste();
 
+    void rebuildBpmTimeCache();
+    const QVector<MathUtils::BpmCacheEntry> &bpmTimeCache();
+
     void rebuildNoteTimesCache();
 
     double effectiveVisibleBeatRange() const
@@ -157,6 +161,8 @@ private:
     QVector<NoteType> m_noteTypes;
     bool m_noteDataDirty;
     bool m_timesDirty;
+    QVector<MathUtils::BpmCacheEntry> m_bpmTimeCache;
+    bool m_bpmCacheDirty;
 
     ChartController *m_chartController;
     SelectionController *m_selectionController;
@@ -228,6 +234,10 @@ private:
     double m_currentFps;
 
     bool m_isPlaying;
+    qint64 m_lastScrollSignalTimeMs;
+    bool m_hasPlaybackAnchor;
+    double m_playbackAnchorMs;
+    qint64 m_playbackAnchorWallMs;
 
     int leftMargin() const;
     int rightMargin() const;

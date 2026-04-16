@@ -78,6 +78,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_backgroundCacheDirty(true),
       m_noteDataDirty(true),
       m_timesDirty(true),
+      m_bpmCacheDirty(true),
       m_frameCount(0),
       m_currentFps(0.0),
       m_isPlaying(false),
@@ -86,7 +87,11 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_pasteXOffset(0.0),
       m_pasteRefBeat(0.0),
       m_pasteDragReferenceIndex(-1),
-      m_pasteBaseOriginalTimeMs(std::numeric_limits<double>::max())
+      m_pasteBaseOriginalTimeMs(std::numeric_limits<double>::max()),
+      m_lastScrollSignalTimeMs(0),
+      m_hasPlaybackAnchor(false),
+      m_playbackAnchorMs(0.0),
+      m_playbackAnchorWallMs(0)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -117,6 +122,34 @@ ChartCanvas::~ChartCanvas()
     delete m_backgroundRenderer;
 }
 
+void ChartCanvas::rebuildBpmTimeCache()
+{
+    m_bpmTimeCache.clear();
+    if (!m_chartController || !m_chartController->chart())
+    {
+        m_bpmCacheDirty = false;
+        return;
+    }
+
+    const auto &bpmList = m_chartController->chart()->bpmList();
+    if (bpmList.isEmpty())
+    {
+        m_bpmCacheDirty = false;
+        return;
+    }
+
+    const int offset = m_chartController->chart()->meta().offset;
+    m_bpmTimeCache = MathUtils::buildBpmTimeCache(bpmList, offset);
+    m_bpmCacheDirty = false;
+}
+
+const QVector<MathUtils::BpmCacheEntry> &ChartCanvas::bpmTimeCache()
+{
+    if (m_bpmCacheDirty)
+        rebuildBpmTimeCache();
+    return m_bpmTimeCache;
+}
+
 void ChartCanvas::rebuildNoteTimesCache()
 {
     if (!m_chartController || !m_chartController->chart())
@@ -132,7 +165,6 @@ void ChartCanvas::rebuildNoteTimesCache()
     }
     const auto &notes = m_chartController->chart()->notes();
     const auto &bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
 
     // 防御性检查：若 BPM 列表为空，无法计算时间，清空缓存并返回
     if (bpmList.isEmpty())
@@ -149,7 +181,18 @@ void ChartCanvas::rebuildNoteTimesCache()
     }
 
     // 优化2：构建 BPM 时间缓存，用于快速计算音符毫秒时间
-    QVector<MathUtils::BpmCacheEntry> bpmCache = MathUtils::buildBpmTimeCache(bpmList, offset);
+    const QVector<MathUtils::BpmCacheEntry> &bpmCache = bpmTimeCache();
+    if (bpmCache.isEmpty())
+    {
+        m_noteBeatPositions.clear();
+        m_noteEndBeatPositions.clear();
+        m_noteXPositions.clear();
+        m_noteTimesMs.clear();
+        m_noteTypes.clear();
+        m_timesDirty = false;
+        m_noteDataDirty = false;
+        return;
+    }
 
     const int N = notes.size();
     m_noteBeatPositions.resize(N);
@@ -204,6 +247,7 @@ void ChartCanvas::setChartController(ChartController *controller)
             m_hyperCacheValid = false;
             m_noteDataDirty = true;
             m_timesDirty = true;
+            m_bpmCacheDirty = true;
             m_backgroundCacheDirty = true;
             update(); });
         m_hyperfruitDetector->setCS(3.2);
@@ -211,6 +255,7 @@ void ChartCanvas::setChartController(ChartController *controller)
         updateBackgroundCache();
         m_timesDirty = true;
         m_noteDataDirty = true;
+        m_bpmCacheDirty = true;
     }
     update();
 }
@@ -238,12 +283,17 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
             if (state == PlaybackController::Playing) {
                 m_autoScrollEnabled = true;
                 m_isPlaying = true;
+                m_lastScrollSignalTimeMs = 0;
+                m_hasPlaybackAnchor = false;
+                m_playbackAnchorMs = m_playbackController ? m_playbackController->currentTime() : m_currentPlayTime;
+                m_playbackAnchorWallMs = QDateTime::currentMSecsSinceEpoch();
                 // 优化4：启动播放定时器
                 if (m_playbackTimer)
                     m_playbackTimer->start();
                 requestNextFrame();
             } else {
                 m_isPlaying = false;
+                m_hasPlaybackAnchor = false;
                 // 优化4：停止播放定时器
                 if (m_playbackTimer)
                     m_playbackTimer->stop();
@@ -610,7 +660,8 @@ void ChartCanvas::updateDragPaste(const QPointF &currentPos)
     // 时间偏移（拍数）
     double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
     // X 偏移（像素转 X 坐标）
-    double deltaX = delta.x() / width() * 512.0;
+    const int availableWidth = qMax(1, width() - leftMargin() - rightMargin());
+    double deltaX = delta.x() / static_cast<double>(availableWidth) * 512.0;
 
     double newTimeOffset = m_pasteTimeOffset + deltaBeat;
     double newXOffset = m_pasteXOffset + deltaX;
@@ -751,7 +802,7 @@ void ChartCanvas::confirmPaste()
         }
 
         // X 坐标偏移并边界约束
-        newNote.x = originalNote.x + static_cast<int>(finalXShift);
+        newNote.x = originalNote.x + qRound(finalXShift);
         newNote.x = qBound(0, newNote.x, 512);
 
         newNotes.append(newNote);
@@ -846,13 +897,26 @@ void ChartCanvas::requestNextFrame()
         return;
     }
 
-    if (m_playbackController)
-    {
-        m_currentPlayTime = m_playbackController->currentTime();
-    }
-
     if (m_autoScrollEnabled && m_chartController && m_chartController->chart())
     {
+        if (m_playbackController)
+        {
+            const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+            const double speed = m_playbackController->speed();
+            if (!m_hasPlaybackAnchor)
+            {
+                m_playbackAnchorMs = m_playbackController->currentTime();
+                m_playbackAnchorWallMs = nowMs;
+                m_hasPlaybackAnchor = true;
+            }
+            double predicted = m_playbackAnchorMs +
+                               (nowMs - m_playbackAnchorWallMs) * speed;
+            // Guard against tiny backwards jitter in source timestamps.
+            if (predicted < m_currentPlayTime)
+                predicted = m_currentPlayTime;
+            m_currentPlayTime = predicted;
+        }
+
         const auto &bpmList = m_chartController->chart()->bpmList();
         int offset = m_chartController->chart()->meta().offset;
         int beatNum, numerator, denominator;
@@ -873,7 +937,12 @@ void ChartCanvas::requestNextFrame()
         m_scrollBeat = targetScrollBeat;
         if (m_scrollBeat < 0)
             m_scrollBeat = 0;
-        emit scrollPositionChanged(m_scrollBeat);
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        if (m_lastScrollSignalTimeMs == 0 || nowMs - m_lastScrollSignalTimeMs >= 33)
+        {
+            emit scrollPositionChanged(m_scrollBeat);
+            m_lastScrollSignalTimeMs = nowMs;
+        }
     }
 
     update();
@@ -915,19 +984,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     double endBeat = startBeat + visibleRange;
 
     // 优化2：计算可见范围的毫秒时间（用于 Y 坐标线性映射）
-    double startTimeMs = 0.0, endTimeMs = 0.0, invTimeRange = 1.0;
-    if (!bpmList.isEmpty())
-    {
-        QVector<MathUtils::BpmCacheEntry> bpmCache = MathUtils::buildBpmTimeCache(bpmList, offset);
-        int sb, sn, sd, eb, en, ed;
-        MathUtils::floatToBeat(startBeat, sb, sn, sd);
-        MathUtils::floatToBeat(endBeat, eb, en, ed);
-        startTimeMs = MathUtils::beatToMs(sb, sn, sd, bpmCache);
-        endTimeMs = MathUtils::beatToMs(eb, en, ed, bpmCache);
-        double timeRange = endTimeMs - startTimeMs;
-        if (timeRange > 0)
-            invTimeRange = 1.0 / timeRange;
-    }
+    
 
     if (m_hyperfruitEnabled && !bpmList.isEmpty())
     {
@@ -963,7 +1020,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
 
         double beat = m_noteBeatPositions[i];
         double endBeatNote = m_noteEndBeatPositions[i];
-        double timeMs = m_noteTimesMs[i]; // 优化2：直接使用预计算的毫秒时间
 
         if (type == NoteType::NORMAL)
         {
@@ -977,7 +1033,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         }
 
         // 优化2：基于毫秒时间线性映射到 Y 坐标，避免每帧调用 beatToMs
-        double y = baseY + sign * ((timeMs - startTimeMs) * invTimeRange * canvasHeight);
+        double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
 
         if (type == NoteType::RAIN)
         {
@@ -1070,18 +1126,12 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
                 double newTime = originalTime + finalTimeShiftMs;
                 // 优化2：使用已计算的毫秒时间（newTime）映射 Y 坐标
                 double y;
-                if (!bpmList.isEmpty() && (endTimeMs - startTimeMs) > 0)
-                    y = baseY + sign * ((newTime - startTimeMs) * invTimeRange * canvasHeight);
-                else
-                {
-                    int beatNum, num, den;
-                    MathUtils::msToBeat(newTime, bpmList, offset, beatNum, num, den);
-                    double beat = beatNum + static_cast<double>(num) / den;
-                    y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
-                }
-                double x = lmargin + (note.x / 512.0) * availableWidth;
-                // 应用 X 偏移
-                x += m_pasteXOffset;
+                int beatNum, num, den;
+                MathUtils::msToBeat(newTime, bpmList, offset, beatNum, num, den);
+                double beat = beatNum + static_cast<double>(num) / den;
+                y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
+                double shiftedX = note.x + m_pasteXOffset;
+                double x = lmargin + (shiftedX / 512.0) * availableWidth;
                 // 预览时不进行边界裁剪
                 m_noteRenderer->drawNote(painter, note, QPointF(x, y), false, -1);
             }
@@ -1177,11 +1227,11 @@ void ChartCanvas::drawGrid(QPainter &painter)
             rect.adjust(lmargin, 0, -rmargin, 0);
         }
 
-        const auto &bpmList = m_chartController->chart()->bpmList();
-        int offset = m_chartController->chart()->meta().offset;
 
         // 优化3：构建 BPM 时间缓存并传递给网格渲染器，减少重复转换
-        QVector<MathUtils::BpmCacheEntry> bpmCache = MathUtils::buildBpmTimeCache(bpmList, offset);
+        const QVector<MathUtils::BpmCacheEntry> &bpmCache = bpmTimeCache();
+        if (bpmCache.isEmpty())
+            return;
 
         int startBeatNum, startNum, startDen;
         MathUtils::floatToBeat(m_scrollBeat, startBeatNum, startNum, startDen);
@@ -1735,12 +1785,52 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
 
 void ChartCanvas::playbackPositionChanged(double timeMs)
 {
-    m_currentPlayTime = timeMs;
-
-    if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing || !m_autoScrollEnabled)
+    if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing)
     {
+        m_hasPlaybackAnchor = false;
+        m_currentPlayTime = timeMs;
         update();
         return;
+    }
+
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const double speed = m_playbackController->speed();
+
+    if (!m_hasPlaybackAnchor)
+    {
+        m_playbackAnchorMs = timeMs;
+        m_playbackAnchorWallMs = nowMs;
+        m_hasPlaybackAnchor = true;
+        m_currentPlayTime = timeMs;
+        return;
+    }
+
+    const double predicted =
+        m_playbackAnchorMs + (nowMs - m_playbackAnchorWallMs) * speed;
+    const double delta = timeMs - predicted;
+
+    // Small negative delta is usually backend jitter; keep monotonic progression.
+    if (delta > -20.0 && delta < 20.0)
+    {
+        m_playbackAnchorMs = predicted + delta * 0.2;
+        m_playbackAnchorWallMs = nowMs;
+    }
+    else if (delta < -20.0 && delta > -180.0)
+    {
+        m_playbackAnchorMs = predicted;
+        m_playbackAnchorWallMs = nowMs;
+    }
+    else
+    {
+        // Large jump: treat as explicit seek or real discontinuity.
+        m_playbackAnchorMs = timeMs;
+        m_playbackAnchorWallMs = nowMs;
+    }
+
+    if (!m_autoScrollEnabled)
+    {
+        m_currentPlayTime = timeMs;
+        update();
     }
 }
 
