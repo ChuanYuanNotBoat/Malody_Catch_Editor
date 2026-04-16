@@ -97,8 +97,13 @@ void PlaybackController::seekTo(double timeMs)
 
 void PlaybackController::seekToBeat(int beat, int num, int den)
 {
-    // 需要谱面 BPM 表，暂时无法实现，留空
-    // 实际使用时需传入 Chart 引用
+    Q_UNUSED(beat);
+    Q_UNUSED(num);
+    Q_UNUSED(den);
+
+    const QString msg = "PlaybackController::seekToBeat is not supported without chart timing context; use seekTo(ms).";
+    Logger::warn(msg);
+    emit errorOccurred(msg);
 }
 
 double PlaybackController::currentTime() const
@@ -121,7 +126,7 @@ void PlaybackController::onAudioPositionChanged(qint64 position)
 void PlaybackController::onAudioError(const QString &error)
 {
     Logger::error(QString("PlaybackController::onAudioError - Audio error: %1").arg(error));
-    // 可以选择停止播放并更新状态
+    // Optionally stop playback and reset state.
     if (m_state != Stopped)
     {
         m_state = Stopped;

@@ -61,6 +61,7 @@ private:
     void createCentralArea();
     void retranslateUi();
     void populateSkinMenu();
+    bool confirmSaveIfModified(const QString &reasonText);
     void loadChartFile(const QString &filePath);
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
     QString beatmapRootPath() const; // 新增：返回 beatmap 根目录

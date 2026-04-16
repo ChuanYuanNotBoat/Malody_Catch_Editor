@@ -1,4 +1,4 @@
-// MainWindow.cpp - 支持区间复制和右键粘贴
+// MainWindow.cpp - Main window implementation.
 #include "MainWindow.h"
 #include "ui/CustomWidgets/ChartCanvas.h"
 #include "ui/NoteEditPanel.h"
@@ -31,6 +31,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QFileInfo>
+#include <QDir>
 #include <QSlider>
 #include <QSpinBox>
 #include <QDialog>
@@ -51,7 +52,37 @@
 #include <QInputDialog>
 #include <QListWidget>
 #include <QScrollBar>
+#include <QSet>
 #include <algorithm>
+
+namespace
+{
+QStringList skinBaseDirs()
+{
+    const QString appDir = QCoreApplication::applicationDirPath();
+    QStringList candidates;
+    candidates << (appDir + "/skins") << (appDir + "/resources/default_skin");
+
+    QStringList result;
+    for (const QString &dir : candidates)
+    {
+        if (QDir(dir).exists() && !result.contains(dir))
+            result.append(dir);
+    }
+    return result;
+}
+
+QString resolveSkinPathByName(const QString &skinName)
+{
+    for (const QString &baseDir : skinBaseDirs())
+    {
+        const QString fullPath = baseDir + "/" + skinName;
+        if (QDir(fullPath).exists())
+            return fullPath;
+    }
+    return QString();
+}
+} // namespace
 
 class MainWindow::Private
 {
@@ -81,6 +112,7 @@ public:
     QAction *outlineAction;
 
     QString currentChartPath;
+    bool isModified = false;
 };
 
 MainWindow::MainWindow(ChartController *chartCtrl,
@@ -98,6 +130,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->skin = skin;
     d->leftPanel = nullptr;
     d->currentChartPath.clear();
+    d->isModified = false;
 
     setupUi();
     createCentralArea();
@@ -106,6 +139,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
 
     connect(d->chartController, &ChartController::chartChanged, this, [this]()
             {
+        d->isModified = true;
         d->canvas->update();
         d->undoAction->setEnabled(d->chartController->canUndo());
         d->redoAction->setEnabled(d->chartController->canRedo());
@@ -195,7 +229,7 @@ void MainWindow::createMenus()
             Logger::debug("Deleted selected notes via menu");
         } });
 
-    // 粘贴时使用288分度选项
+    // Paste option: use 288-division conversion.
     editMenu->addSeparator();
     QAction *paste288Action = editMenu->addAction(tr("Paste with 288 Division"));
     paste288Action->setCheckable(true);
@@ -217,7 +251,7 @@ void MainWindow::createMenus()
     d->verticalFlipAction->setChecked(Settings::instance().verticalFlip());
     connect(d->verticalFlipAction, &QAction::toggled, this, &MainWindow::toggleVerticalFlip);
 
-    // 背景图片开关
+    // Background image toggle.
     QAction *bgImageAction = viewMenu->addAction(tr("Show Background Image"));
     bgImageAction->setCheckable(true);
     bgImageAction->setChecked(Settings::instance().backgroundImageEnabled());
@@ -383,9 +417,9 @@ void MainWindow::createCentralArea()
     d->bpmPanel->setChartController(d->chartController);
     d->metaPanel->setChartController(d->chartController);
 
-    // 连接 NoteEditPanel 的信号
+    // Connect NoteEditPanel signals.
     connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
-    // connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
+    connect(d->notePanel, &NoteEditPanel::gridDivisionChanged, d->canvas, &ChartCanvas::setGridDivision);
     connect(d->notePanel, &NoteEditPanel::gridSnapChanged, d->canvas, [this](bool on)
             {
         Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));
@@ -425,13 +459,57 @@ void MainWindow::createCentralArea()
     Logger::debug("Central area created with LeftPanel.");
 }
 
-// ==================== beatmap 根目录 ====================
+// ==================== beatmap root path ====================
 QString MainWindow::beatmapRootPath() const
 {
     return QCoreApplication::applicationDirPath() + "/beatmap";
 }
 
-// ==================== 打开文件（单个 .mc 或 .mcz） ====================
+bool MainWindow::confirmSaveIfModified(const QString &reasonText)
+{
+    if (!d->isModified)
+        return true;
+
+    QMessageBox::StandardButton choice = QMessageBox::warning(
+        this,
+        tr("Unsaved Changes"),
+        tr("Current chart has unsaved changes.\n%1\nDo you want to save before continuing?")
+            .arg(reasonText),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Save);
+
+    if (choice == QMessageBox::Cancel)
+        return false;
+
+    if (choice == QMessageBox::Discard)
+        return true;
+
+    QString savePath = d->currentChartPath;
+    if (savePath.isEmpty())
+    {
+        savePath = QFileDialog::getSaveFileName(
+            this,
+            tr("Save Chart As"),
+            Settings::instance().lastOpenPath(),
+            tr("Malody Catch Chart (*.mc);;All Files (*.*)"));
+        if (savePath.isEmpty())
+            return false;
+    }
+
+    if (!d->chartController->saveChart(savePath))
+    {
+        QMessageBox::critical(this, tr("Error"), tr("Failed to save chart."));
+        return false;
+    }
+
+    d->currentChartPath = savePath;
+    Settings::instance().setLastOpenPath(QFileInfo(savePath).absolutePath());
+    d->isModified = false;
+    statusBar()->showMessage(tr("Saved: %1").arg(savePath), 2000);
+    return true;
+}
+
+// ==================== Open chart file (.mc/.mcz) ====================
 void MainWindow::openChart()
 {
     QString startDir = Settings::instance().lastProjectPath();
@@ -448,7 +526,7 @@ void MainWindow::openChart()
     loadChartFile(fileName);
 }
 
-// ==================== 打开文件夹 ====================
+// ==================== Open folder ====================
 void MainWindow::openFolder()
 {
     QString startDir = Settings::instance().lastProjectPath();
@@ -478,7 +556,7 @@ void MainWindow::openFolder()
     loadChartFile(selectedPath);
 }
 
-// ==================== 加载谱面（核心逻辑） ====================
+// ==================== Load chart core logic ====================
 void MainWindow::loadChartFile(const QString &filePath)
 {
     Logger::info(QString("Loading chart file: %1").arg(filePath));
@@ -539,6 +617,7 @@ void MainWindow::loadChartFile(const QString &filePath)
     }
 
     d->canvas->update();
+    d->isModified = false;
     statusBar()->showMessage(tr("Loaded: %1").arg(QFileInfo(actualChartPath).fileName()), 3000);
 }
 
@@ -581,6 +660,9 @@ void MainWindow::switchDifficulty()
         return;
     }
 
+    if (!confirmSaveIfModified(tr("Switching difficulty will replace the current chart in editor.")))
+        return;
+
     QString currentDir = QFileInfo(d->currentChartPath).absolutePath();
     QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(currentDir);
     if (charts.size() <= 1)
@@ -615,6 +697,8 @@ void MainWindow::saveChart()
     QString currentPath = Settings::instance().lastOpenPath() + "/" + d->chartController->chart()->meta().difficulty + ".mc";
     if (d->chartController->saveChart(currentPath))
     {
+        d->currentChartPath = currentPath;
+        d->isModified = false;
         statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
         Logger::info("Chart saved: " + currentPath);
     }
@@ -637,6 +721,8 @@ void MainWindow::saveChartAs()
     }
     if (d->chartController->saveChart(fileName))
     {
+        d->currentChartPath = fileName;
+        d->isModified = false;
         statusBar()->showMessage(tr("Saved: %1").arg(fileName), 2000);
         Logger::info("Chart saved as: " + fileName);
     }
@@ -1096,9 +1182,26 @@ void MainWindow::configureOutline()
 void MainWindow::populateSkinMenu()
 {
     d->skinMenu->clear();
-    QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/skins";
-    QStringList skinDirs = SkinIO::getSkinList(skinsBaseDir);
-    if (skinDirs.isEmpty())
+    struct SkinEntry
+    {
+        QString name;
+        QString path;
+    };
+    QVector<SkinEntry> entries;
+    QSet<QString> seenNames;
+
+    for (const QString &baseDir : skinBaseDirs())
+    {
+        for (const QString &skinName : SkinIO::getSkinList(baseDir))
+        {
+            if (seenNames.contains(skinName))
+                continue;
+            seenNames.insert(skinName);
+            entries.append({skinName, baseDir + "/" + skinName});
+        }
+    }
+
+    if (entries.isEmpty())
     {
         d->skinMenu->addAction(tr("No skins found"))->setEnabled(false);
         Logger::warn("No skin directories found");
@@ -1106,29 +1209,35 @@ void MainWindow::populateSkinMenu()
     }
 
     QString currentSkin = Settings::instance().currentSkin();
-    for (const QString &skinDirName : skinDirs)
+    for (const SkinEntry &entry : entries)
     {
-        QString skinPath = skinsBaseDir + "/" + skinDirName;
-        QString displayName = SkinIO::getSkinDisplayName(skinPath);
+        QString displayName = SkinIO::getSkinDisplayName(entry.path);
         QAction *action = d->skinMenu->addAction(displayName);
-        action->setData(skinDirName);
+        action->setData(entry.name);
         action->setCheckable(true);
-        if (skinDirName == currentSkin)
+        if (entry.name == currentSkin)
         {
             action->setChecked(true);
         }
-        connect(action, &QAction::triggered, this, [this, skinDirName]()
-                { changeSkin(skinDirName); });
+        connect(action, &QAction::triggered, this, [this, entry]()
+                { changeSkin(entry.name); });
     }
-    Logger::debug(QString("Populated skin menu with %1 skins").arg(skinDirs.size()));
+    Logger::debug(QString("Populated skin menu with %1 skins").arg(entries.size()));
 }
 
 void MainWindow::changeSkin(const QString &skinName)
 {
     Logger::info(QString("Changing skin to %1").arg(skinName));
 
-    QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/skins";
-    QString skinPath = skinsBaseDir + "/" + skinName;
+    QString skinPath = resolveSkinPathByName(skinName);
+    if (skinPath.isEmpty())
+    {
+        Logger::error(QString("Skin path not found for %1").arg(skinName));
+        QMessageBox::warning(this, tr("Skin Error"), tr("Failed to locate skin: %1").arg(skinName));
+        populateSkinMenu();
+        return;
+    }
+
     Skin *newSkin = new Skin();
     if (SkinIO::loadSkin(skinPath, *newSkin))
     {
@@ -1161,9 +1270,10 @@ void MainWindow::setSkin(Skin *skin)
     Logger::debug("Skin set externally");
 }
 
-// ==================== 粘贴288分度选项槽函数 ====================
+// ==================== Paste 288 division option slot ====================
 void MainWindow::togglePaste288Division(bool enabled)
 {
     Settings::instance().setPasteUse288Division(enabled);
     Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
 }
+
