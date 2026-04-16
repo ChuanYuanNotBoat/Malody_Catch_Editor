@@ -917,11 +917,28 @@ void ChartCanvas::requestNextFrame()
             m_currentPlayTime = predicted;
         }
 
-        const auto &bpmList = m_chartController->chart()->bpmList();
-        int offset = m_chartController->chart()->meta().offset;
-        int beatNum, numerator, denominator;
-        MathUtils::msToBeat(m_currentPlayTime, bpmList, offset, beatNum, numerator, denominator);
-        double beat = beatNum + static_cast<double>(numerator) / denominator;
+        const QVector<MathUtils::BpmCacheEntry> &cache = bpmTimeCache();
+        if (cache.isEmpty())
+            return;
+
+        auto beatFromTimeMs = [&cache](double timeMs) -> double
+        {
+            int lo = 0;
+            int hi = cache.size() - 1;
+            while (lo < hi)
+            {
+                const int mid = (lo + hi + 1) / 2;
+                if (cache[mid].accumulatedMs <= timeMs)
+                    lo = mid;
+                else
+                    hi = mid - 1;
+            }
+            const auto &seg = cache[lo];
+            if (seg.bpm <= 0.0)
+                return seg.beatPos;
+            return seg.beatPos + (timeMs - seg.accumulatedMs) * (seg.bpm / 60000.0);
+        };
+        const double beat = beatFromTimeMs(m_currentPlayTime);
 
         double baselineRatio = 0.8;
         double targetScrollBeat;
@@ -1810,14 +1827,19 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
     const double delta = timeMs - predicted;
 
     // Small negative delta is usually backend jitter; keep monotonic progression.
-    if (delta > -20.0 && delta < 20.0)
+    if (delta > -24.0 && delta < 24.0)
     {
-        m_playbackAnchorMs = predicted + delta * 0.2;
+        m_playbackAnchorMs = predicted + delta * 0.08;
         m_playbackAnchorWallMs = nowMs;
     }
-    else if (delta < -20.0 && delta > -180.0)
+    else if (delta < -24.0 && delta > -220.0)
     {
         m_playbackAnchorMs = predicted;
+        m_playbackAnchorWallMs = nowMs;
+    }
+    else if (delta >= 24.0 && delta < 220.0)
+    {
+        m_playbackAnchorMs = predicted + delta * 0.12;
         m_playbackAnchorWallMs = nowMs;
     }
     else
