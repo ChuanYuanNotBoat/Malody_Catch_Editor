@@ -18,15 +18,7 @@ void Chart::removeNote(int index)
 
 void Chart::removeNote(const Note &note)
 {
-    // 首先尝试通过相等性查找（标准方式）
-    int idx = m_notes.indexOf(note);
-    if (idx != -1)
-    {
-        m_notes.removeAt(idx);
-        return;
-    }
-
-    // 如果相等性查找失败，仅通过 ID 精确查找
+    // Prefer id match to avoid deleting a different note with same content.
     if (!note.id.isEmpty())
     {
         for (int i = 0; i < m_notes.size(); ++i)
@@ -39,7 +31,14 @@ void Chart::removeNote(const Note &note)
         }
     }
 
-    // 找不到匹配项，输出警告但不执行删除，避免误删相邻音符
+    // Fallback for notes without id (legacy data).
+    int idx = m_notes.indexOf(note);
+    if (idx != -1)
+    {
+        m_notes.removeAt(idx);
+        return;
+    }
+
     qDebug() << "[Chart] removeNote: failed to find note with id" << note.id
              << "for removal, beat" << note.getStartBeat();
 }

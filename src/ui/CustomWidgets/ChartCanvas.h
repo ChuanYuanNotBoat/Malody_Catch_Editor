@@ -57,6 +57,7 @@ public:
     bool isVerticalFlip() const;
     void setVerticalFlip(bool flip);
     double currentPlayTime() const;
+    int timeDivision() const { return m_timeDivision; }
 
     void setTimeScale(double scale);
     double timeScale() const { return m_timeScale; }

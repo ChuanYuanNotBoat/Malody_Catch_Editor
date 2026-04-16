@@ -5,6 +5,7 @@
 #include <QAudioOutput>
 #include <QMediaPlayer>
 #include <QDebug>
+#include <QFile>
 #include <QFileInfo>
 #include <QEventLoop>
 #include <QTimer>
@@ -50,6 +51,7 @@ AudioPlayer::AudioPlayer(QObject *parent) : QObject(parent),
 
 AudioPlayer::~AudioPlayer()
 {
+    cleanupTempAudioFiles();
 }
 
 AudioPlayer::LoadingState AudioPlayer::loadingState() const
@@ -78,6 +80,9 @@ bool AudioPlayer::load(const QString &filePath)
     setLoadingState(LoadingState::Idle);
     m_lastError.clear();
     m_currentLoadPath.clear();
+    m_player->stop();
+    m_player->setSource(QUrl());
+    cleanupTempAudioFiles();
 
     // 检查文件是否存在
     QFileInfo fileInfo(filePath);
@@ -235,6 +240,20 @@ QString AudioPlayer::normalizeAudioPath(const QString &originalPath)
 
     Logger::warn(QString("AudioPlayer::normalizeAudioPath - Failed to copy audio file to temp path, using original"));
     return originalPath;
+}
+
+void AudioPlayer::cleanupTempAudioFiles()
+{
+    for (const QString &tempPath : m_tempAudioFiles)
+    {
+        if (tempPath.isEmpty() || !QFile::exists(tempPath))
+            continue;
+        if (!QFile::remove(tempPath))
+        {
+            Logger::warn(QString("AudioPlayer::cleanupTempAudioFiles - Failed to remove temporary file: %1").arg(tempPath));
+        }
+    }
+    m_tempAudioFiles.clear();
 }
 
 void AudioPlayer::play()

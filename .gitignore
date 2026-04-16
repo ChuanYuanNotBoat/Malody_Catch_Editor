@@ -24,6 +24,7 @@ Makefile
 *.sln
 *.dir
 *.property
+build_codex
 
 # Qt moc/uic自动生成文件
 moc_*.cpp
@@ -70,3 +71,4 @@ apply_diff.py
 change.diff
 apply_replace.py
 changes.patch
+TODO.md

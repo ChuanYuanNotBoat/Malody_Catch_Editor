@@ -26,7 +26,6 @@ Application::~Application()
     delete m_selectionController;
     delete m_playbackController;
     delete m_pluginManager;
-    delete m_skin;
 }
 
 bool Application::initialize()
@@ -109,6 +108,8 @@ bool Application::initialize()
         }
 
         m_mainWindow = new MainWindow(m_chartController, m_selectionController, m_playbackController, m_skin);
+        // Skin ownership is transferred to MainWindow.
+        m_skin = nullptr;
         m_mainWindow->show();
         Logger::info("Main window created and shown.");
 

@@ -76,4 +76,5 @@ private:
     int m_userOffset;   ///< 用户全局偏移（毫秒）
 
     QString normalizeAudioPath(const QString &originalPath);
+    void cleanupTempAudioFiles();
 };

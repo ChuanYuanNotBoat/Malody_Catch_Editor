@@ -127,6 +127,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
 
 MainWindow::~MainWindow()
 {
+    delete d->skin;
     delete d;
     Logger::info("MainWindow destroyed");
 }
@@ -751,7 +752,7 @@ void MainWindow::togglePlayback()
         {
             const QVector<BpmEntry> &bpmList = chart->bpmList();
             int offset = chart->meta().offset;
-            int timeDivision = 4;
+            int timeDivision = d->canvas ? d->canvas->timeDivision() : 4;
             startTime = MathUtils::snapTimeToGrid(startTime, bpmList, offset, timeDivision);
         }
         d->playbackController->playFromTime(startTime);
@@ -1150,6 +1151,8 @@ void MainWindow::changeSkin(const QString &skinName)
 
 void MainWindow::setSkin(Skin *skin)
 {
+    if (d->skin == skin)
+        return;
     if (d->skin)
         delete d->skin;
     d->skin = skin;
