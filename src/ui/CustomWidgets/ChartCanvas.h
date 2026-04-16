@@ -1,4 +1,4 @@
-// src/ui/CustomWidgets/ChartCanvas.h
+﻿// src/ui/CustomWidgets/ChartCanvas.h
 #pragma once
 
 #include <QWidget>
@@ -48,11 +48,11 @@ public:
     void setNoteSize(int size);
     void setMode(Mode mode);
 
-    // 复制粘贴功能
-    void handleCopy();                     // 处理复制（快捷键/菜单/按钮）
-    void paste();                          // 普通粘贴（参考线）
-    void pasteAtCursor(const QPoint &pos); // 右键粘贴（光标位置）
-    void cancelOperation();                // 取消当前操作（区间选择/粘贴预览）
+    // Copy/paste
+    void handleCopy();
+    void paste();
+    void pasteAtCursor(const QPoint &pos);
+    void cancelOperation();
     void beginPastePreview(const QVector<Note> &notes, const QPoint &cursorPos = QPoint());
 
     bool isVerticalFlip() const;
@@ -72,7 +72,7 @@ signals:
     void verticalFlipChanged(bool flipped);
     void scrollPositionChanged(double beat);
     void timeScaleChanged(double scale);
-    void statusMessage(const QString &msg); // 用于状态栏提示
+    void statusMessage(const QString &msg); // 鐢ㄤ簬鐘舵€佹爮鎻愮ず
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -96,7 +96,7 @@ private:
     int hitTestNote(const QPointF &pos) const;
     QRectF getRainNoteRect(const Note &note) const;
     void invalidateCache();
-    void updateNotePosCacheIfNeeded(); // 已废弃（保留空实现兼容）
+    void updateNotePosCacheIfNeeded(); // 宸插簾寮冿紙淇濈暀绌哄疄鐜板吋瀹癸級
     void updateBackgroundCache();
 
     void beginMoveSelection(const QPointF &startPos, int referenceIndex = -1);
@@ -121,43 +121,44 @@ private:
         return m_baseVisibleBeatRange / m_timeScale;
     }
 
-    // 新增：粘贴预览相关辅助函数
-    double calculatePasteReferenceTime() const; // 计算粘贴基准时间（参考线或光标位置）
-    double yToTime(double y) const;             // Y坐标转时间（ms）
-
-    // 新增：区间选择
+    // Paste preview helpers
+    double calculatePasteReferenceTime() const;
+    double yToTime(double y) const;
+    // 鏂板锛氬尯闂撮€夋嫨
     enum IntervalState
     {
         IntervalNone,
-        IntervalWaitingEnd // 已记录起点，等待第二次复制
+        IntervalWaitingEnd // Start point recorded, waiting for second copy click.
     };
     IntervalState m_intervalState;
     double m_intervalStartTime;
     QVector<Note> m_intervalNotes;
 
-    void startIntervalSelection();    // 记录起点，进入等待状态
-    void completeIntervalSelection(); // 记录终点，完成区间选择并进入预览
+    void startIntervalSelection();
+    void completeIntervalSelection();
     void cancelIntervalSelection();
 
-    // 新增：粘贴预览拖动相关
-    bool m_isDraggingPaste;                              // 是否正在拖动粘贴预览
-    QPointF m_pasteDragStartPos;                         // 拖动起始位置（屏幕坐标）
-    double m_pasteTimeOffset;                            // 当前粘贴预览的时间偏移（拍数）
-    double m_pasteXOffset;                               // 当前粘贴预览的 X 偏移（像素）
-    double m_pasteRefBeat;                               // 粘贴预览最早音符的原始拍数（用于吸附计算）
-    int m_pasteDragReferenceIndex;                       // 拖动时用于吸附的参考音符索引
-    void cancelPaste();                                  // 取消粘贴预览
-    void beginDragPaste(const QPointF &startPos);        // 开始拖动预览
-    void updateDragPaste(const QPointF &currentPos);     // 更新拖动偏移
-    void endDragPaste();                                 // 结束拖动
-    void updatePastePreviewPosition();                   // 根据当前偏移更新预览位置（重绘）
-    double snapPasteTimeOffset(double offsetBeat) const; // 对时间偏移进行吸附
+    // Paste preview drag state
+    bool m_isDraggingPaste;
+    QPointF m_pasteDragStartPos;
+    double m_pasteTimeOffset;
+    double m_pasteXOffset;
+    double m_pasteTimeOffsetRaw;                         // 粘贴预览原始时间偏移（未吸附）
+    double m_pasteXOffsetRaw;                            // 粘贴预览原始 X 偏移
+    double m_pasteRefBeat;
+    int m_pasteDragReferenceIndex;
+    void cancelPaste();
+    void beginDragPaste(const QPointF &startPos);
+    void updateDragPaste(const QPointF &currentPos);
+    void endDragPaste();
+    void updatePastePreviewPosition();
+    double snapPasteTimeOffset(double offsetBeat) const;
 
-    // 预计算缓存数据
+    // Precomputed cache data
     QVector<double> m_noteBeatPositions;
     QVector<double> m_noteEndBeatPositions;
     QVector<double> m_noteXPositions;
-    QVector<double> m_noteTimesMs; // 优化2：预计算音符的毫秒时间（含 offset）
+    QVector<double> m_noteTimesMs;
     QVector<NoteType> m_noteTypes;
     bool m_noteDataDirty;
     bool m_timesDirty;
@@ -193,8 +194,8 @@ private:
     QSet<int> m_draggedNotes;
 
     bool m_isPasting;
-    bool m_useCursorPaste;   // 是否使用光标位置粘贴（右键触发）
-    QPoint m_pasteCursorPos; // 右键粘贴时的光标位置
+    bool m_useCursorPaste;   // 鏄惁浣跨敤鍏夋爣浣嶇疆绮樿创锛堝彸閿Е鍙戯級
+    QPoint m_pasteCursorPos; // 鍙抽敭绮樿创鏃剁殑鍏夋爣浣嶇疆
     QVector<Note> m_pasteNotes;
     QVector<double> m_pasteOriginalTimesMs;
     double m_pasteBaseOriginalTimeMs;
@@ -202,7 +203,7 @@ private:
 
     bool m_isMovingSelection;
     QPointF m_moveStartPos;
-    QHash<int, QPair<Note, Note>> m_moveChanges; // 存储原始音符快照，key=索引
+    QHash<int, QPair<Note, Note>> m_moveChanges; // 瀛樺偍鍘熷闊崇蹇収锛宬ey=绱㈠紩
     QSet<int> m_originalSelectedIndices;
     int m_dragReferenceIndex;
 
@@ -218,7 +219,7 @@ private:
     bool m_isScrolling;
 
     QTimer *m_repaintTimer;
-    QTimer *m_playbackTimer; // 优化4：播放驱动定时器（16ms 间隔）
+    QTimer *m_playbackTimer; // Playback tick timer (~16ms).
     bool m_repaintPending;
     bool m_forceRepaint;
     qint64 m_lastRepaintTime;
