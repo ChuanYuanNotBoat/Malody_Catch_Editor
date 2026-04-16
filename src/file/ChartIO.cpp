@@ -123,7 +123,8 @@ bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
                 soundNoteCount++;
                 if (Logger::isVerbose())
                 {
-                    Logger::debug(QString("ChartIO::load - Note %1: Sound note at [%2,%3,%4], sound=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(sound));
+                    if (verbose && i < 20)
+                        Logger::debug(QString("ChartIO::load - Note %1: Sound note at [%2,%3,%4], sound=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(sound));
                 }
             }
             // Rain 音符（type=3）：有 endbeat 字段，x 字段可选
@@ -140,7 +141,8 @@ bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
                     rainNoteCount++;
                     if (Logger::isVerbose())
                     {
-                        Logger::debug(QString("ChartIO::load - Note %1: Rain note at [%2,%3,%4]-[%5,%6,%7], x=%8").arg(i).arg(beatNum).arg(num).arg(den).arg(endBeatNum).arg(endNum).arg(endDen).arg(x));
+                        if (verbose && i < 20)
+                            Logger::debug(QString("ChartIO::load - Note %1: Rain note at [%2,%3,%4]-[%5,%6,%7], x=%8").arg(i).arg(beatNum).arg(num).arg(den).arg(endBeatNum).arg(endNum).arg(endDen).arg(x));
                     }
                 }
                 else
@@ -166,7 +168,8 @@ bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
                 normalNoteCount++;
                 if (Logger::isVerbose())
                 {
-                    Logger::debug(QString("ChartIO::load - Note %1: Normal note at [%2,%3,%4], x=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(x));
+                    if (verbose && i < 20)
+                        Logger::debug(QString("ChartIO::load - Note %1: Normal note at [%2,%3,%4], x=%5").arg(i).arg(beatNum).arg(num).arg(den).arg(x));
                 }
             }
             // Sound note检查（type=1但缺少sound字段）
