@@ -45,4 +45,5 @@ private:
     QPushButton *m_gridSettingsBtn;
     QPushButton *m_copyButton;
     int m_currentMode;
+    int m_gridDivision;
 };

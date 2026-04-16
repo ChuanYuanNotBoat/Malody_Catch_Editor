@@ -18,7 +18,7 @@
 #include <QDebug>
 
 NoteEditPanel::NoteEditPanel(QWidget *parent)
-    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0)
+    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20)
 {
     setupUi();
 }
@@ -45,7 +45,7 @@ void NoteEditPanel::setupUi()
     mainLayout->addWidget(rainRadio);
     mainLayout->addWidget(deleteRadio);
 
-    // 复制按钮
+    // Copy button.
     m_copyButton = new QPushButton(tr("Copy"), this);
     connect(m_copyButton, &QPushButton::clicked, this, &NoteEditPanel::copyRequested);
     mainLayout->addWidget(m_copyButton);
@@ -93,7 +93,7 @@ void NoteEditPanel::onGridSettingsClicked()
 
     QSpinBox *divisionSpin = new QSpinBox;
     divisionSpin->setRange(4, 64);
-    divisionSpin->setValue(20); // 默认值，实际应由外部同步，此处发出信号后由外部更新
+    divisionSpin->setValue(m_gridDivision); // Use current grid division instead of hardcoded default.
 
     form.addRow(tr("Snap to Grid:"), snapCheck);
     form.addRow(tr("Grid Divisions (4-64):"), divisionSpin);
@@ -107,6 +107,7 @@ void NoteEditPanel::onGridSettingsClicked()
     {
         m_gridSnapCheck->setChecked(snapCheck->isChecked());
         int newDivision = divisionSpin->value();
+        m_gridDivision = newDivision;
         emit gridDivisionChanged(newDivision);
         Logger::info(QString("[Grid] NoteEditPanel: grid division changed to %1").arg(newDivision));
     }
@@ -139,3 +140,4 @@ void NoteEditPanel::setSelectionController(SelectionController *controller)
 {
     m_selectionController = controller;
 }
+
