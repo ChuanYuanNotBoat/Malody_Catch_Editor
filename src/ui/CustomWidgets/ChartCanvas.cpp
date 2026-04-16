@@ -26,11 +26,12 @@
 #include <QMessageBox>
 #include <QMenu>
 #include <QAction>
-#include <QWindow>
 #include <QShowEvent>
 #include <QDebug>
 #include <chrono>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 ChartCanvas::ChartCanvas(QWidget *parent)
     : QWidget(parent),
@@ -84,7 +85,8 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_pasteTimeOffset(0.0),
       m_pasteXOffset(0.0),
       m_pasteRefBeat(0.0),
-      m_pasteDragReferenceIndex(-1)
+      m_pasteDragReferenceIndex(-1),
+      m_pasteBaseOriginalTimeMs(std::numeric_limits<double>::max())
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -101,7 +103,8 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     // 优化4：创建播放驱动定时器（16ms 约 60fps）
     m_playbackTimer = new QTimer(this);
     m_playbackTimer->setInterval(16);
-    connect(m_playbackTimer, &QTimer::timeout, this, QOverload<>::of(&ChartCanvas::update));
+    m_playbackTimer->setTimerType(Qt::PreciseTimer);
+    connect(m_playbackTimer, &QTimer::timeout, this, &ChartCanvas::requestNextFrame);
 
     m_fpsTimer.start();
 }
@@ -476,6 +479,8 @@ void ChartCanvas::pasteAtCursor(const QPoint &pos)
 void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cursorPos)
 {
     m_pasteNotes = notes;
+    m_pasteOriginalTimesMs.clear();
+    m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
     m_isPasting = true;
     m_pasteTimeOffset = 0.0;
     m_pasteXOffset = 0.0;
@@ -494,8 +499,28 @@ void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cu
     // 计算最早音符的原始拍数（用于吸附）
     if (!m_pasteNotes.isEmpty())
     {
-        const auto &bpmList = m_chartController->chart()->bpmList();
-        int offset = m_chartController->chart()->meta().offset;
+        const bool canBuildTimeCache =
+            m_chartController && m_chartController->chart() &&
+            !m_chartController->chart()->bpmList().isEmpty();
+        if (canBuildTimeCache)
+        {
+            const auto &bpmList = m_chartController->chart()->bpmList();
+            int offset = m_chartController->chart()->meta().offset;
+            m_pasteOriginalTimesMs.resize(m_pasteNotes.size());
+            for (int i = 0; i < m_pasteOriginalTimesMs.size(); ++i)
+                m_pasteOriginalTimesMs[i] = std::numeric_limits<double>::quiet_NaN();
+
+            for (int i = 0; i < m_pasteNotes.size(); ++i)
+            {
+                const Note &note = m_pasteNotes[i];
+                if (note.type == NoteType::SOUND)
+                    continue;
+                const double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+                m_pasteOriginalTimesMs[i] = t;
+                if (t < m_pasteBaseOriginalTimeMs)
+                    m_pasteBaseOriginalTimeMs = t;
+            }
+        }
         double minBeat = std::numeric_limits<double>::max();
         int refIdx = 0;
         for (int i = 0; i < m_pasteNotes.size(); ++i)
@@ -609,6 +634,9 @@ void ChartCanvas::confirmPaste()
     if (!m_chartController || m_pasteNotes.isEmpty())
     {
         m_isPasting = false;
+        m_pasteNotes.clear();
+        m_pasteOriginalTimesMs.clear();
+        m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
         return;
     }
 
@@ -617,18 +645,38 @@ void ChartCanvas::confirmPaste()
 
     double referenceTime = calculatePasteReferenceTime();
 
-    double baseOriginalTime = std::numeric_limits<double>::max();
-    for (const Note &note : m_pasteNotes)
+    QVector<double> fallbackOriginalTimes;
+    bool usingCachedOriginalTimes =
+        (m_pasteOriginalTimesMs.size() == m_pasteNotes.size()) &&
+        std::isfinite(m_pasteBaseOriginalTimeMs);
+    if (!usingCachedOriginalTimes)
     {
-        if (note.type == NoteType::SOUND)
-            continue;
-        double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-        if (t < baseOriginalTime)
-            baseOriginalTime = t;
+        fallbackOriginalTimes.resize(m_pasteNotes.size());
+        for (int i = 0; i < fallbackOriginalTimes.size(); ++i)
+            fallbackOriginalTimes[i] = std::numeric_limits<double>::quiet_NaN();
+
+        m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
+        for (int i = 0; i < m_pasteNotes.size(); ++i)
+        {
+            const Note &note = m_pasteNotes[i];
+            if (note.type == NoteType::SOUND)
+                continue;
+            const double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+            fallbackOriginalTimes[i] = t;
+            if (t < m_pasteBaseOriginalTimeMs)
+                m_pasteBaseOriginalTimeMs = t;
+        }
+        usingCachedOriginalTimes = std::isfinite(m_pasteBaseOriginalTimeMs);
     }
+
+    const QVector<double> &sourceOriginalTimes = usingCachedOriginalTimes ? m_pasteOriginalTimesMs : fallbackOriginalTimes;
+    const double baseOriginalTime = m_pasteBaseOriginalTimeMs;
     if (baseOriginalTime == std::numeric_limits<double>::max())
     {
         m_isPasting = false;
+        m_pasteNotes.clear();
+        m_pasteOriginalTimesMs.clear();
+        m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
         update();
         return;
     }
@@ -648,15 +696,20 @@ void ChartCanvas::confirmPaste()
     double finalXShift = m_pasteXOffset;
 
     QVector<Note> newNotes;
-    for (const Note &originalNote : m_pasteNotes)
+    for (int i = 0; i < m_pasteNotes.size(); ++i)
     {
+        const Note &originalNote = m_pasteNotes[i];
         if (originalNote.type == NoteType::SOUND)
+            continue;
+        if (i >= sourceOriginalTimes.size())
+            continue;
+        const double originalTime = sourceOriginalTimes[i];
+        if (!std::isfinite(originalTime))
             continue;
         Note newNote = originalNote;
         newNote.id = Note::generateId();
 
         // 时间偏移
-        double originalTime = MathUtils::beatToMs(originalNote.beatNum, originalNote.numerator, originalNote.denominator, bpmList, offset);
         double newTime = originalTime + finalTimeShiftMs;
         int b, n, d;
         MathUtils::msToBeat(newTime, bpmList, offset, b, n, d);
@@ -712,6 +765,8 @@ void ChartCanvas::confirmPaste()
 
     m_isPasting = false;
     m_pasteNotes.clear();
+    m_pasteOriginalTimesMs.clear();
+    m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
     update();
 }
 
@@ -821,19 +876,7 @@ void ChartCanvas::requestNextFrame()
         emit scrollPositionChanged(m_scrollBeat);
     }
 
-    // 优化4：使用定时器驱动刷新，避免递归 singleShot 事件堆积
-    if (m_playbackTimer && !m_playbackTimer->isActive())
-        m_playbackTimer->start();
-
-    // 请求立即重绘（update() 已由定时器触发，此处可选）
-    if (QWindow *win = windowHandle())
-    {
-        win->requestUpdate();
-    }
-    else
-    {
-        update();
-    }
+    update();
 }
 
 void ChartCanvas::paintEvent(QPaintEvent *event)
@@ -970,14 +1013,36 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         double refTime = calculatePasteReferenceTime();
 
         // 找到最早音符的原始时间
-        double baseOriginalTime = std::numeric_limits<double>::max();
-        for (const Note &note : m_pasteNotes)
+        QVector<double> fallbackOriginalTimes;
+        bool usingCachedOriginalTimes =
+            (m_pasteOriginalTimesMs.size() == m_pasteNotes.size()) &&
+            std::isfinite(m_pasteBaseOriginalTimeMs);
+        if (!usingCachedOriginalTimes)
         {
-            if (note.type == NoteType::SOUND)
-                continue;
-            double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-            if (t < baseOriginalTime)
-                baseOriginalTime = t;
+            fallbackOriginalTimes.resize(m_pasteNotes.size());
+            for (int i = 0; i < fallbackOriginalTimes.size(); ++i)
+                fallbackOriginalTimes[i] = std::numeric_limits<double>::quiet_NaN();
+
+            for (int i = 0; i < m_pasteNotes.size(); ++i)
+            {
+                const Note &note = m_pasteNotes[i];
+                if (note.type == NoteType::SOUND)
+                    continue;
+                const double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+                fallbackOriginalTimes[i] = t;
+            }
+        }
+
+        const QVector<double> &sourceOriginalTimes = usingCachedOriginalTimes ? m_pasteOriginalTimesMs : fallbackOriginalTimes;
+        double baseOriginalTime = m_pasteBaseOriginalTimeMs;
+        if (!usingCachedOriginalTimes)
+        {
+            baseOriginalTime = std::numeric_limits<double>::max();
+            for (double t : sourceOriginalTimes)
+            {
+                if (std::isfinite(t) && t < baseOriginalTime)
+                    baseOriginalTime = t;
+            }
         }
         if (baseOriginalTime != std::numeric_limits<double>::max())
         {
@@ -992,21 +1057,28 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
             // 最终时间偏移（毫秒）
             MathUtils::floatToBeat(totalBeatShift, beatNum, num, den);
             double finalTimeShiftMs = MathUtils::beatToMs(beatNum, num, den, bpmList, offset);
-            for (const Note &note : m_pasteNotes)
+            for (int i = 0; i < m_pasteNotes.size(); ++i)
             {
+                const Note &note = m_pasteNotes[i];
                 if (note.type == NoteType::SOUND)
                     continue;
-                double originalTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+                if (i >= sourceOriginalTimes.size())
+                    continue;
+                const double originalTime = sourceOriginalTimes[i];
+                if (!std::isfinite(originalTime))
+                    continue;
                 double newTime = originalTime + finalTimeShiftMs;
-                int beatNum, num, den;
-                MathUtils::msToBeat(newTime, bpmList, offset, beatNum, num, den);
-                double beat = beatNum + static_cast<double>(num) / den;
                 // 优化2：使用已计算的毫秒时间（newTime）映射 Y 坐标
                 double y;
                 if (!bpmList.isEmpty() && (endTimeMs - startTimeMs) > 0)
                     y = baseY + sign * ((newTime - startTimeMs) * invTimeRange * canvasHeight);
                 else
+                {
+                    int beatNum, num, den;
+                    MathUtils::msToBeat(newTime, bpmList, offset, beatNum, num, den);
+                    double beat = beatNum + static_cast<double>(num) / den;
                     y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
+                }
                 double x = lmargin + (note.x / 512.0) * availableWidth;
                 // 应用 X 偏移
                 x += m_pasteXOffset;
@@ -1059,10 +1131,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         lastRecord = now;
     }
 
-    if (m_isPlaying)
-    {
-        QTimer::singleShot(0, this, &ChartCanvas::requestNextFrame);
-    }
 }
 
 void ChartCanvas::drawBackground(QPainter &painter)
@@ -1839,6 +1907,8 @@ void ChartCanvas::cancelPaste()
     {
         m_isPasting = false;
         m_pasteNotes.clear();
+        m_pasteOriginalTimesMs.clear();
+        m_pasteBaseOriginalTimeMs = std::numeric_limits<double>::max();
         update();
         emit statusMessage(tr("Paste cancelled."));
     }

@@ -190,6 +190,8 @@ private:
     bool m_useCursorPaste;   // 是否使用光标位置粘贴（右键触发）
     QPoint m_pasteCursorPos; // 右键粘贴时的光标位置
     QVector<Note> m_pasteNotes;
+    QVector<double> m_pasteOriginalTimesMs;
+    double m_pasteBaseOriginalTimeMs;
     QPointF m_pasteOffset;
 
     bool m_isMovingSelection;
