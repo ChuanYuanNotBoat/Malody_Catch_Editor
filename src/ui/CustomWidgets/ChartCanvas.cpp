@@ -62,6 +62,8 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_intervalState(IntervalNone),
       m_intervalStartTime(0.0),
       m_isMovingSelection(false),
+      m_moveDeltaBeatRaw(0.0),
+      m_moveDeltaXRaw(0.0),
       m_gridSnapBackup(false),
       m_wasGridSnapEnabled(false),
       m_dragReferenceIndex(-1),
@@ -1504,6 +1506,8 @@ void ChartCanvas::beginMoveSelection(const QPointF &startPos, int referenceIndex
 {
     m_isMovingSelection = true;
     m_moveStartPos = startPos;
+    m_moveDeltaBeatRaw = 0.0;
+    m_moveDeltaXRaw = 0.0;
     m_originalSelectedIndices = m_selectionController->selectedIndices();
     m_dragReferenceIndex = referenceIndex;
     if (m_dragReferenceIndex == -1 && !m_originalSelectedIndices.isEmpty())
@@ -1529,25 +1533,28 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
     if (m_verticalFlip)
         deltaY = -deltaY;
 
-    double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
-    double deltaX = delta.x() / width() * 512.0;
+    const int availableWidth = qMax(1, width() - leftMargin() - rightMargin());
+    const double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
+    const double deltaX = delta.x() / static_cast<double>(availableWidth) * 512.0;
 
-    double snapOffsetBeat = 0.0;
-    if (m_timeDivision > 0 && m_dragReferenceIndex >= 0)
+    m_moveDeltaBeatRaw += deltaBeat;
+    m_moveDeltaXRaw += deltaX;
+    m_moveStartPos = currentPos;
+
+    double appliedDeltaBeat = m_moveDeltaBeatRaw;
+    if (m_timeDivision > 0 && m_dragReferenceIndex >= 0 && m_moveChanges.contains(m_dragReferenceIndex))
     {
         const Note &refOriginal = m_moveChanges[m_dragReferenceIndex].first;
-        double refOriginalBeat = MathUtils::beatToFloat(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator);
-        double refNewBeat = refOriginalBeat + deltaBeat;
+        const double refOriginalBeat = MathUtils::beatToFloat(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator);
+        const double refNewBeat = refOriginalBeat + m_moveDeltaBeatRaw;
 
-        Note refNote = refOriginal;
-        MathUtils::floatToBeat(refNewBeat, refNote.beatNum, refNote.numerator, refNote.denominator);
-        refNote = MathUtils::snapNoteToTimeWithBoundary(refNote, m_timeDivision);
-        double refSnappedBeat = MathUtils::beatToFloat(refNote.beatNum, refNote.numerator, refNote.denominator);
-        snapOffsetBeat = refSnappedBeat - refNewBeat;
+        Note refSnapped = refOriginal;
+        MathUtils::floatToBeat(refNewBeat, refSnapped.beatNum, refSnapped.numerator, refSnapped.denominator);
+        refSnapped = MathUtils::snapNoteToTimeWithBoundary(refSnapped, m_timeDivision);
+        const double refSnappedBeat = MathUtils::beatToFloat(refSnapped.beatNum, refSnapped.numerator, refSnapped.denominator);
+        appliedDeltaBeat = refSnappedBeat - refOriginalBeat;
     }
-
-    double appliedDeltaBeat = deltaBeat + snapOffsetBeat;
-    double appliedDeltaX = deltaX;
+    const double appliedDeltaX = m_moveDeltaXRaw;
 
     QVector<Note> &notes = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
     QList<int> selectedList = m_originalSelectedIndices.values();
@@ -1597,11 +1604,54 @@ void ChartCanvas::endMoveSelection()
         m_wasGridSnapEnabled = false;
     }
 
+    double finalAppliedDeltaBeat = m_moveDeltaBeatRaw;
+    if (m_timeDivision > 0 && m_dragReferenceIndex >= 0 && m_moveChanges.contains(m_dragReferenceIndex))
+    {
+        const Note &refOriginal = m_moveChanges[m_dragReferenceIndex].first;
+        const double refOriginalBeat = MathUtils::beatToFloat(refOriginal.beatNum, refOriginal.numerator, refOriginal.denominator);
+        const double refNewBeat = refOriginalBeat + m_moveDeltaBeatRaw;
+
+        Note refSnapped = refOriginal;
+        MathUtils::floatToBeat(refNewBeat, refSnapped.beatNum, refSnapped.numerator, refSnapped.denominator);
+        refSnapped = MathUtils::snapNoteToTimeWithBoundary(refSnapped, m_timeDivision);
+        const double refSnappedBeat = MathUtils::beatToFloat(refSnapped.beatNum, refSnapped.numerator, refSnapped.denominator);
+        finalAppliedDeltaBeat = refSnappedBeat - refOriginalBeat;
+    }
+    const double finalAppliedDeltaX = m_moveDeltaXRaw;
+
+    QVector<Note> &notes = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+    QList<int> selectedList = m_originalSelectedIndices.values();
+    for (int idx : selectedList)
+    {
+        if (!m_moveChanges.contains(idx))
+            continue;
+
+        const Note &original = m_moveChanges[idx].first;
+        Note snappedNote = original;
+
+        double newBeat = MathUtils::beatToFloat(original.beatNum, original.numerator, original.denominator) + finalAppliedDeltaBeat;
+        if (newBeat < 0.0)
+            newBeat = 0.0;
+        MathUtils::floatToBeat(newBeat, snappedNote.beatNum, snappedNote.numerator, snappedNote.denominator);
+
+        snappedNote.x = qBound(0, qRound(original.x + finalAppliedDeltaX), 512);
+
+        if (original.type == NoteType::RAIN)
+        {
+            double newEndBeat = MathUtils::beatToFloat(original.endBeatNum, original.endNumerator, original.endDenominator) + finalAppliedDeltaBeat;
+            if (newEndBeat < newBeat)
+                newEndBeat = newBeat;
+            MathUtils::floatToBeat(newEndBeat, snappedNote.endBeatNum, snappedNote.endNumerator, snappedNote.endDenominator);
+        }
+
+        notes[idx] = snappedNote;
+    }
+
     QList<QPair<Note, Note>> finalChanges;
-    const auto &notes = m_chartController->chart()->notes();
+    const auto &notesNow = m_chartController->chart()->notes();
     for (int idx : m_originalSelectedIndices)
     {
-        const Note &currentNote = notes[idx];
+        const Note &currentNote = notesNow[idx];
         auto it = m_moveChanges.find(idx);
         if (it != m_moveChanges.end())
         {
@@ -1616,6 +1666,8 @@ void ChartCanvas::endMoveSelection()
 
     m_originalSelectedIndices.clear();
     m_dragReferenceIndex = -1;
+    m_moveDeltaBeatRaw = 0.0;
+    m_moveDeltaXRaw = 0.0;
     m_moveChanges.clear();
     m_moveStartPos = QPointF();
 

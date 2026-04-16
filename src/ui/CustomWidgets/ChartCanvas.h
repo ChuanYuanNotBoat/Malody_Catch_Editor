@@ -204,6 +204,8 @@ private:
 
     bool m_isMovingSelection;
     QPointF m_moveStartPos;
+    double m_moveDeltaBeatRaw;
+    double m_moveDeltaXRaw;
     QHash<int, QPair<Note, Note>> m_moveChanges; // 瀛樺偍鍘熷闊崇蹇収锛宬ey=绱㈠紩
     QSet<int> m_originalSelectedIndices;
     int m_dragReferenceIndex;
