@@ -925,6 +925,11 @@ Do you want to save before continuing?</translation>
         <translation>Size (pixels):</translation>
     </message>
     <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="386"/>
+        <source>Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration.</source>
+        <translation>Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration.</translation>
+    </message>
+    <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="443"/>
         <source>No Skin</source>
         <translation>No Skin</translation>

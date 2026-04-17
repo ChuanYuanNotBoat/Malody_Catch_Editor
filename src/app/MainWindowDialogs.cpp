@@ -385,6 +385,11 @@ void MainWindow::adjustNoteSize()
     sizeLayout->addWidget(sizeSpin);
     layout->addLayout(sizeLayout);
 
+    QLabel *remarkLabel = new QLabel(tr("Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration."));
+    remarkLabel->setWordWrap(true);
+    remarkLabel->setStyleSheet("color: #666;");
+    layout->addWidget(remarkLabel);
+
     QLabel *previewLabel = new QLabel;
     previewLabel->setFixedSize(128, 128);
     previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
@@ -394,28 +399,32 @@ void MainWindow::adjustNoteSize()
     auto updatePreview = [previewLabel, sizeSpin, this]()
     {
         int sz = sizeSpin->value();
-        QPixmap pix(sz, sz);
+        QPixmap pix(128, 128);
         pix.fill(Qt::white);
         QPainter painter(&pix);
-        Note exampleNote(0, 1, 4, 256);
         if (d->skin && d->skin->isValid())
         {
             const QPixmap *notePix = d->skin->getNotePixmap(2);
             if (notePix && !notePix->isNull())
             {
-                QPixmap scaled = notePix->scaled(sz, sz, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                painter.drawPixmap((sz - scaled.width()) / 2, (sz - scaled.height()) / 2, scaled);
+                double scale = d->skin->getNoteScale(2);
+                int scaledW = qMax(1, qRound(notePix->width() * scale));
+                int scaledH = qMax(1, qRound(notePix->height() * scale));
+                QPixmap scaled = notePix->scaled(scaledW, scaledH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                painter.drawPixmap((128 - scaled.width()) / 2, (128 - scaled.height()) / 2, scaled);
             }
             else
             {
                 painter.setBrush(Qt::lightGray);
-                painter.drawEllipse(0, 0, sz, sz);
+                painter.setPen(Qt::NoPen);
+                painter.drawEllipse((128 - sz) / 2, (128 - sz) / 2, sz, sz);
             }
         }
         else
         {
             painter.setBrush(Qt::lightGray);
-            painter.drawEllipse(0, 0, sz, sz);
+            painter.setPen(Qt::NoPen);
+            painter.drawEllipse((128 - sz) / 2, (128 - sz) / 2, sz, sz);
         }
         previewLabel->setPixmap(pix);
     };

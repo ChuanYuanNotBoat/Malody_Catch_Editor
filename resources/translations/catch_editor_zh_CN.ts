@@ -925,6 +925,11 @@ Do you want to save before continuing?</source>
         <translation>大小 (像素):</translation>
     </message>
     <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="386"/>
+        <source>Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration.</source>
+        <translation>备注：此设置仅影响后备圆形音符。加载皮肤后，音符大小由皮肤校准控制。</translation>
+    </message>
+    <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="443"/>
         <source>No Skin</source>
         <translation>无皮肤</translation>

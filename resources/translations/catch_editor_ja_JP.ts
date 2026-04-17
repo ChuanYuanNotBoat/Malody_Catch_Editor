@@ -925,6 +925,11 @@ Do you want to save before continuing?</source>
         <translation>サイズ (ピクセル):</translation>
     </message>
     <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="386"/>
+        <source>Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration.</source>
+        <translation>注: この設定は代替の円形ノートにのみ適用されます。スキン読み込み時のノートサイズはスキン校正で調整してください。</translation>
+    </message>
+    <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="443"/>
         <source>No Skin</source>
         <translation>スキンがありません</translation>
