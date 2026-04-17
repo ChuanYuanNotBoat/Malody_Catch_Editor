@@ -68,6 +68,15 @@ PluginManager *activePluginManager()
     auto *app = qobject_cast<Application *>(QCoreApplication::instance());
     return app ? app->pluginManager() : nullptr;
 }
+
+QColor sidebarTextColorFor(const QColor &bg)
+{
+    const double r = bg.redF();
+    const double g = bg.greenF();
+    const double b = bg.blueF();
+    const double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return (luminance >= 0.5) ? QColor(20, 20, 20) : QColor(245, 245, 245);
+}
 }
 
 MainWindow::MainWindow(ChartController *chartCtrl,
@@ -83,8 +92,23 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->selectionController = selCtrl;
     d->playbackController = playCtrl;
     d->skin = skin;
+    d->canvas = nullptr;
+    d->verticalScrollBar = nullptr;
+    d->splitter = nullptr;
+    d->rightPanelContainer = nullptr;
+    d->currentRightPanel = nullptr;
+    d->notePanel = nullptr;
+    d->bpmPanel = nullptr;
+    d->metaPanel = nullptr;
     d->leftPanel = nullptr;
+    d->undoAction = nullptr;
+    d->redoAction = nullptr;
+    d->colorAction = nullptr;
+    d->hyperfruitAction = nullptr;
+    d->verticalFlipAction = nullptr;
+    d->playAction = nullptr;
     d->speedActionGroup = nullptr;
+    d->skinMenu = nullptr;
     d->noteSoundMenu = nullptr;
     d->pluginToolsMenu = nullptr;
     d->mainToolBar = nullptr;
@@ -241,21 +265,34 @@ void MainWindow::createMenus()
     connect(bgImageAction, &QAction::toggled, this, [this](bool on)
             {
     Settings::instance().setBackgroundImageEnabled(on);
-    d->canvas->update(); });
+    if (d->canvas) d->canvas->refreshBackground(); });
 
     QMenu *bgColorMenu = viewMenu->addMenu(tr("Background Color"));
     bgColorMenu->addAction(tr("Black"), [this]()
                            {
-    Settings::instance().setBackgroundColor(Qt::black);
-    d->canvas->update(); });
+    // Use a softer dark tone to keep UI readable and avoid pure-black harshness.
+    Settings::instance().setBackgroundColor(QColor(24, 26, 30));
+    applySidebarTheme();
+    if (d->canvas) d->canvas->refreshBackground(); });
     bgColorMenu->addAction(tr("White"), [this]()
                            {
     Settings::instance().setBackgroundColor(Qt::white);
-    d->canvas->update(); });
+    applySidebarTheme();
+    if (d->canvas) d->canvas->refreshBackground(); });
     bgColorMenu->addAction(tr("Gray"), [this]()
                            {
     Settings::instance().setBackgroundColor(QColor(40, 40, 40));
-    d->canvas->update(); });
+    applySidebarTheme();
+    if (d->canvas) d->canvas->refreshBackground(); });
+    bgColorMenu->addAction(tr("Custom..."), [this]()
+                           {
+    const QColor current = Settings::instance().backgroundColor();
+    const QColor picked = QColorDialog::getColor(current, this, tr("Select Background Color"));
+    if (!picked.isValid())
+        return;
+    Settings::instance().setBackgroundColor(picked);
+    applySidebarTheme();
+    if (d->canvas) d->canvas->refreshBackground(); });
 
     QMenu *settingsMenu = menuBar()->addMenu(tr("&Settings"));
     d->noteSizeAction = settingsMenu->addAction(tr("Note Size..."));
@@ -319,6 +356,7 @@ void MainWindow::createMenus()
     populateSkinMenu();
     d->noteSoundMenu = menuBar()->addMenu(tr("Note &Sound"));
     populateNoteSoundMenu();
+    applySidebarTheme();
 
     Logger::debug("Menus created");
 }
@@ -328,6 +366,8 @@ void MainWindow::createCentralArea()
     Logger::debug("Creating central area...");
 
     d->leftPanel = new LeftPanel(this);
+    d->leftPanel->setObjectName("leftPanelRoot");
+    d->leftPanel->setAttribute(Qt::WA_StyledBackground, true);
     d->leftPanel->setChartController(d->chartController);
     d->leftPanel->setPlaybackController(d->playbackController);
 
@@ -413,6 +453,8 @@ void MainWindow::createCentralArea()
     }
 
     d->rightPanelContainer = new QWidget(this);
+    d->rightPanelContainer->setObjectName("rightPanelRoot");
+    d->rightPanelContainer->setAttribute(Qt::WA_StyledBackground, true);
     QVBoxLayout *rightLayout = new QVBoxLayout(d->rightPanelContainer);
     rightLayout->setContentsMargins(0, 0, 0, 0);
 
@@ -468,6 +510,7 @@ void MainWindow::createCentralArea()
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(true);
         d->currentRightPanel = d->metaPanel; });
+    applySidebarTheme();
 
     Logger::debug("Central area created with LeftPanel.");
 }
@@ -895,6 +938,7 @@ void MainWindow::retranslateUi()
     populateSkinMenu();
     populateNoteSoundMenu();
     populatePluginToolsMenu();
+    applySidebarTheme();
     Logger::debug("UI retranslated");
 }
 
@@ -933,6 +977,86 @@ void MainWindow::changeLanguage()
         } });
 
     statusBar()->showMessage(tr("Language changed to %1").arg(languageName), 2000);
+}
+
+void MainWindow::applySidebarTheme()
+{
+    const QColor bg = Settings::instance().backgroundColor();
+    const QColor fg = sidebarTextColorFor(bg);
+    const bool darkTheme = (fg.lightness() > 128);
+    const QColor panelBg = darkTheme ? bg.lighter(108) : bg.darker(103);
+    const QColor panelInputBg = darkTheme ? panelBg.lighter(120) : panelBg.darker(105);
+    const QColor panelButtonBg = darkTheme ? panelBg.lighter(132) : panelBg.darker(112);
+    const QColor panelBorder = darkTheme ? panelBg.lighter(165) : panelBg.darker(145);
+    const QColor panelDisabledText = darkTheme ? QColor("#9A9A9A") : QColor("#707070");
+
+    auto applyPanelStyle = [&](QWidget *panel, const QString &rootName)
+    {
+        if (!panel)
+            return;
+
+        const QString css = QString(
+                                "QWidget#%7 { background-color: %1; color: %2; border: 1px solid %4; }"
+                                "QLabel, QCheckBox, QRadioButton, QGroupBox { color: %2; }"
+                                "QLineEdit, QAbstractSpinBox, QComboBox, QListWidget, QTextEdit, QPlainTextEdit {"
+                                "  background-color: %3; color: %2; border: 1px solid %4; }"
+                                "QAbstractItemView { background-color: %3; color: %2; border: 1px solid %4; selection-background-color: %5; selection-color: %6; }"
+                                "QPushButton { background-color: %5; color: %2; border: 1px solid %4; padding: 3px 6px; }"
+                                "QPushButton:disabled { color: %6; }"
+                                "QScrollBar:vertical, QScrollBar:horizontal { background-color: %1; }")
+                                .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
+                                     panelDisabledText.name(), rootName);
+
+        panel->setStyleSheet(css);
+    };
+
+    applyPanelStyle(d->leftPanel, "leftPanelRoot");
+    applyPanelStyle(d->rightPanelContainer, "rightPanelRoot");
+
+    if (menuBar())
+    {
+        const QString menuCss = QString(
+                                    "QMenuBar { background-color: %1; color: %2; }"
+                                    "QMenuBar::item { background: transparent; color: %2; padding: 4px 8px; }"
+                                    "QMenuBar::item:selected { background: %3; }"
+                                    "QMenu { background-color: %1; color: %2; border: 1px solid %4; }"
+                                    "QMenu::item:selected { background-color: %3; }")
+                                    .arg(bg.name(), fg.name(), panelButtonBg.name(), panelBorder.name());
+        menuBar()->setStyleSheet(menuCss);
+    }
+
+    if (d->mainToolBar)
+    {
+        const QString toolbarCss = QString(
+                                       "QToolBar { background-color: %1; color: %2; border-bottom: 1px solid %4; border-top: 1px solid %4; spacing: 6px; padding: 2px 4px; }"
+                                       "QToolButton { background-color: %5; color: %2; border: 1px solid %4; padding: 3px 8px; }"
+                                       "QToolButton:hover { background-color: %3; }")
+                                       .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name());
+        d->mainToolBar->setStyleSheet(toolbarCss);
+    }
+
+    if (statusBar())
+    {
+        statusBar()->setStyleSheet(QString("QStatusBar { background-color: %1; color: %2; border-top: 1px solid %3; }")
+                                       .arg(panelBg.name(), fg.name(), panelBorder.name()));
+    }
+
+    if (d->splitter)
+    {
+        d->splitter->setStyleSheet(QString("QSplitter::handle { background-color: %1; }").arg(panelBorder.name()));
+    }
+
+    if (d->verticalScrollBar)
+    {
+        const QString scrollCss = QString(
+                                      "QScrollBar:vertical { background: %1; width: 12px; margin: 0; }"
+                                      "QScrollBar::handle:vertical { background: %2; min-height: 24px; border-radius: 5px; }"
+                                      "QScrollBar::handle:vertical:hover { background: %3; }"
+                                      "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+                                      "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
+                                      .arg(panelBg.name(), panelButtonBg.name(), panelInputBg.name());
+        d->verticalScrollBar->setStyleSheet(scrollCss);
+    }
 }
 
 

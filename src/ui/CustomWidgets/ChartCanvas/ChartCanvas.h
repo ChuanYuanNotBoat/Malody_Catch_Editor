@@ -67,6 +67,7 @@ public:
 
     void setTimeScale(double scale);
     double timeScale() const { return m_timeScale; }
+    void refreshBackground();
 
 public slots:
     void showGridSettings();

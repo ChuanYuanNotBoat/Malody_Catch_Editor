@@ -1,6 +1,7 @@
 #include "DensityCurve.h"
 #include "model/Chart.h"
 #include "utils/MathUtils.h"
+#include "utils/Settings.h"
 #include <QPainter>
 #include <QMouseEvent>
 #include <QDebug>
@@ -67,7 +68,12 @@ void DensityCurve::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
-    painter.fillRect(rect(), Qt::darkGray);
+    const QColor baseBg = Settings::instance().backgroundColor();
+    const double luminance = 0.2126 * baseBg.redF() + 0.7152 * baseBg.greenF() + 0.0722 * baseBg.blueF();
+    const bool darkTheme = (luminance < 0.5);
+    const QColor curveBg = darkTheme ? baseBg.lighter(118) : baseBg.darker(106);
+    const QColor barColor = darkTheme ? QColor(235, 238, 245) : QColor(35, 35, 35);
+    painter.fillRect(rect(), curveBg);
     if (m_densityData.isEmpty())
         return;
     int w = width();
@@ -75,7 +81,7 @@ void DensityCurve::paintEvent(QPaintEvent *event)
     for (int i = 0; i < m_densityData.size(); ++i)
     {
         int barHeight = static_cast<int>(m_densityData[i] * h);
-        painter.fillRect(i, h - barHeight, 1, barHeight, Qt::white);
+        painter.fillRect(i, h - barHeight, 1, barHeight, barColor);
     }
 }
 

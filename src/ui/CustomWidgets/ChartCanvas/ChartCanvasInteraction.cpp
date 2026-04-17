@@ -99,6 +99,12 @@ void ChartCanvas::updateBackgroundCache()
     m_backgroundCacheDirty = true;
 }
 
+void ChartCanvas::refreshBackground()
+{
+    updateBackgroundCache();
+    update();
+}
+
 void ChartCanvas::requestNextFrame()
 {
     if (!m_isPlaying)

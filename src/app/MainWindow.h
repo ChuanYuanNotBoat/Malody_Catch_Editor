@@ -76,6 +76,7 @@ private:
     void loadChartFile(const QString &filePath);
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
     QString beatmapRootPath() const; // Return beatmap root directory.
+    void applySidebarTheme();
 
     class Private;
     Private *d;
