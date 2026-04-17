@@ -28,9 +28,9 @@ void LeftPanel::setupUi()
 
     QHBoxLayout *zoomLayout = new QHBoxLayout;
     m_zoomLabel = new QLabel(tr("Zoom:"), this);
-    m_zoomOutBtn = new QPushButton("-", this);
+    m_zoomOutBtn = new QPushButton(tr("-"), this);
     m_zoomOutBtn->setFixedWidth(30);
-    m_zoomInBtn = new QPushButton("+", this);
+    m_zoomInBtn = new QPushButton(tr("+"), this);
     m_zoomInBtn->setFixedWidth(30);
 
     m_timeScaleSpin = new QDoubleSpinBox(this);

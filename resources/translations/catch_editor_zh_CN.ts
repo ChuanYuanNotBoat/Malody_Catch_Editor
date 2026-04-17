@@ -252,28 +252,28 @@
     </message>
     <message>
         <location filename="../../src/ui/dialogs/LogSettingsDialog.cpp" line="63"/>
-        <source>查看当前日志文件</source>
+        <source>View Current Log File</source>
         <translation>查看当前日志文件</translation>
     </message>
     <message>
         <location filename="../../src/ui/dialogs/LogSettingsDialog.cpp" line="64"/>
-        <source>清除诊断数据</source>
+        <source>Clear Diagnostic Data</source>
         <translation>清除诊断数据</translation>
     </message>
     <message>
         <location filename="../../src/ui/dialogs/LogSettingsDialog.cpp" line="65"/>
         <location filename="../../src/ui/dialogs/LogSettingsDialog.cpp" line="171"/>
-        <source>导出诊断报告</source>
+        <source>Export Diagnostic Report</source>
         <translation>导出诊断报告</translation>
     </message>
     <message>
         <location filename="../../src/ui/dialogs/LogSettingsDialog.cpp" line="74"/>
-        <source>确定</source>
+        <source>OK</source>
         <translation>确定</translation>
     </message>
     <message>
         <location filename="../../src/ui/dialogs/LogSettingsDialog.cpp" line="75"/>
-        <source>取消</source>
+        <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>

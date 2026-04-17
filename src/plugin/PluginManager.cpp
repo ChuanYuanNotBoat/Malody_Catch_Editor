@@ -14,6 +14,22 @@ QString currentLocale()
         locale = QLocale::system().name();
     return locale;
 }
+
+QVariantMap enrichContextWithLocale(const QVariantMap &context)
+{
+    QVariantMap enriched = context;
+    const QString locale = currentLocale();
+    if (!enriched.contains("locale"))
+        enriched.insert("locale", locale);
+
+    QString language = locale;
+    const int split = language.indexOf('_');
+    if (split > 0)
+        language = language.left(split);
+    if (!enriched.contains("language"))
+        enriched.insert("language", language);
+    return enriched;
+}
 }
 
 PluginManager::PluginManager(QObject *parent) : QObject(parent)
@@ -237,6 +253,7 @@ QList<PluginManager::ToolActionEntry> PluginManager::toolActions() const
 
 bool PluginManager::runToolAction(const QString &pluginId, const QString &actionId, const QVariantMap &context)
 {
+    const QVariantMap enrichedContext = enrichContextWithLocale(context);
     for (PluginInterface *p : m_plugins)
     {
         if (!p)
@@ -245,7 +262,7 @@ bool PluginManager::runToolAction(const QString &pluginId, const QString &action
             continue;
         try
         {
-            return p->runToolAction(actionId, context);
+            return p->runToolAction(actionId, enrichedContext);
         }
         catch (...)
         {
@@ -312,6 +329,7 @@ void PluginManager::notifyChartSaved(const QString &chartPath)
 
 bool PluginManager::tryOpenAdvancedColorEditor(const QVariantMap &context)
 {
+    const QVariantMap enrichedContext = enrichContextWithLocale(context);
     for (PluginInterface *p : m_plugins)
     {
         if (!p || !p->hasCapability(PluginInterface::kCapabilityAdvancedColorEditor))
@@ -319,7 +337,7 @@ bool PluginManager::tryOpenAdvancedColorEditor(const QVariantMap &context)
 
         try
         {
-            if (p->openAdvancedColorEditor(context))
+            if (p->openAdvancedColorEditor(enrichedContext))
             {
                 Logger::info(QString("Advanced color editor handled by plugin '%1'.").arg(localizedNameForLog(p)));
                 return true;

@@ -38,3 +38,12 @@
 ## 5. Error Handling
 
 插件抛出的异常由宿主捕获并记录日志，不应导致主程序崩溃。
+
+
+## 6. Optional i18n Context
+
+Host may include these optional fields in context:
+- locale (e.g. zh_CN)
+- language (e.g. zh)
+
+Plugins can ignore them safely, or use them to load plugin-localized UI/resources.

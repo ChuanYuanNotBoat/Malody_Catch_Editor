@@ -79,7 +79,7 @@
 ```
 
 ```json
-{"type":"request","id":"1713512345681","method":"runToolAction","payload":{"action_id":"standardize_all_colors","context":{"chart_path":"D:/beatmap/test.mc"}}}
+{"type":"request","id":"1713512345681","method":"runToolAction","payload":{"action_id":"standardize_all_colors","context":{"chart_path":"D:/beatmap/test.mc","locale":"zh_CN","language":"zh"}}}
 ```
 
 ### 4.3 Response (Plugin -> Host)
@@ -121,3 +121,12 @@
 - 插件应忽略未知 `event` / `method`
 - 插件内部异常不应导致进程崩溃
 - 对无法处理的 `request` 返回 `result=false`
+
+
+## 7. Optional Locale Context
+
+- Host may include locale (e.g. zh_CN) and language (e.g. zh) in request context.
+- Plugins can ignore these fields safely if not needed.
+- For one-shot mode (--run-tool-action), host also exports:
+  - MALODY_LOCALE
+  - MALODY_LANGUAGE

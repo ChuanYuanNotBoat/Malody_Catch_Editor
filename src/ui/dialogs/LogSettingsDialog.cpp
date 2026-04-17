@@ -60,9 +60,9 @@ void LogSettingsDialog::setupUI()
     QGroupBox *actionsGroup = new QGroupBox(tr("操作"), this);
     QVBoxLayout *actionsLayout = new QVBoxLayout(actionsGroup);
 
-    m_showLogButton = new QPushButton(tr("查看当前日志文件"));
-    m_clearLogsButton = new QPushButton(tr("清除诊断数据"));
-    m_exportButton = new QPushButton(tr("导出诊断报告"));
+    m_showLogButton = new QPushButton(tr("View Current Log File"));
+    m_clearLogsButton = new QPushButton(tr("Clear Diagnostic Data"));
+    m_exportButton = new QPushButton(tr("Export Diagnostic Report"));
 
     actionsLayout->addWidget(m_showLogButton);
     actionsLayout->addWidget(m_clearLogsButton);
@@ -71,8 +71,8 @@ void LogSettingsDialog::setupUI()
 
     // 对话框按钮
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    m_okButton = new QPushButton(tr("确定"));
-    m_cancelButton = new QPushButton(tr("取消"));
+    m_okButton = new QPushButton(tr("OK"));
+    m_cancelButton = new QPushButton(tr("Cancel"));
     buttonLayout->addStretch();
     buttonLayout->addWidget(m_okButton);
     buttonLayout->addWidget(m_cancelButton);
@@ -168,7 +168,7 @@ void LogSettingsDialog::onShowLogDialogClicked()
 void LogSettingsDialog::onExportDiagnosticsClicked()
 {
     QString fileName = QFileDialog::getSaveFileName(this,
-                                                    tr("导出诊断报告"), "",
+                                                    tr("Export Diagnostic Report"), "",
                                                     tr("JSON文件 (*.json);;文本文件 (*.txt)"));
 
     if (fileName.isEmpty())

@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QVariantMap>
+#include <QProcessEnvironment>
 #include <utility>
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -388,6 +389,14 @@ bool ExternalProcessPlugin::runToolActionOneShot(const QString &actionId, const 
     oneShot.setWorkingDirectory(baseDir);
     oneShot.setProgram(executable);
     oneShot.setArguments(args);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    const QString locale = context.value("locale").toString().trimmed();
+    const QString language = context.value("language").toString().trimmed();
+    if (!locale.isEmpty())
+        env.insert("MALODY_LOCALE", locale);
+    if (!language.isEmpty())
+        env.insert("MALODY_LANGUAGE", language);
+    oneShot.setProcessEnvironment(env);
     oneShot.setProcessChannelMode(QProcess::MergedChannels);
 #ifdef Q_OS_WIN
     oneShot.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *p)
