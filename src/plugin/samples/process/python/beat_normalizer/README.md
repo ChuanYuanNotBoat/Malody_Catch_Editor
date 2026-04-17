@@ -13,9 +13,9 @@ Files:
 ## 运行时行为
 
 - Exposes one UI action through plugin interface:
-  - `standardize_all_colors` (placement: `left_sidebar`)
+  - `simplify_note_beats` (placement: `left_sidebar`)
 - 通过插件接口仅暴露一个 UI 动作：
-  - `standardize_all_colors`（挂载位：`left_sidebar`）
+  - `simplify_note_beats`（挂载位：`left_sidebar`）
 
 - Supports `.mc` and `.mcz`.  
 - 支持 `.mc` 与 `.mcz` 格式。
@@ -43,3 +43,4 @@ Files:
 
 - In plugin mode, protocol messages are read from stdin and responses are written to stdout.  
 - 在插件模式下，协议消息将从标准输入（stdin）读取，响应内容则输出至标准输出（stdout）。
+

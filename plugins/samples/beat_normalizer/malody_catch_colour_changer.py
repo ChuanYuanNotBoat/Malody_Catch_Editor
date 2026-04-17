@@ -53,27 +53,6 @@ def process_beat(beat):
     return [measure, new_num, new_den]
 
 
-def normalize_note_colors(note):
-    if not isinstance(note, dict):
-        return 0
-    removed = 0
-    color_keys = ("color", "colour", "noteColor", "customColor", "rgba", "rgb")
-    for key in list(note.keys()):
-        key_lower = key.lower()
-        if key in color_keys or ("color" in key_lower) or ("colour" in key_lower):
-            note.pop(key, None)
-            removed += 1
-
-    style = note.get("style")
-    if isinstance(style, dict):
-        for key in list(style.keys()):
-            key_lower = key.lower()
-            if ("color" in key_lower) or ("colour" in key_lower):
-                style.pop(key, None)
-                removed += 1
-    return removed
-
-
 def process_mc_file(mc_path, lang):
     with open(mc_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -99,20 +78,27 @@ def process_mc_file(mc_path, lang):
     return True
 
 
-def standardize_mc_colors(mc_path):
+def simplify_mc_beats(mc_path):
     with open(mc_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    modified = 0
+    changed = False
     for note in data.get("note", []):
-        modified += normalize_note_colors(note)
+        beat = note.get("beat")
+        if beat is None:
+            continue
+        new_beat = process_beat(beat)
+        if new_beat != beat:
+            note["beat"] = new_beat
+            changed = True
 
     backup_path = mc_path + ".bak"
     shutil.copyfile(mc_path, backup_path)
 
-    with open(mc_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    return modified
+    if changed:
+        with open(mc_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    return True
 
 
 def process_mcz_file(mcz_path, lang):
@@ -157,9 +143,9 @@ def normalize_path(path, lang):
         return False
 
 
-def standardize_colors_path(path):
+def simplify_beats_path(path):
     if path.lower().endswith(".mc"):
-        standardize_mc_colors(path)
+        simplify_mc_beats(path)
         return True
     if path.lower().endswith(".mcz"):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -168,7 +154,7 @@ def standardize_colors_path(path):
             for root, _, files in os.walk(tmpdir):
                 for file_name in files:
                     if file_name.lower().endswith(".mc"):
-                        standardize_mc_colors(os.path.join(root, file_name))
+                        simplify_mc_beats(os.path.join(root, file_name))
             backup = path + ".bak"
             shutil.copyfile(path, backup)
             with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zip_write:
@@ -210,6 +196,18 @@ def run_standalone():
     for p in targets:
         normalize_path(p, lang)
     return 0
+
+
+def run_tool_action_once(action_id, chart_path):
+    if not isinstance(chart_path, str) or not chart_path:
+        return 1
+    try:
+        if action_id == "simplify_note_beats":
+            return 0 if simplify_beats_path(chart_path) else 1
+        return 1
+    except Exception as exc:
+        print(f"run_tool_action_once failed: {exc}", file=sys.stderr)
+        return 1
 
 
 def _send_response(req_id, result):
@@ -268,10 +266,10 @@ def run_process_plugin():
                     req_id,
                     [
                         {
-                            "action_id": "standardize_all_colors",
-                            "title": "Standardize All Colors",
-                            "description": "Remove custom color fields and normalize note colors.",
-                            "confirm_message": "This will standardize all colors. Continue?",
+                            "action_id": "simplify_note_beats",
+                            "title": "Simplify Note Beats",
+                            "description": "Reduce all note beat fractions to simplest form.",
+                            "confirm_message": "This will simplify all note beat fractions. Continue?",
                             "placement": "left_sidebar",
                             "requires_undo_snapshot": True,
                         },
@@ -286,8 +284,8 @@ def run_process_plugin():
                     continue
 
                 try:
-                    if action_id == "standardize_all_colors":
-                        _send_response(req_id, standardize_colors_path(chart_path))
+                    if action_id == "simplify_note_beats":
+                        _send_response(req_id, simplify_beats_path(chart_path))
                     else:
                         _send_response(req_id, False)
                 except Exception as exc:
@@ -297,7 +295,7 @@ def run_process_plugin():
                 chart_path = payload.get("chart_path")
                 try:
                     if isinstance(chart_path, str) and chart_path:
-                        _send_response(req_id, standardize_colors_path(chart_path))
+                        _send_response(req_id, simplify_beats_path(chart_path))
                     else:
                         _send_response(req_id, False)
                 except Exception as exc:
@@ -310,6 +308,11 @@ def run_process_plugin():
 
 
 if __name__ == "__main__":
+    if "--run-tool-action" in sys.argv:
+        idx = sys.argv.index("--run-tool-action")
+        action = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else ""
+        chart = sys.argv[idx + 2] if idx + 2 < len(sys.argv) else ""
+        sys.exit(run_tool_action_once(action, chart))
     if "--plugin" in sys.argv:
         sys.exit(run_process_plugin())
     sys.exit(run_standalone())

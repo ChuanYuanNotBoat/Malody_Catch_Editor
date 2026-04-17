@@ -53,6 +53,7 @@ private:
     bool sendNotification(const QString &event, const QJsonObject &payload = QJsonObject());
     bool requestBool(const QString &method, const QJsonObject &payload, bool defaultValue) const;
     bool requestJson(const QString &method, const QJsonObject &payload, QJsonValue *result) const;
+    bool runToolActionOneShot(const QString &actionId, const QVariantMap &context) const;
     bool ensureProcessRunning();
     QString resolveLocalizedValue(const QJsonObject &table, const QString &locale, const QString &fallback) const;
     QString readSingleLine(int timeoutMs) const;

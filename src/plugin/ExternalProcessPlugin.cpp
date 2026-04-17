@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -30,6 +31,11 @@ int requestTimeoutMsForMethod(const QString &method)
     if (method == "listToolActions")
         return 5000;
     return 5000;
+}
+
+void pumpUiEvents()
+{
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
 }
 }
 
@@ -189,6 +195,14 @@ bool ExternalProcessPlugin::runToolAction(const QString &actionId, const QVarian
     if (actionId.isEmpty())
         return false;
 
+    // Prefer one-shot execution to match standalone script behavior and avoid
+    // request/response channel stalls for long-running file operations.
+    if (runToolActionOneShot(actionId, context))
+        return true;
+
+    Logger::warn(QString("Process plugin '%1' runToolAction(%2) one-shot path failed, trying protocol fallback.")
+                     .arg(m_manifest.pluginId)
+                     .arg(actionId));
     QJsonObject payload{
         {"action_id", actionId},
         {"context", toJsonObject(context)},
@@ -255,20 +269,38 @@ bool ExternalProcessPlugin::requestJson(const QString &method, const QJsonObject
     while (QDateTime::currentMSecsSinceEpoch() < deadline)
     {
         const int remaining = static_cast<int>(deadline - QDateTime::currentMSecsSinceEpoch());
-        const QString responseLine = readSingleLine(remaining);
-        if (responseLine.isEmpty())
+        const int waitSlice = qMax(1, qMin(remaining, 50));
+        if (!m_process.waitForReadyRead(waitSlice))
+        {
+            pumpUiEvents();
             continue;
+        }
+        const QString responseLine = QString::fromUtf8(m_process.readLine()).trimmed();
+        if (responseLine.isEmpty())
+        {
+            pumpUiEvents();
+            continue;
+        }
 
         QJsonParseError err;
         const QJsonDocument doc = QJsonDocument::fromJson(responseLine.toUtf8(), &err);
         if (err.error != QJsonParseError::NoError || !doc.isObject())
+        {
+            pumpUiEvents();
             continue;
+        }
 
         const QJsonObject obj = doc.object();
         if (obj.value("type").toString() != "response")
+        {
+            pumpUiEvents();
             continue;
+        }
         if (obj.value("id").toString() != requestId)
+        {
+            pumpUiEvents();
             continue;
+        }
 
         if (result)
             *result = obj.value("result");
@@ -289,6 +321,114 @@ bool ExternalProcessPlugin::requestJson(const QString &method, const QJsonObject
                          .arg(method));
     }
     return false;
+}
+
+bool ExternalProcessPlugin::runToolActionOneShot(const QString &actionId, const QVariantMap &context) const
+{
+    const QFileInfo manifestInfo(m_manifest.manifestPath);
+    const QString baseDir = manifestInfo.absolutePath();
+
+    QString executable = m_manifest.executable.trimmed();
+    QFileInfo execInfo(executable);
+    const bool looksLikePath = executable.contains('/') || executable.contains('\\') || executable.startsWith('.');
+    if (looksLikePath && execInfo.isRelative())
+        executable = QDir(baseDir).filePath(executable);
+
+    QStringList args;
+    for (const QString &arg : m_manifest.args)
+    {
+        const QString trimmed = arg.trimmed();
+        if (trimmed == "--plugin")
+            continue;
+        const bool argLooksLikePath = trimmed.contains('/') || trimmed.contains('\\') || trimmed.startsWith('.');
+        QFileInfo argInfo(trimmed);
+        if (argLooksLikePath && argInfo.isRelative())
+            args.append(QDir(baseDir).filePath(trimmed));
+        else
+            args.append(trimmed);
+    }
+
+    QStringList candidates;
+    const QString pNative = context.value("chart_path_native").toString();
+    const QString pPath = context.value("chart_path").toString();
+    const QString pCanonical = context.value("chart_path_canonical").toString();
+    if (!pNative.isEmpty())
+        candidates << pNative;
+    if (!pPath.isEmpty())
+        candidates << pPath;
+    if (!pCanonical.isEmpty())
+        candidates << pCanonical;
+
+    QString chartPath;
+    for (const QString &candidate : candidates)
+    {
+        if (QFileInfo::exists(candidate))
+        {
+            chartPath = candidate;
+            break;
+        }
+    }
+    if (chartPath.isEmpty() && !candidates.isEmpty())
+        chartPath = candidates.first();
+
+    args << "--run-tool-action" << actionId;
+    if (!chartPath.isEmpty())
+        args << chartPath;
+
+    Logger::info(QString("Process plugin one-shot start (%1): action=%2 path=%3 exists=%4")
+                     .arg(m_manifest.pluginId)
+                     .arg(actionId)
+                     .arg(chartPath)
+                     .arg(QFileInfo::exists(chartPath)));
+
+    QProcess oneShot;
+    oneShot.setWorkingDirectory(baseDir);
+    oneShot.setProgram(executable);
+    oneShot.setArguments(args);
+    oneShot.setProcessChannelMode(QProcess::MergedChannels);
+#ifdef Q_OS_WIN
+    oneShot.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *p)
+                                              { p->flags |= CREATE_NO_WINDOW; });
+#endif
+    oneShot.start();
+    if (!oneShot.waitForStarted(3000))
+    {
+        Logger::warn(QString("Process plugin '%1' one-shot fallback start failed.").arg(m_manifest.pluginId));
+        return false;
+    }
+
+    const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 120000;
+    while (oneShot.state() != QProcess::NotRunning && QDateTime::currentMSecsSinceEpoch() < deadline)
+    {
+        oneShot.waitForFinished(50);
+        pumpUiEvents();
+    }
+    if (oneShot.state() != QProcess::NotRunning)
+    {
+        oneShot.kill();
+        oneShot.waitForFinished(1000);
+        Logger::warn(QString("Process plugin '%1' one-shot fallback timed out.").arg(m_manifest.pluginId));
+        return false;
+    }
+
+    const QByteArray out = oneShot.readAll();
+    const QString outText = QString::fromUtf8(out).trimmed();
+    if (!outText.isEmpty())
+    {
+        Logger::info(QString("Process plugin one-shot output (%1): %2")
+                         .arg(m_manifest.pluginId)
+                         .arg(outText));
+    }
+
+    const bool ok = (oneShot.exitStatus() == QProcess::NormalExit && oneShot.exitCode() == 0);
+    if (!ok)
+    {
+        Logger::warn(QString("Process plugin one-shot failed (%1): exitStatus=%2 exitCode=%3")
+                         .arg(m_manifest.pluginId)
+                         .arg(static_cast<int>(oneShot.exitStatus()))
+                         .arg(oneShot.exitCode()));
+    }
+    return ok;
 }
 
 bool ExternalProcessPlugin::ensureProcessRunning()

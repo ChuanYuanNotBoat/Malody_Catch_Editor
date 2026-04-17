@@ -2,7 +2,7 @@
   "pluginId": "tool.beat_normalizer.py",
   "displayName": "Beat Fraction Normalizer",
   "version": "1.0.0",
-  "description": "Provides chart color standardization action.",
+  "description": "Provides note beat fraction simplification action.",
   "author": "Local Script Port",
   "pluginApiVersion": 2,
   "executable": "python",
@@ -13,7 +13,8 @@
     "en_US": "Beat Fraction Normalizer"
   },
   "localizedDescription": {
-    "zh_CN": "提供谱面颜色标准化动作",
-    "en_US": "Provides chart color standardization action"
+    "zh_CN": "提供谱面 Note 分数化简动作",
+    "en_US": "Provides note beat fraction simplification action"
   }
 }
+
