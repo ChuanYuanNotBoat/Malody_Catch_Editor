@@ -1,0 +1,19 @@
+﻿{
+  "pluginId": "tool.beat_normalizer.py",
+  "displayName": "Beat Fraction Normalizer",
+  "version": "1.0.0",
+  "description": "Normalize beat fractions in .mc/.mcz to simplest denominator.",
+  "author": "Local Script Port",
+  "pluginApiVersion": 2,
+  "executable": "python",
+  "args": ["./malody_catch_colour_changer.py", "--plugin"],
+  "capabilities": ["chart_observer", "advanced_color_editor"],
+  "localizedDisplayName": {
+    "zh_CN": "拍点分母规范化",
+    "en_US": "Beat Fraction Normalizer"
+  },
+  "localizedDescription": {
+    "zh_CN": "将 .mc/.mcz 中的拍点分数约分为最简分母",
+    "en_US": "Reduce beat fractions in .mc/.mcz to simplest terms"
+  }
+}

@@ -53,6 +53,7 @@ private slots:
     void calibrateSkin();
     void configureOutline();
     void openLogSettings();
+    void openPluginManager();
     void exportDiagnosticsReport();
     void togglePaste288Division(bool enabled);
     void changeNoteSound(const QString &soundPath);

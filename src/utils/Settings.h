@@ -62,6 +62,9 @@ public:
     QColor backgroundColor() const;
     void setBackgroundColor(const QColor &color);
 
+    QStringList disabledPluginIds() const;
+    void setDisabledPluginIds(const QStringList &pluginIds);
+
 private:
     Settings();
     QSettings m_settings;

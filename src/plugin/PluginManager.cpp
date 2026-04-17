@@ -1,11 +1,14 @@
 #include "PluginManager.h"
 #include "file/PluginLoader.h"
 #include "utils/Logger.h"
-#include <QDebug>
+#include "utils/Settings.h"
 #include <QLocale>
 #include <exception>
 
-PluginManager::PluginManager(QObject *parent) : QObject(parent) {}
+PluginManager::PluginManager(QObject *parent) : QObject(parent)
+{
+    m_disabledPluginIds = Settings::instance().disabledPluginIds();
+}
 
 PluginManager::~PluginManager()
 {
@@ -14,12 +17,15 @@ PluginManager::~PluginManager()
 
 void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
 {
+    m_pluginsDir = pluginsDir;
+    m_parentWidget = parent;
+    m_pluginInfos.clear();
     unloadPlugins();
 
     try
     {
         QVector<PluginInterface *> loaded = PluginLoader::loadPlugins(pluginsDir);
-        Logger::info(QString("Discovered %1 plugin binaries.").arg(loaded.size()));
+        Logger::info(QString("Discovered %1 plugin candidates.").arg(loaded.size()));
 
         QVector<PluginInterface *> rejected;
         const QString locale = QLocale::system().name();
@@ -33,13 +39,37 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
                 continue;
             }
 
+            PluginInfo info;
+            info.pluginId = p->pluginId();
+            info.displayName = p->localizedDisplayName(locale);
+            info.version = p->version();
+            info.author = p->author();
+            info.description = p->localizedDescription(locale);
+            info.capabilities = p->capabilities();
+            info.sourcePath = PluginLoader::pluginSourcePath(p);
+            info.enabled = isPluginEnabled(info.pluginId);
+
             if (p->pluginApiVersion() != PluginInterface::kHostApiVersion)
             {
-                Logger::warn(QString("Plugin '%1' skipped: API version mismatch (plugin=%2, host=%3)")
-                                 .arg(p->displayName())
-                                 .arg(p->pluginApiVersion())
-                                 .arg(PluginInterface::kHostApiVersion));
+                info.active = false;
+                info.loadError = QString("API mismatch: plugin=%1 host=%2")
+                                     .arg(p->pluginApiVersion())
+                                     .arg(PluginInterface::kHostApiVersion);
                 rejected.append(p);
+                m_pluginInfos.append(info);
+                Logger::warn(QString("Plugin '%1' skipped: %2")
+                                 .arg(info.displayName.isEmpty() ? info.pluginId : info.displayName)
+                                 .arg(info.loadError));
+                continue;
+            }
+
+            if (!info.enabled)
+            {
+                info.active = false;
+                info.loadError = "Disabled by user";
+                rejected.append(p);
+                m_pluginInfos.append(info);
+                Logger::info(QString("Plugin '%1' is disabled by user settings.").arg(info.pluginId));
                 continue;
             }
 
@@ -48,38 +78,50 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
                 const bool ok = p->initialize(parent);
                 if (!ok)
                 {
-                    Logger::warn(QString("Plugin '%1' initialize returned false. Skipped.").arg(p->displayName()));
+                    info.active = false;
+                    info.loadError = "initialize() returned false";
                     rejected.append(p);
-                    continue;
+                    Logger::warn(QString("Plugin '%1' initialize returned false.").arg(info.pluginId));
                 }
-
-                m_plugins.append(p);
-                Logger::info(QString("Plugin initialized: id='%1', name='%2', version='%3', author='%4'")
-                                 .arg(p->pluginId())
-                                 .arg(p->localizedDisplayName(locale))
-                                 .arg(p->version())
-                                 .arg(p->author()));
+                else
+                {
+                    info.active = true;
+                    m_plugins.append(p);
+                    Logger::info(QString("Plugin initialized: id='%1', name='%2', version='%3', author='%4'")
+                                     .arg(info.pluginId)
+                                     .arg(info.displayName)
+                                     .arg(info.version)
+                                     .arg(info.author));
+                }
             }
             catch (const std::exception &e)
             {
-                Logger::error(QString("Error initializing plugin %1: %2").arg(i).arg(QString::fromStdString(std::string(e.what()))));
+                info.active = false;
+                info.loadError = QString("initialize() exception: %1").arg(e.what());
                 rejected.append(p);
+                Logger::error(QString("Error initializing plugin %1: %2").arg(i).arg(e.what()));
             }
             catch (...)
             {
-                Logger::error(QString("Unknown error initializing plugin %1").arg(i));
+                info.active = false;
+                info.loadError = "initialize() unknown exception";
                 rejected.append(p);
+                Logger::error(QString("Unknown error initializing plugin %1").arg(i));
             }
+
+            m_pluginInfos.append(info);
         }
 
         if (!rejected.isEmpty())
             PluginLoader::unloadPlugins(rejected);
 
-        Logger::info(QString("PluginManager ready: %1 active plugins.").arg(m_plugins.size()));
+        Logger::info(QString("PluginManager ready: %1 active plugins, %2 total entries.")
+                         .arg(m_plugins.size())
+                         .arg(m_pluginInfos.size()));
     }
     catch (const std::exception &e)
     {
-        Logger::error(QString("Error loading plugins: %1").arg(QString::fromStdString(std::string(e.what()))));
+        Logger::error(QString("Error loading plugins: %1").arg(e.what()));
     }
     catch (...)
     {
@@ -87,32 +129,73 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
     }
 }
 
+void PluginManager::reloadPlugins()
+{
+    if (m_pluginsDir.isEmpty())
+        return;
+    loadPlugins(m_pluginsDir, m_parentWidget.data());
+}
+
 void PluginManager::unloadPlugins()
 {
-    if (m_plugins.isEmpty())
-        return;
-
-    for (PluginInterface *p : m_plugins)
+    if (!m_plugins.isEmpty())
     {
-        if (!p)
-            continue;
-        try
+        for (PluginInterface *p : m_plugins)
         {
-            p->shutdown();
+            if (!p)
+                continue;
+            try
+            {
+                p->shutdown();
+            }
+            catch (...)
+            {
+                Logger::warn(QString("Error in plugin '%1' shutdown").arg(localizedNameForLog(p)));
+            }
         }
-        catch (...)
-        {
-            Logger::warn(QString("Error in plugin '%1' shutdown").arg(p->displayName()));
-        }
-    }
 
-    PluginLoader::unloadPlugins(m_plugins);
-    Logger::info("All plugins unloaded.");
+        PluginLoader::unloadPlugins(m_plugins);
+        Logger::info("All plugins unloaded.");
+    }
 }
 
 QVector<PluginInterface *> PluginManager::plugins() const
 {
     return m_plugins;
+}
+
+QVector<PluginManager::PluginInfo> PluginManager::pluginInfos() const
+{
+    return m_pluginInfos;
+}
+
+QString PluginManager::pluginsDir() const
+{
+    return m_pluginsDir;
+}
+
+bool PluginManager::isPluginEnabled(const QString &pluginId) const
+{
+    return !m_disabledPluginIds.contains(pluginId, Qt::CaseSensitive);
+}
+
+void PluginManager::setPluginEnabled(const QString &pluginId, bool enabled)
+{
+    if (pluginId.isEmpty())
+        return;
+
+    if (enabled)
+        m_disabledPluginIds.removeAll(pluginId);
+    else if (!m_disabledPluginIds.contains(pluginId))
+        m_disabledPluginIds.append(pluginId);
+
+    m_disabledPluginIds.removeDuplicates();
+    Settings::instance().setDisabledPluginIds(m_disabledPluginIds);
+}
+
+QStringList PluginManager::disabledPluginIds() const
+{
+    return m_disabledPluginIds;
 }
 
 void PluginManager::notifyChartChanged()
@@ -127,7 +210,7 @@ void PluginManager::notifyChartChanged()
             }
             catch (...)
             {
-                Logger::warn("Error in plugin onChartChanged");
+                Logger::warn(QString("Error in plugin '%1' onChartChanged").arg(localizedNameForLog(p)));
             }
         }
     }
@@ -145,7 +228,7 @@ void PluginManager::notifyChartLoaded(const QString &chartPath)
         }
         catch (...)
         {
-            Logger::warn(QString("Error in plugin '%1' onChartLoaded").arg(p->displayName()));
+            Logger::warn(QString("Error in plugin '%1' onChartLoaded").arg(localizedNameForLog(p)));
         }
     }
 }
@@ -162,7 +245,7 @@ void PluginManager::notifyChartSaved(const QString &chartPath)
         }
         catch (...)
         {
-            Logger::warn(QString("Error in plugin '%1' onChartSaved").arg(p->displayName()));
+            Logger::warn(QString("Error in plugin '%1' onChartSaved").arg(localizedNameForLog(p)));
         }
     }
 }
@@ -178,14 +261,26 @@ bool PluginManager::tryOpenAdvancedColorEditor(const QVariantMap &context)
         {
             if (p->openAdvancedColorEditor(context))
             {
-                Logger::info(QString("Advanced color editor handled by plugin '%1'.").arg(p->displayName()));
+                Logger::info(QString("Advanced color editor handled by plugin '%1'.").arg(localizedNameForLog(p)));
                 return true;
             }
         }
         catch (...)
         {
-            Logger::warn(QString("Error in plugin '%1' openAdvancedColorEditor").arg(p->displayName()));
+            Logger::warn(QString("Error in plugin '%1' openAdvancedColorEditor").arg(localizedNameForLog(p)));
         }
     }
     return false;
 }
+
+QString PluginManager::localizedNameForLog(PluginInterface *plugin) const
+{
+    if (!plugin)
+        return "unknown";
+    const QString locale = QLocale::system().name();
+    const QString name = plugin->localizedDisplayName(locale);
+    if (!name.isEmpty())
+        return name;
+    return plugin->displayName();
+}
+

@@ -267,6 +267,9 @@ void MainWindow::createMenus()
         } });
 
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
+    QAction *pluginManagerAction = toolsMenu->addAction(tr("&Plugin Manager..."));
+    connect(pluginManagerAction, &QAction::triggered, this, &MainWindow::openPluginManager);
+    toolsMenu->addSeparator();
     QAction *gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
     toolsMenu->addSeparator();
     QAction *logSettingsAction = toolsMenu->addAction(tr("&Log Settings..."));

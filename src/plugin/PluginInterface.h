@@ -24,6 +24,10 @@ public:
     virtual QString version() const = 0;
     virtual QString description() const = 0;
     virtual QString author() const = 0;
+    virtual QString pluginSourcePath() const
+    {
+        return QString();
+    }
     virtual QString localizedDisplayName(const QString &locale) const
     {
         (void)locale;

@@ -246,3 +246,14 @@ void PluginLoader::unloadPlugins(QVector<PluginInterface *> &plugins)
 
     plugins.clear();
 }
+
+QString PluginLoader::pluginSourcePath(PluginInterface *plugin)
+{
+    if (!plugin)
+        return QString();
+
+    const auto it = g_pluginRuntime.constFind(plugin);
+    if (it != g_pluginRuntime.constEnd())
+        return it->filePath;
+    return plugin->pluginSourcePath();
+}

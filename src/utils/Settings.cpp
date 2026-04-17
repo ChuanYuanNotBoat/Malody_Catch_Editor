@@ -179,3 +179,13 @@ void Settings::setBackgroundColor(const QColor &color)
 {
     m_settings.setValue("view/backgroundColor", color);
 }
+
+QStringList Settings::disabledPluginIds() const
+{
+    return m_settings.value("plugins/disabledIds", QStringList()).toStringList();
+}
+
+void Settings::setDisabledPluginIds(const QStringList &pluginIds)
+{
+    m_settings.setValue("plugins/disabledIds", pluginIds);
+}

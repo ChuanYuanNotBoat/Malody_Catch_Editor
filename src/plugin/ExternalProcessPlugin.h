@@ -32,6 +32,7 @@ public:
     QString version() const override;
     QString description() const override;
     QString author() const override;
+    QString pluginSourcePath() const override;
     QString localizedDisplayName(const QString &locale) const override;
     QString localizedDescription(const QString &locale) const override;
     int pluginApiVersion() const override;
@@ -58,4 +59,3 @@ private:
     mutable QProcess m_process;
     bool m_initialized = false;
 };
-

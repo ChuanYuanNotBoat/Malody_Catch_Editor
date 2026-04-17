@@ -1,6 +1,8 @@
 ﻿#include "MainWindow.h"
 #include "MainWindowPrivate.h"
+#include "app/Application.h"
 #include "ui/dialogs/LogSettingsDialog.h"
+#include "ui/dialogs/PluginManagerDialog.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
@@ -31,7 +33,20 @@
 #include <QDoubleSpinBox>
 #include <QVariant>
 #include <QSlider>
+#include <QCoreApplication>
 
+void MainWindow::openPluginManager()
+{
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginManager())
+    {
+        QMessageBox::warning(this, tr("Plugin Manager"), tr("Plugin manager is not available."));
+        return;
+    }
+
+    PluginManagerDialog dialog(app->pluginManager(), this);
+    dialog.exec();
+}
 void MainWindow::openLogSettings()
 {
     Logger::info("Log settings dialog opened");
@@ -398,6 +413,10 @@ void MainWindow::adjustNoteSoundVolume()
         d->canvas->setNoteSoundVolume(originalVolume);
     }
 }
+
+
+
+
 
 
 

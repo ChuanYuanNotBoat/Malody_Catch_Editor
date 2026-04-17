@@ -12,6 +12,9 @@
 - 从 `{appDir}/plugins` 自动发现并加载插件
 - API 版本强校验（`PluginInterface::kHostApiVersion`）
 - 生命周期：`initialize -> events -> shutdown`
+- 主程序内置插件管理页面（Tools -> Plugin Manager）
+  - 查看插件元信息、来源路径、能力、加载状态
+  - 启用/禁用插件（持久化）并手动重载
 - 事件回调：
   - `onChartChanged`
   - `onChartLoaded(chartPath)`
@@ -83,6 +86,8 @@ plugins/
 ```
 
 仓库内可参考：`samples/process/`。
+
+其中 `samples/process/python/beat_normalizer/` 是从原始 Python 脚本迁移的完整插件示例。
 
 ## 7. 宿主端实现位置
 

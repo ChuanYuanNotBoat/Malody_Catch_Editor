@@ -46,7 +46,8 @@ ui_*.h
 *.swp
 *.DS_Store
 Thumbs.db
-
+__pycache__
+*.pyc
 # 可能的不应提交的资源
 *.exe
 *.dll

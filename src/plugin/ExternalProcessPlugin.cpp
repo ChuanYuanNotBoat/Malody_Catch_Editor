@@ -54,6 +54,11 @@ QString ExternalProcessPlugin::author() const
     return m_manifest.author;
 }
 
+QString ExternalProcessPlugin::pluginSourcePath() const
+{
+    return m_manifest.manifestPath;
+}
+
 QString ExternalProcessPlugin::localizedDisplayName(const QString &locale) const
 {
     return resolveLocalizedValue(m_manifest.localizedDisplayName, locale, m_manifest.displayName);
