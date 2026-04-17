@@ -1,6 +1,7 @@
 #include "PluginManagerDialog.h"
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QDir>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -91,7 +92,20 @@ void PluginManagerDialog::openPluginsFolder()
         path = m_pluginManager->pluginsDir();
     if (path.isEmpty())
         path = QCoreApplication::applicationDirPath() + "/plugins";
-    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+
+    if (!QDir(path).exists())
+    {
+        if (!QDir().mkpath(path))
+        {
+            QMessageBox::warning(this, tr("Plugin Manager"), tr("Failed to create plugin directory:\n%1").arg(path));
+            return;
+        }
+    }
+
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
+    {
+        QMessageBox::warning(this, tr("Plugin Manager"), tr("Failed to open plugin directory:\n%1").arg(path));
+    }
 }
 
 void PluginManagerDialog::updateDetails()
@@ -220,4 +234,3 @@ QString PluginManagerDialog::safeText(const QString &value) const
         return tr("(empty)");
     return value;
 }
-

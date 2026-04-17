@@ -46,6 +46,7 @@ public:
     // 保存/加载
     bool loadChart(const QString &path);
     bool saveChart(const QString &path);
+    bool applyExternalChartMutation(const QString &actionName, const Chart &mutatedChart);
 
 signals:
     void chartChanged(); // 任何数据变化
@@ -64,6 +65,7 @@ private:
     class RemoveBpmCommand;
     class UpdateBpmCommand;
     class SetMetaCommand;
+    class ExternalMutationCommand;
 
     Chart m_chart;
     QUndoStack *m_undoStack;

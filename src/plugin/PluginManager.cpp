@@ -118,6 +118,7 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
         Logger::info(QString("PluginManager ready: %1 active plugins, %2 total entries.")
                          .arg(m_plugins.size())
                          .arg(m_pluginInfos.size()));
+        emit pluginsChanged();
     }
     catch (const std::exception &e)
     {
@@ -156,6 +157,7 @@ void PluginManager::unloadPlugins()
 
         PluginLoader::unloadPlugins(m_plugins);
         Logger::info("All plugins unloaded.");
+        emit pluginsChanged();
     }
 }
 
@@ -196,6 +198,53 @@ void PluginManager::setPluginEnabled(const QString &pluginId, bool enabled)
 QStringList PluginManager::disabledPluginIds() const
 {
     return m_disabledPluginIds;
+}
+
+QList<PluginManager::ToolActionEntry> PluginManager::toolActions() const
+{
+    QList<ToolActionEntry> entries;
+    const QString locale = QLocale::system().name();
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        const QList<PluginInterface::ToolAction> actions = p->toolActions();
+        for (const PluginInterface::ToolAction &action : actions)
+        {
+            if (action.actionId.isEmpty() || action.title.isEmpty())
+                continue;
+            ToolActionEntry entry;
+            entry.pluginId = p->pluginId();
+            entry.pluginDisplayName = p->localizedDisplayName(locale);
+            entry.action = action;
+            entries.append(entry);
+        }
+    }
+    Logger::info(QString("PluginManager::toolActions => %1 entries").arg(entries.size()));
+    return entries;
+}
+
+bool PluginManager::runToolAction(const QString &pluginId, const QString &actionId, const QVariantMap &context)
+{
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        if (p->pluginId() != pluginId)
+            continue;
+        try
+        {
+            return p->runToolAction(actionId, context);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' runToolAction(%2)")
+                             .arg(localizedNameForLog(p))
+                             .arg(actionId));
+            return false;
+        }
+    }
+    return false;
 }
 
 void PluginManager::notifyChartChanged()
@@ -283,4 +332,3 @@ QString PluginManager::localizedNameForLog(PluginInterface *plugin) const
         return name;
     return plugin->displayName();
 }
-

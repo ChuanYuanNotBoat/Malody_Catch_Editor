@@ -333,6 +333,43 @@ private:
     MetaData m_old, m_new;
 };
 
+class ChartController::ExternalMutationCommand : public ChartController::ChartCommand
+{
+public:
+    ExternalMutationCommand(ChartController *controller,
+                            const QString &actionName,
+                            const Chart &before,
+                            const Chart &after,
+                            const QString &chartPath)
+        : ChartCommand(controller, actionName.isEmpty() ? "Plugin Mutation" : actionName),
+          m_before(before),
+          m_after(after),
+          m_chartPath(chartPath)
+    {
+    }
+
+    void undo() override
+    {
+        m_controller->m_chart = m_before;
+        if (!m_chartPath.isEmpty())
+            ChartIO::save(m_chartPath, m_controller->m_chart);
+        m_controller->chartChanged();
+    }
+
+    void redo() override
+    {
+        m_controller->m_chart = m_after;
+        if (!m_chartPath.isEmpty())
+            ChartIO::save(m_chartPath, m_controller->m_chart);
+        m_controller->chartChanged();
+    }
+
+private:
+    Chart m_before;
+    Chart m_after;
+    QString m_chartPath;
+};
+
 // ---------- ChartController 实现 ----------
 ChartController::ChartController(QObject *parent) : QObject(parent)
 {
@@ -537,4 +574,10 @@ bool ChartController::saveChart(const QString &path)
         emit errorOccurred("Unknown exception saving chart");
         return false;
     }
+}
+
+bool ChartController::applyExternalChartMutation(const QString &actionName, const Chart &mutatedChart)
+{
+    m_undoStack->push(new ExternalMutationCommand(this, actionName, m_chart, mutatedChart, m_currentChartPath));
+    return true;
 }

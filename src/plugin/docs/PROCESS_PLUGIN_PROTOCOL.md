@@ -74,13 +74,39 @@
 {"type":"request","id":"1713512345678","method":"openAdvancedColorEditor","payload":{"feature":"note_color_editor"}}
 ```
 
+```json
+{"type":"request","id":"1713512345680","method":"listToolActions","payload":{}}
+```
+
+```json
+{"type":"request","id":"1713512345681","method":"runToolAction","payload":{"action_id":"standardize_all_colors","context":{"chart_path":"D:/beatmap/test.mc"}}}
+```
+
 ### 4.3 Response (Plugin -> Host)
 
 ```json
 {"type":"response","id":"1713512345678","result":true}
 ```
 
-`result` 目前按 `bool` 处理。
+`result` 默认按 `bool` 处理；对于 `listToolActions` 返回数组。
+
+对于 `listToolActions`，`result` 应为数组，元素结构建议：
+
+```json
+{
+  "action_id": "standardize_all_colors",
+  "title": "标准化所有颜色",
+  "description": "可选描述",
+  "confirm_message": "执行前确认文案",
+  "placement": "left_sidebar",
+  "requires_undo_snapshot": true
+}
+```
+
+`placement` 可选值：
+- `tools_menu`
+- `top_toolbar`
+- `left_sidebar`
 
 ## 5. i18n Metadata Fallback
 

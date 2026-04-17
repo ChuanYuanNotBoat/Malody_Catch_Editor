@@ -3,14 +3,14 @@
 #include "controller/ChartController.h"
 #include "controller/PlaybackController.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QPushButton>
-#include <QLabel>
 #include <QDoubleSpinBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QVBoxLayout>
 
 LeftPanel::LeftPanel(QWidget *parent)
-    : QWidget(parent), m_chartController(nullptr), m_playbackController(nullptr), m_chartCanvas(nullptr)
+    : QWidget(parent)
 {
     setupUi();
 }
@@ -19,16 +19,13 @@ void LeftPanel::setupUi()
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
 
-    // 瀵嗗害鏇茬嚎
     m_densityCurve = new DensityCurve(this);
     layout->addWidget(m_densityCurve);
 
-    // 鎾斁/鏆傚仠鎸夐挳
     m_playPauseBtn = new QPushButton(tr("Play"), this);
     layout->addWidget(m_playPauseBtn);
     connect(m_playPauseBtn, &QPushButton::clicked, this, &LeftPanel::onPlayPauseClicked);
 
-    // 鏃堕棿杞寸缉鏀炬帶鍒?
     QHBoxLayout *zoomLayout = new QHBoxLayout;
     QLabel *zoomLabel = new QLabel(tr("Zoom:"), this);
     m_zoomOutBtn = new QPushButton("-", this);
@@ -37,7 +34,7 @@ void LeftPanel::setupUi()
     m_zoomInBtn->setFixedWidth(30);
 
     m_timeScaleSpin = new QDoubleSpinBox(this);
-    m_timeScaleSpin->setRange(0.2, 5.0); // 鎵嬪姩杈撳叆鏃犱弗鏍奸檺鍒?
+    m_timeScaleSpin->setRange(0.2, 5.0);
     m_timeScaleSpin->setSingleStep(0.1);
     m_timeScaleSpin->setDecimals(2);
     m_timeScaleSpin->setValue(2.25);
@@ -53,6 +50,16 @@ void LeftPanel::setupUi()
     connect(m_zoomOutBtn, &QPushButton::clicked, this, &LeftPanel::onZoomOutClicked);
     connect(m_timeScaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &LeftPanel::onTimeScaleChanged);
+
+    m_pluginSectionLabel = new QLabel(tr("Plugin Shortcuts"), this);
+    m_pluginSectionContainer = new QWidget(this);
+    m_pluginButtonsLayout = new QVBoxLayout(m_pluginSectionContainer);
+    m_pluginButtonsLayout->setContentsMargins(0, 0, 0, 0);
+    m_pluginButtonsLayout->setSpacing(6);
+    m_pluginSectionLabel->setVisible(false);
+    m_pluginSectionContainer->setVisible(false);
+    layout->addWidget(m_pluginSectionLabel);
+    layout->addWidget(m_pluginSectionContainer);
 
     layout->addStretch();
 }
@@ -77,9 +84,7 @@ void LeftPanel::onZoomInClicked()
 {
     if (!m_chartCanvas)
         return;
-    double newScale = m_chartCanvas->timeScale() * 1.2; // 澧炲姞 20%
-    m_chartCanvas->setTimeScale(newScale);
-    // 鏇存柊 spinbox 鏄剧ず锛堜俊鍙蜂細瑙﹀彂鏇存柊锛屼絾涓轰簡闃叉寰幆锛屽厛 block锛?
+    m_chartCanvas->setTimeScale(m_chartCanvas->timeScale() * 1.2);
     m_timeScaleSpin->blockSignals(true);
     m_timeScaleSpin->setValue(m_chartCanvas->timeScale());
     m_timeScaleSpin->blockSignals(false);
@@ -89,8 +94,7 @@ void LeftPanel::onZoomOutClicked()
 {
     if (!m_chartCanvas)
         return;
-    double newScale = m_chartCanvas->timeScale() / 1.2; // 鍑忓皯 20%
-    m_chartCanvas->setTimeScale(newScale);
+    m_chartCanvas->setTimeScale(m_chartCanvas->timeScale() / 1.2);
     m_timeScaleSpin->blockSignals(true);
     m_timeScaleSpin->setValue(m_chartCanvas->timeScale());
     m_timeScaleSpin->blockSignals(false);
@@ -106,7 +110,7 @@ void LeftPanel::onTimeScaleChanged(double scale)
 void LeftPanel::setChartController(ChartController *controller)
 {
     m_chartController = controller;
-    if (m_densityCurve)
+    if (m_densityCurve && controller)
         m_densityCurve->setChart(controller->chart());
 }
 
@@ -120,17 +124,42 @@ void LeftPanel::setPlaybackController(PlaybackController *controller)
 void LeftPanel::setChartCanvas(ChartCanvas *canvas)
 {
     m_chartCanvas = canvas;
-    if (canvas)
-    {
-        // 褰撶敾甯冪缉鏀炬敼鍙樻椂锛屽悓姝ユ洿鏂?spinbox 鏄剧ず
-        connect(canvas, &ChartCanvas::timeScaleChanged, this, [this](double scale)
-                {
-            m_timeScaleSpin->blockSignals(true);
-            m_timeScaleSpin->setValue(scale);
-            m_timeScaleSpin->blockSignals(false); });
-        // 鍒濆鍖?spinbox 涓哄綋鍓嶇缉鏀惧€?
-        m_timeScaleSpin->setValue(canvas->timeScale());
-    }
+    if (!canvas)
+        return;
+
+    connect(canvas, &ChartCanvas::timeScaleChanged, this, [this](double scale)
+            {
+                m_timeScaleSpin->blockSignals(true);
+                m_timeScaleSpin->setValue(scale);
+                m_timeScaleSpin->blockSignals(false);
+            });
+    m_timeScaleSpin->setValue(canvas->timeScale());
 }
 
+void LeftPanel::setPluginQuickActions(const QList<PluginQuickAction> &actions)
+{
+    while (QLayoutItem *item = m_pluginButtonsLayout->takeAt(0))
+    {
+        if (item->widget())
+            item->widget()->deleteLater();
+        delete item;
+    }
+
+    for (const PluginQuickAction &a : actions)
+    {
+        if (a.pluginId.isEmpty() || a.actionId.isEmpty() || a.title.isEmpty())
+            continue;
+
+        QPushButton *btn = new QPushButton(a.title, m_pluginSectionContainer);
+        if (!a.tooltip.isEmpty())
+            btn->setToolTip(a.tooltip);
+        connect(btn, &QPushButton::clicked, this, [this, a]()
+                { emit pluginQuickActionTriggered(a.pluginId, a.actionId); });
+        m_pluginButtonsLayout->addWidget(btn);
+    }
+
+    const bool hasActions = (m_pluginButtonsLayout->count() > 0);
+    m_pluginSectionLabel->setVisible(hasActions);
+    m_pluginSectionContainer->setVisible(hasActions);
+}
 

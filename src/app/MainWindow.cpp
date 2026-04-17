@@ -58,6 +58,7 @@
 #include <QListWidget>
 #include <QScrollBar>
 #include <QSet>
+#include <QTimer>
 #include <algorithm>
 
 namespace
@@ -85,6 +86,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->leftPanel = nullptr;
     d->speedActionGroup = nullptr;
     d->noteSoundMenu = nullptr;
+    d->pluginToolsMenu = nullptr;
+    d->mainToolBar = nullptr;
     d->noteSoundVolumeAction = nullptr;
     d->currentChartPath.clear();
     d->isModified = false;
@@ -112,6 +115,14 @@ MainWindow::MainWindow(ChartController *chartCtrl,
             {
         statusBar()->showMessage(msg, 3000);
         Logger::error("PlaybackController error: " + msg); });
+    connect(d->leftPanel, &LeftPanel::pluginQuickActionTriggered, this, &MainWindow::triggerPluginQuickAction);
+    QTimer::singleShot(0, this, [this]()
+                       {
+        if (PluginManager *pm = activePluginManager())
+        {
+            connect(pm, &PluginManager::pluginsChanged, this, &MainWindow::refreshPluginUiExtensions);
+            refreshPluginUiExtensions();
+        } });
 
     Logger::info("MainWindow constructor finished");
 }
@@ -269,6 +280,8 @@ void MainWindow::createMenus()
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
     QAction *pluginManagerAction = toolsMenu->addAction(tr("&Plugin Manager..."));
     connect(pluginManagerAction, &QAction::triggered, this, &MainWindow::openPluginManager);
+    d->pluginToolsMenu = toolsMenu->addMenu(tr("Plugin &Actions"));
+    connect(d->pluginToolsMenu, &QMenu::aboutToShow, this, &MainWindow::populatePluginToolsMenu);
     toolsMenu->addSeparator();
     QAction *gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
     toolsMenu->addSeparator();
@@ -411,20 +424,20 @@ void MainWindow::createCentralArea()
     d->splitter->setSizes({150, 800, 300});
     setCentralWidget(d->splitter);
 
-    QToolBar *toolBar = addToolBar(tr("Tools"));
-    toolBar->addAction(tr("Note"), [this]()
+    d->mainToolBar = addToolBar(tr("Tools"));
+    d->mainToolBar->addAction(tr("Note"), [this]()
                        {
         d->notePanel->setVisible(true);
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(false);
         d->currentRightPanel = d->notePanel; });
-    toolBar->addAction(tr("BPM"), [this]()
+    d->mainToolBar->addAction(tr("BPM"), [this]()
                        {
         d->notePanel->setVisible(false);
         d->bpmPanel->setVisible(true);
         d->metaPanel->setVisible(false);
         d->currentRightPanel = d->bpmPanel; });
-    toolBar->addAction(tr("Meta"), [this]()
+    d->mainToolBar->addAction(tr("Meta"), [this]()
                        {
         d->notePanel->setVisible(false);
         d->bpmPanel->setVisible(false);

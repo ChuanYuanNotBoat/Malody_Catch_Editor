@@ -1,9 +1,13 @@
 ﻿#include "MainWindow.h"
 #include "MainWindowPrivate.h"
 #include "app/Application.h"
+#include "controller/ChartController.h"
+#include "plugin/PluginManager.h"
 #include "ui/dialogs/LogSettingsDialog.h"
 #include "ui/dialogs/PluginManagerDialog.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
+#include "ui/LeftPanel.h"
+#include "file/ChartIO.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
 #include "utils/DiagnosticCollector.h"
@@ -11,6 +15,7 @@
 #include "model/Note.h"
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QMenu>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -18,6 +23,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QDir>
 #include <QFileInfo>
 #include <QDesktopServices>
 #include <QUrl>
@@ -34,6 +40,202 @@
 #include <QVariant>
 #include <QSlider>
 #include <QCoreApplication>
+#include <QAction>
+#include <QStatusBar>
+#include <QToolBar>
+
+void MainWindow::populatePluginToolsMenu()
+{
+    if (!d->pluginToolsMenu)
+        return;
+
+    d->pluginToolsMenu->clear();
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginManager())
+    {
+        QAction *none = d->pluginToolsMenu->addAction(tr("(Plugin manager unavailable)"));
+        none->setEnabled(false);
+        return;
+    }
+
+    const QList<PluginManager::ToolActionEntry> entries = app->pluginManager()->toolActions();
+    if (entries.isEmpty())
+    {
+        QAction *none = d->pluginToolsMenu->addAction(tr("(No plugin actions)"));
+        none->setEnabled(false);
+        return;
+    }
+
+    bool added = false;
+    for (const PluginManager::ToolActionEntry &entry : entries)
+    {
+        const QString text = QString("%1  [%2]").arg(entry.action.title, entry.pluginDisplayName);
+        QAction *act = d->pluginToolsMenu->addAction(text);
+        if (!entry.action.description.isEmpty())
+            act->setToolTip(entry.action.description);
+
+        QVariantMap payload;
+        payload.insert("plugin_id", entry.pluginId);
+        payload.insert("action_id", entry.action.actionId);
+        payload.insert("title", entry.action.title);
+        payload.insert("confirm_message", entry.action.confirmMessage);
+        payload.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
+        payload.insert("placement", entry.action.placement);
+        act->setData(payload);
+        connect(act, &QAction::triggered, this, &MainWindow::triggerPluginToolAction);
+        added = true;
+    }
+
+    if (!added)
+    {
+        QAction *none = d->pluginToolsMenu->addAction(tr("(No menu actions)"));
+        none->setEnabled(false);
+    }
+}
+
+void MainWindow::refreshPluginUiExtensions()
+{
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginManager())
+    {
+        Logger::warn("refreshPluginUiExtensions skipped: plugin manager unavailable.");
+        return;
+    }
+
+    d->pluginActionMeta.clear();
+    for (QAction *a : d->pluginToolbarActions)
+    {
+        if (d->mainToolBar && a)
+            d->mainToolBar->removeAction(a);
+        delete a;
+    }
+    d->pluginToolbarActions.clear();
+
+    QList<LeftPanel::PluginQuickAction> sidebarActions;
+    const QList<PluginManager::ToolActionEntry> entries = app->pluginManager()->toolActions();
+    Logger::info(QString("refreshPluginUiExtensions: discovered %1 plugin tool actions.").arg(entries.size()));
+    for (const PluginManager::ToolActionEntry &entry : entries)
+    {
+        QVariantMap meta;
+        meta.insert("plugin_id", entry.pluginId);
+        meta.insert("action_id", entry.action.actionId);
+        meta.insert("title", entry.action.title);
+        meta.insert("confirm_message", entry.action.confirmMessage);
+        meta.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
+        meta.insert("placement", entry.action.placement);
+
+        const QString key = entry.pluginId + "::" + entry.action.actionId;
+        d->pluginActionMeta.insert(key, meta);
+
+        const QString placement = entry.action.placement.toLower();
+        if (placement == QString(PluginInterface::kPlacementTopToolbar) && d->mainToolBar)
+        {
+            QAction *act = d->mainToolBar->addAction(entry.action.title);
+            if (!entry.action.description.isEmpty())
+                act->setToolTip(entry.action.description);
+            act->setData(meta);
+            connect(act, &QAction::triggered, this, &MainWindow::triggerPluginToolAction);
+            d->pluginToolbarActions.append(act);
+        }
+        else if (placement == QString(PluginInterface::kPlacementLeftSidebar))
+        {
+            LeftPanel::PluginQuickAction qa;
+            qa.pluginId = entry.pluginId;
+            qa.actionId = entry.action.actionId;
+            qa.title = entry.action.title;
+            qa.tooltip = entry.action.description;
+            sidebarActions.append(qa);
+        }
+    }
+
+    if (d->leftPanel)
+        d->leftPanel->setPluginQuickActions(sidebarActions);
+}
+
+void MainWindow::triggerPluginToolAction()
+{
+    QAction *action = qobject_cast<QAction *>(sender());
+    if (!action)
+        return;
+    runPluginActionWithMeta(action->data().toMap());
+}
+
+void MainWindow::triggerPluginQuickAction(const QString &pluginId, const QString &actionId)
+{
+    const QString key = pluginId + "::" + actionId;
+    if (!d->pluginActionMeta.contains(key))
+        return;
+    runPluginActionWithMeta(d->pluginActionMeta.value(key));
+}
+
+bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
+{
+    const QString pluginId = meta.value("plugin_id").toString();
+    const QString actionId = meta.value("action_id").toString();
+    const QString actionTitle = meta.value("title").toString();
+    const QString confirmMessage = meta.value("confirm_message").toString();
+    const bool requiresUndo = meta.value("requires_undo_snapshot", true).toBool();
+    if (pluginId.isEmpty() || actionId.isEmpty())
+        return false;
+
+    if (!confirmMessage.isEmpty())
+    {
+        QMessageBox::StandardButton confirm = QMessageBox::warning(
+            this,
+            tr("Confirm Plugin Action"),
+            confirmMessage,
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (confirm != QMessageBox::Yes)
+            return false;
+    }
+
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginManager() || !d->chartController)
+        return false;
+
+    const QString chartPath = d->chartController->chartFilePath();
+    if (chartPath.isEmpty())
+    {
+        QMessageBox::information(this, tr("No Chart"), tr("Please open a chart first."));
+        return false;
+    }
+
+    QVariantMap context;
+    context.insert("chart_path", chartPath);
+    context.insert("chart_path_native", QDir::toNativeSeparators(chartPath));
+    context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
+    context.insert("action_title", actionTitle);
+    Logger::info(QString("Running plugin action: plugin=%1 action=%2 path=%3")
+                     .arg(pluginId)
+                     .arg(actionId)
+                     .arg(chartPath));
+
+    if (!app->pluginManager()->runToolAction(pluginId, actionId, context))
+    {
+        Logger::warn(QString("Plugin action returned false: plugin=%1 action=%2 path=%3")
+                         .arg(pluginId)
+                         .arg(actionId)
+                         .arg(chartPath));
+        QMessageBox::warning(this, tr("Plugin Action"), tr("Plugin action failed: %1").arg(actionTitle));
+        return false;
+    }
+
+    Chart mutated;
+    if (!ChartIO::load(chartPath, mutated, false))
+    {
+        QMessageBox::warning(this, tr("Plugin Action"), tr("Plugin action finished, but failed to reload chart."));
+        return false;
+    }
+
+    if (requiresUndo)
+        d->chartController->applyExternalChartMutation(tr("Plugin Action: %1").arg(actionTitle), mutated);
+    else
+        d->chartController->loadChart(chartPath);
+
+    statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
+    return true;
+}
 
 void MainWindow::openPluginManager()
 {
@@ -46,6 +248,7 @@ void MainWindow::openPluginManager()
 
     PluginManagerDialog dialog(app->pluginManager(), this);
     dialog.exec();
+    refreshPluginUiExtensions();
 }
 void MainWindow::openLogSettings()
 {

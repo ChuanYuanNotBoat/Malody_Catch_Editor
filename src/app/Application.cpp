@@ -107,7 +107,10 @@ bool Application::initialize()
         Logger::info("Main window created and shown.");
 
         m_pluginManager = new PluginManager(this);
-        QString pluginsDir = QCoreApplication::applicationDirPath() + "/plugins";
+        const QString appDir = QCoreApplication::applicationDirPath();
+        const QString pluginsDir = QDir(appDir).filePath("plugins");
+        QDir().mkpath(pluginsDir);
+        Logger::info(QString("Plugin directory: %1").arg(QDir(pluginsDir).absolutePath()));
         m_pluginManager->loadPlugins(pluginsDir, m_mainWindow);
         Logger::info("Plugins loaded.");
 

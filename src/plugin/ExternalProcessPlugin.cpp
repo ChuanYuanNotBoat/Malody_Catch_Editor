@@ -10,12 +10,26 @@
 #include <QLocale>
 #include <QVariantMap>
 #include <utility>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace
 {
 QJsonObject toJsonObject(const QVariantMap &map)
 {
     return QJsonObject::fromVariantMap(map);
+}
+
+int requestTimeoutMsForMethod(const QString &method)
+{
+    if (method == "runToolAction")
+        return 15000;
+    if (method == "openAdvancedColorEditor")
+        return 10000;
+    if (method == "listToolActions")
+        return 5000;
+    return 5000;
 }
 }
 
@@ -139,6 +153,49 @@ bool ExternalProcessPlugin::openAdvancedColorEditor(const QVariantMap &context)
     return requestBool("openAdvancedColorEditor", toJsonObject(context), false);
 }
 
+QList<PluginInterface::ToolAction> ExternalProcessPlugin::toolActions() const
+{
+    QJsonValue result;
+    if (!requestJson("listToolActions", QJsonObject(), &result))
+        return {};
+    if (!result.isArray())
+        return {};
+
+    QList<ToolAction> actions;
+    const QJsonArray arr = result.toArray();
+    for (const QJsonValue &v : arr)
+    {
+        if (!v.isObject())
+            continue;
+        const QJsonObject obj = v.toObject();
+        ToolAction action;
+        action.actionId = obj.value("action_id").toString().trimmed();
+        action.title = obj.value("title").toString().trimmed();
+        action.description = obj.value("description").toString().trimmed();
+        action.confirmMessage = obj.value("confirm_message").toString().trimmed();
+        action.placement = obj.value("placement").toString().trimmed();
+        if (action.placement.isEmpty())
+            action.placement = PluginInterface::kPlacementToolsMenu;
+        action.requiresUndoSnapshot = obj.value("requires_undo_snapshot").toBool(true);
+        if (action.actionId.isEmpty() || action.title.isEmpty())
+            continue;
+        actions.append(action);
+    }
+    return actions;
+}
+
+bool ExternalProcessPlugin::runToolAction(const QString &actionId, const QVariantMap &context)
+{
+    if (actionId.isEmpty())
+        return false;
+
+    QJsonObject payload{
+        {"action_id", actionId},
+        {"context", toJsonObject(context)},
+    };
+    return requestBool("runToolAction", payload, false);
+}
+
 bool ExternalProcessPlugin::sendNotification(const QString &event, const QJsonObject &payload)
 {
     if (!ensureProcessRunning())
@@ -157,8 +214,25 @@ bool ExternalProcessPlugin::sendNotification(const QString &event, const QJsonOb
 
 bool ExternalProcessPlugin::requestBool(const QString &method, const QJsonObject &payload, bool defaultValue) const
 {
-    if (m_process.state() != QProcess::Running)
+    QJsonValue result;
+    if (!requestJson(method, payload, &result))
         return defaultValue;
+    if (!result.isBool())
+        return defaultValue;
+    return result.toBool(defaultValue);
+}
+
+bool ExternalProcessPlugin::requestJson(const QString &method, const QJsonObject &payload, QJsonValue *result) const
+{
+    if (result)
+        *result = QJsonValue();
+    if (m_process.state() != QProcess::Running)
+    {
+        Logger::warn(QString("Process plugin '%1' request '%2' skipped: process not running.")
+                         .arg(m_manifest.pluginId)
+                         .arg(method));
+        return false;
+    }
 
     const QString requestId = QString::number(QDateTime::currentMSecsSinceEpoch());
     QJsonObject req{
@@ -169,9 +243,15 @@ bool ExternalProcessPlugin::requestBool(const QString &method, const QJsonObject
     };
     const QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact) + "\n";
     if (!const_cast<ExternalProcessPlugin *>(this)->writeLine(line))
-        return defaultValue;
+    {
+        Logger::warn(QString("Process plugin '%1' request '%2' failed: writeLine error.")
+                         .arg(m_manifest.pluginId)
+                         .arg(method));
+        return false;
+    }
 
-    const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 1500;
+    const int timeoutMs = requestTimeoutMsForMethod(method);
+    const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + timeoutMs;
     while (QDateTime::currentMSecsSinceEpoch() < deadline)
     {
         const int remaining = static_cast<int>(deadline - QDateTime::currentMSecsSinceEpoch());
@@ -189,10 +269,26 @@ bool ExternalProcessPlugin::requestBool(const QString &method, const QJsonObject
             continue;
         if (obj.value("id").toString() != requestId)
             continue;
-        return obj.value("result").toBool(defaultValue);
-    }
 
-    return defaultValue;
+        if (result)
+            *result = obj.value("result");
+        return true;
+    }
+    const QByteArray stderrMsg = m_process.readAllStandardError();
+    if (!stderrMsg.isEmpty())
+    {
+        Logger::warn(QString("Process plugin '%1' request '%2' timeout, stderr: %3")
+                         .arg(m_manifest.pluginId)
+                         .arg(method)
+                         .arg(QString::fromUtf8(stderrMsg).trimmed()));
+    }
+    else
+    {
+        Logger::warn(QString("Process plugin '%1' request '%2' timeout without response.")
+                         .arg(m_manifest.pluginId)
+                         .arg(method));
+    }
+    return false;
 }
 
 bool ExternalProcessPlugin::ensureProcessRunning()
@@ -200,18 +296,38 @@ bool ExternalProcessPlugin::ensureProcessRunning()
     if (m_process.state() == QProcess::Running)
         return true;
 
-    QString executable = m_manifest.executable;
+    const QFileInfo manifestInfo(m_manifest.manifestPath);
+    const QString baseDir = manifestInfo.absolutePath();
+
+    QString executable = m_manifest.executable.trimmed();
     QFileInfo execInfo(executable);
-    if (execInfo.isRelative())
+    const bool looksLikePath = executable.contains('/') || executable.contains('\\') || executable.startsWith('.');
+    if (looksLikePath && execInfo.isRelative())
     {
-        const QFileInfo manifestInfo(m_manifest.manifestPath);
-        const QString baseDir = manifestInfo.absolutePath();
         executable = QDir(baseDir).filePath(executable);
     }
 
+    QStringList resolvedArgs;
+    resolvedArgs.reserve(m_manifest.args.size());
+    for (const QString &arg : m_manifest.args)
+    {
+        const QString trimmed = arg.trimmed();
+        const bool argLooksLikePath = trimmed.contains('/') || trimmed.contains('\\') || trimmed.startsWith('.');
+        QFileInfo argInfo(trimmed);
+        if (argLooksLikePath && argInfo.isRelative())
+            resolvedArgs.append(QDir(baseDir).filePath(trimmed));
+        else
+            resolvedArgs.append(trimmed);
+    }
+
+    m_process.setWorkingDirectory(baseDir);
     m_process.setProgram(executable);
-    m_process.setArguments(m_manifest.args);
+    m_process.setArguments(resolvedArgs);
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
+#ifdef Q_OS_WIN
+    m_process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args)
+                                                { args->flags |= CREATE_NO_WINDOW; });
+#endif
     m_process.start();
     if (!m_process.waitForStarted(2000))
     {

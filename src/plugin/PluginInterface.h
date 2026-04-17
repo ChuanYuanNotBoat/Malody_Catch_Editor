@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QList>
 #include <QVariantMap>
 #include <QWidget>
 #include <QtGlobal>
@@ -9,12 +10,26 @@
 class PluginInterface
 {
 public:
+    struct ToolAction
+    {
+        QString actionId;
+        QString title;
+        QString description;
+        QString confirmMessage;
+        QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar
+        bool requiresUndoSnapshot = true;
+    };
+
     // Host ABI/API version for runtime compatibility checks.
     static constexpr int kHostApiVersion = 2;
 
     // Capability keys.
     static constexpr const char *kCapabilityChartObserver = "chart_observer";
     static constexpr const char *kCapabilityAdvancedColorEditor = "advanced_color_editor";
+    static constexpr const char *kCapabilityToolActions = "tool_actions";
+    static constexpr const char *kPlacementToolsMenu = "tools_menu";
+    static constexpr const char *kPlacementTopToolbar = "top_toolbar";
+    static constexpr const char *kPlacementLeftSidebar = "left_sidebar";
 
     virtual ~PluginInterface() = default;
 
@@ -59,6 +74,18 @@ public:
     // Optional UI extension point.
     virtual bool openAdvancedColorEditor(const QVariantMap &context)
     {
+        (void)context;
+        return false;
+    }
+
+    // Optional tool action extension points.
+    virtual QList<ToolAction> toolActions() const
+    {
+        return {};
+    }
+    virtual bool runToolAction(const QString &actionId, const QVariantMap &context)
+    {
+        (void)actionId;
         (void)context;
         return false;
     }

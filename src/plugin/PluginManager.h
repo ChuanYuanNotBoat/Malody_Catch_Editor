@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QList>
 #include <QPointer>
 #include <QStringList>
 #include <QVector>
@@ -23,6 +24,12 @@ public:
         bool active = false;
         QString loadError;
     };
+    struct ToolActionEntry
+    {
+        QString pluginId;
+        QString pluginDisplayName;
+        PluginInterface::ToolAction action;
+    };
 
     explicit PluginManager(QObject *parent = nullptr);
     ~PluginManager();
@@ -37,11 +44,16 @@ public:
     bool isPluginEnabled(const QString &pluginId) const;
     void setPluginEnabled(const QString &pluginId, bool enabled);
     QStringList disabledPluginIds() const;
+    QList<ToolActionEntry> toolActions() const;
+    bool runToolAction(const QString &pluginId, const QString &actionId, const QVariantMap &context);
 
     void notifyChartChanged();
     void notifyChartLoaded(const QString &chartPath);
     void notifyChartSaved(const QString &chartPath);
     bool tryOpenAdvancedColorEditor(const QVariantMap &context);
+
+signals:
+    void pluginsChanged();
 
 private:
     QString localizedNameForLog(PluginInterface *plugin) const;
@@ -53,4 +65,3 @@ private:
     QString m_pluginsDir;
     QPointer<QWidget> m_parentWidget;
 };
-

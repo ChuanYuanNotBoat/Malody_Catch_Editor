@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <QMainWindow>
+#include <QVariantMap>
 
 class ChartController;
 class SelectionController;
@@ -54,6 +55,8 @@ private slots:
     void configureOutline();
     void openLogSettings();
     void openPluginManager();
+    void triggerPluginToolAction();
+    void triggerPluginQuickAction(const QString &pluginId, const QString &actionId);
     void exportDiagnosticsReport();
     void togglePaste288Division(bool enabled);
     void changeNoteSound(const QString &soundPath);
@@ -65,6 +68,9 @@ private:
     void retranslateUi();
     void populateSkinMenu();
     void populateNoteSoundMenu();
+    void populatePluginToolsMenu();
+    void refreshPluginUiExtensions();
+    bool runPluginActionWithMeta(const QVariantMap &meta);
     bool confirmSaveIfModified(const QString &reasonText);
     void loadChartFile(const QString &filePath);
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);

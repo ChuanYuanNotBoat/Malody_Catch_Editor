@@ -1,7 +1,10 @@
 ﻿#pragma once
 
 #include "MainWindow.h"
+#include <QHash>
+#include <QList>
 #include <QString>
+#include <QVariantMap>
 
 class ChartController;
 class SelectionController;
@@ -19,6 +22,7 @@ class QAction;
 class QActionGroup;
 class QMenu;
 class ChartCanvas;
+class QToolBar;
 
 class MainWindow::Private
 {
@@ -45,10 +49,14 @@ public:
     QActionGroup *speedActionGroup;
     QMenu *skinMenu;
     QMenu *noteSoundMenu;
+    QMenu *pluginToolsMenu;
     QAction *noteSizeAction;
     QAction *noteSoundVolumeAction;
     QAction *calibrateSkinAction;
     QAction *outlineAction;
+    QToolBar *mainToolBar;
+    QList<QAction *> pluginToolbarActions;
+    QHash<QString, QVariantMap> pluginActionMeta;
 
     QString currentChartPath;
     bool isModified = false;

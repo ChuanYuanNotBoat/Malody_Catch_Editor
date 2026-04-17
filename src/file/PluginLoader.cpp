@@ -2,6 +2,7 @@
 #include "plugin/ExternalProcessPlugin.h"
 #include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QHash>
 #include <QJsonArray>
@@ -49,6 +50,10 @@ ExternalProcessPlugin::Manifest parseProcessManifest(const QString &manifestPath
     *ok = false;
     ExternalProcessPlugin::Manifest manifest;
     manifest.manifestPath = manifestPath;
+    QFileInfo manifestInfo(manifestPath);
+    QString baseName = manifestInfo.completeBaseName();
+    if (baseName.endsWith(".plugin", Qt::CaseInsensitive))
+        baseName.chop(QString(".plugin").size());
 
     QFile f(manifestPath);
     if (!f.open(QIODevice::ReadOnly))
@@ -66,11 +71,11 @@ ExternalProcessPlugin::Manifest parseProcessManifest(const QString &manifestPath
     }
 
     const QJsonObject obj = doc.object();
-    manifest.pluginId = obj.value("pluginId").toString();
-    manifest.displayName = obj.value("displayName").toString();
-    manifest.version = obj.value("version").toString();
-    manifest.description = obj.value("description").toString();
-    manifest.author = obj.value("author").toString();
+    manifest.pluginId = obj.value("pluginId").toString().trimmed();
+    manifest.displayName = obj.value("displayName").toString().trimmed();
+    manifest.version = obj.value("version").toString().trimmed();
+    manifest.description = obj.value("description").toString().trimmed();
+    manifest.author = obj.value("author").toString().trimmed();
     manifest.apiVersion = obj.value("pluginApiVersion").toInt(-1);
     manifest.executable = obj.value("executable").toString();
     manifest.args = jsonArrayToStringList(obj.value("args").toArray());
@@ -84,10 +89,16 @@ ExternalProcessPlugin::Manifest parseProcessManifest(const QString &manifestPath
     if (descL10n.isObject())
         manifest.localizedDescription = descL10n.toObject();
 
+    if (manifest.pluginId.isEmpty())
+        manifest.pluginId = QString("process.%1").arg(baseName);
+    if (manifest.displayName.isEmpty())
+        manifest.displayName = baseName;
+    if (manifest.version.isEmpty())
+        manifest.version = "0.0.0";
+
     const bool hasRequired = !manifest.pluginId.isEmpty() &&
                              !manifest.displayName.isEmpty() &&
                              !manifest.version.isEmpty() &&
-                             !manifest.author.isEmpty() &&
                              !manifest.executable.isEmpty() &&
                              manifest.apiVersion > 0;
     if (!hasRequired)
@@ -111,7 +122,15 @@ QVector<PluginInterface *> PluginLoader::loadPlugins(const QString &pluginsDir)
         return plugins;
     }
 
-    const QStringList files = dir.entryList(QDir::Files);
+    QStringList files;
+    QDirIterator it(pluginsDir, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext())
+    {
+        const QString absPath = it.next();
+        const QString rel = dir.relativeFilePath(absPath);
+        files.append(rel);
+    }
+
     for (const QString &file : files)
     {
         if (!isNativePluginFile(file))

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QList>
+#include <QString>
 #include <QWidget>
 
 class ChartController;
@@ -8,31 +10,49 @@ class ChartCanvas;
 class DensityCurve;
 class QPushButton;
 class QDoubleSpinBox;
+class QLabel;
+class QVBoxLayout;
 
 class LeftPanel : public QWidget
 {
     Q_OBJECT
 public:
+    struct PluginQuickAction
+    {
+        QString pluginId;
+        QString actionId;
+        QString title;
+        QString tooltip;
+    };
+
     explicit LeftPanel(QWidget *parent = nullptr);
     void setChartController(ChartController *controller);
     void setPlaybackController(PlaybackController *controller);
-    void setChartCanvas(ChartCanvas *canvas); // 新增：用于缩放控制
+    void setChartCanvas(ChartCanvas *canvas);
+    void setPluginQuickActions(const QList<PluginQuickAction> &actions);
+
+signals:
+    void pluginQuickActionTriggered(const QString &pluginId, const QString &actionId);
 
 private slots:
     void onPlayPauseClicked();
-    void onZoomInClicked();                // 放大
-    void onZoomOutClicked();               // 缩小
-    void onTimeScaleChanged(double scale); // 手动输入
+    void onZoomInClicked();
+    void onZoomOutClicked();
+    void onTimeScaleChanged(double scale);
 
 private:
     void setupUi();
 
-    ChartController *m_chartController;
-    PlaybackController *m_playbackController;
-    ChartCanvas *m_chartCanvas;
-    DensityCurve *m_densityCurve;
-    QPushButton *m_playPauseBtn;
-    QPushButton *m_zoomInBtn;
-    QPushButton *m_zoomOutBtn;
-    QDoubleSpinBox *m_timeScaleSpin;
+    ChartController *m_chartController = nullptr;
+    PlaybackController *m_playbackController = nullptr;
+    ChartCanvas *m_chartCanvas = nullptr;
+    DensityCurve *m_densityCurve = nullptr;
+    QPushButton *m_playPauseBtn = nullptr;
+    QPushButton *m_zoomInBtn = nullptr;
+    QPushButton *m_zoomOutBtn = nullptr;
+    QDoubleSpinBox *m_timeScaleSpin = nullptr;
+    QLabel *m_pluginSectionLabel = nullptr;
+    QWidget *m_pluginSectionContainer = nullptr;
+    QVBoxLayout *m_pluginButtonsLayout = nullptr;
 };
+
