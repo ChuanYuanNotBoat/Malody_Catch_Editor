@@ -42,6 +42,23 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ---
 
+## Recent Updates / 近期特性
+
+- Safer note removal by note `id` first (avoid wrong delete on same-content notes)  
+  音符删除优先按 `id` 匹配，避免同内容误删
+- Temporary audio files are cleaned up automatically after loading/destruction  
+  临时音频文件会在加载切换/析构时自动清理
+- Playback snap now follows current time division setting  
+  播放头吸附使用当前时间分度设置
+- Paste preview now matches 288-division conversion behavior  
+  粘贴预览与 288 分度转换行为一致
+- Unified skin discovery from both `skins` and `resources/default_skin`  
+  皮肤扫描统一支持 `skins` 与 `resources/default_skin`
+- Added diagnostics/export and log settings dialog integration  
+  新增诊断导出与日志设置入口
+
+---
+
 ## Screenshots / 截图
 
 (coming soon)
@@ -59,8 +76,8 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 ### Build steps / 构建步骤
 
 ```bash
-git clone https://github.com/yourusername/CatchChartEditor.git
-cd CatchChartEditor
+git clone https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor.git
+cd Malody_Catch_Editor
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release

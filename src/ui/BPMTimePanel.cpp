@@ -61,7 +61,7 @@ void BPMTimePanel::setupUi()
 
 void BPMTimePanel::refreshBpmList()
 {
-    if (!m_chartController)
+    if (!m_chartController || !m_chartController->chart())
         return;
     m_bpmListWidget->clear();
     const auto &bpmList = m_chartController->chart()->bpmList();
@@ -79,6 +79,12 @@ void BPMTimePanel::refreshBpmList()
 
 void BPMTimePanel::onItemSelected(int row)
 {
+    if (!m_chartController || !m_chartController->chart())
+    {
+        m_selectedIndex = -1;
+        return;
+    }
+
     if (row < 0)
     {
         m_selectedIndex = -1;
@@ -160,8 +166,16 @@ void BPMTimePanel::onBpmChanged(double)
 
 void BPMTimePanel::setChartController(ChartController *controller)
 {
+    if (m_chartController)
+    {
+        disconnect(m_chartController, &ChartController::chartChanged, this, &BPMTimePanel::refreshBpmList);
+    }
+
     m_chartController = controller;
-    connect(m_chartController, &ChartController::chartChanged, this, &BPMTimePanel::refreshBpmList);
+    if (!m_chartController)
+        return;
+
+    connect(m_chartController, &ChartController::chartChanged, this, &BPMTimePanel::refreshBpmList, Qt::UniqueConnection);
     refreshBpmList();
 }
 

@@ -1,6 +1,23 @@
-#include "Chart.h"
+﻿#include "Chart.h"
 #include <algorithm>
 #include <QDebug>
+
+namespace
+{
+bool bpmLess(const BpmEntry &a, const BpmEntry &b)
+{
+    if (a.beatNum != b.beatNum)
+        return a.beatNum < b.beatNum;
+    double aPos = static_cast<double>(a.numerator) / a.denominator;
+    double bPos = static_cast<double>(b.numerator) / b.denominator;
+    return aPos < bPos;
+}
+
+void sortBpmList(QVector<BpmEntry> &list)
+{
+    std::sort(list.begin(), list.end(), bpmLess);
+}
+} // namespace
 
 Chart::Chart() { clear(); }
 
@@ -51,15 +68,7 @@ QVector<Note> &Chart::notes() { return m_notes; }
 void Chart::addBpm(const BpmEntry &bpm)
 {
     m_bpmList.append(bpm);
-    std::sort(m_bpmList.begin(), m_bpmList.end(),
-              [](const BpmEntry &a, const BpmEntry &b)
-              {
-                  if (a.beatNum != b.beatNum)
-                      return a.beatNum < b.beatNum;
-                  double aPos = static_cast<double>(a.numerator) / a.denominator;
-                  double bPos = static_cast<double>(b.numerator) / b.denominator;
-                  return aPos < bPos;
-              });
+    sortBpmList(m_bpmList);
 }
 
 void Chart::removeBpm(int index)
@@ -73,16 +82,7 @@ void Chart::updateBpm(int index, const BpmEntry &bpm)
     if (index >= 0 && index < m_bpmList.size())
     {
         m_bpmList[index] = bpm;
-        // 重新排序
-        std::sort(m_bpmList.begin(), m_bpmList.end(),
-                  [](const BpmEntry &a, const BpmEntry &b)
-                  {
-                      if (a.beatNum != b.beatNum)
-                          return a.beatNum < b.beatNum;
-                      double aPos = static_cast<double>(a.numerator) / a.denominator;
-                      double bPos = static_cast<double>(b.numerator) / b.denominator;
-                      return aPos < bPos;
-                  });
+        sortBpmList(m_bpmList);
     }
 }
 
@@ -97,23 +97,19 @@ void Chart::sortNotes()
     std::sort(m_notes.begin(), m_notes.end(),
               [](const Note &a, const Note &b)
               {
-                  // 首先按拍号排序
                   if (a.beatNum != b.beatNum)
                       return a.beatNum < b.beatNum;
 
-                  // 同一拍内，按分数位置排序
                   double aPos = static_cast<double>(a.numerator) / a.denominator;
                   double bPos = static_cast<double>(b.numerator) / b.denominator;
                   if (aPos != bPos)
                       return aPos < bPos;
 
-                  // 同一时间位置，按类型排序：普通/rain < 音效
                   if (a.type == NoteType::SOUND && b.type != NoteType::SOUND)
-                      return false; // 音效排在后面
+                      return false;
                   if (a.type != NoteType::SOUND && b.type == NoteType::SOUND)
-                      return true; // 非音效排在前面
+                      return true;
 
-                  // 都是音效或都不是音效，则按x坐标排序（音效的x=-1被自动排在最后）
                   return a.x < b.x;
               });
 }

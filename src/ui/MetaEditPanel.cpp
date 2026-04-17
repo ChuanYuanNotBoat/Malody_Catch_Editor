@@ -101,7 +101,7 @@ void MetaEditPanel::setupUi()
 void MetaEditPanel::refreshMeta()
 {
     Logger::info("MetaEditPanel::refreshMeta called");
-    if (!m_chartController)
+    if (!m_chartController || !m_chartController->chart())
         return;
     const MetaData &meta = m_chartController->chart()->meta();
     Logger::info(QString("MetaEditPanel::refreshMeta - title='%1', artist='%2', difficulty='%3', speed=%4")
@@ -145,9 +145,18 @@ void MetaEditPanel::onSaveClicked()
 
 void MetaEditPanel::setChartController(ChartController *controller)
 {
+    if (m_chartController)
+    {
+        disconnect(m_chartController, &ChartController::chartChanged, this, &MetaEditPanel::refreshMeta);
+        disconnect(m_chartController, &ChartController::chartLoaded, this, &MetaEditPanel::refreshMeta);
+    }
+
     m_chartController = controller;
-    connect(m_chartController, &ChartController::chartChanged, this, &MetaEditPanel::refreshMeta);
-    connect(m_chartController, &ChartController::chartLoaded, this, &MetaEditPanel::refreshMeta);
+    if (!m_chartController)
+        return;
+
+    connect(m_chartController, &ChartController::chartChanged, this, &MetaEditPanel::refreshMeta, Qt::UniqueConnection);
+    connect(m_chartController, &ChartController::chartLoaded, this, &MetaEditPanel::refreshMeta, Qt::UniqueConnection);
     refreshMeta();
 }
 

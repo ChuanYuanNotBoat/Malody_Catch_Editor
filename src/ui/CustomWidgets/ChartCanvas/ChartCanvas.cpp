@@ -404,6 +404,9 @@ void ChartCanvas::setGridSnap(bool snap)
 
 void ChartCanvas::setScrollPos(double timeMs)
 {
+    if (!m_chartController || !m_chartController->chart())
+        return;
+
     int beatNum, numerator, denominator;
     MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
                         m_chartController->chart()->meta().offset,

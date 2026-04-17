@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QStatusBar>
 #include <QSet>
+#include <QDateTime>
 #include <algorithm>
 
 namespace
@@ -41,6 +42,63 @@ QString resolveSkinPathByName(const QString &skinName)
             return fullPath;
     }
     return QString();
+}
+
+struct CachedSkinEntry
+{
+    QString name;
+    QString path;
+    QString displayName;
+};
+
+QString skinDirsFingerprint()
+{
+    QStringList parts;
+    const QStringList dirs = skinBaseDirs();
+    for (const QString &dir : dirs)
+    {
+        const QFileInfo fi(dir);
+        parts.append(fi.canonicalFilePath().isEmpty() ? fi.absoluteFilePath() : fi.canonicalFilePath());
+        parts.append(QString::number(fi.lastModified().toMSecsSinceEpoch()));
+    }
+    return parts.join("||");
+}
+
+QVector<CachedSkinEntry> querySkinEntries(bool *cacheHit = nullptr)
+{
+    static bool initialized = false;
+    static QString fingerprint;
+    static QVector<CachedSkinEntry> cache;
+
+    const QString newFingerprint = skinDirsFingerprint();
+    if (initialized && newFingerprint == fingerprint)
+    {
+        if (cacheHit)
+            *cacheHit = true;
+        return cache;
+    }
+
+    QVector<CachedSkinEntry> entries;
+    QSet<QString> seenNames;
+    for (const QString &baseDir : skinBaseDirs())
+    {
+        for (const QString &skinName : SkinIO::getSkinList(baseDir))
+        {
+            if (seenNames.contains(skinName))
+                continue;
+            seenNames.insert(skinName);
+
+            const QString path = baseDir + "/" + skinName;
+            entries.append({skinName, path, SkinIO::getSkinDisplayName(path)});
+        }
+    }
+
+    cache = entries;
+    fingerprint = newFingerprint;
+    initialized = true;
+    if (cacheHit)
+        *cacheHit = false;
+    return cache;
 }
 
 QStringList noteSoundBaseDirs()
@@ -141,25 +199,12 @@ void MainWindow::populateNoteSoundMenu()
 }
 void MainWindow::populateSkinMenu()
 {
-    d->skinMenu->clear();
-    struct SkinEntry
-    {
-        QString name;
-        QString path;
-    };
-    QVector<SkinEntry> entries;
-    QSet<QString> seenNames;
+    if (!d->skinMenu)
+        return;
 
-    for (const QString &baseDir : skinBaseDirs())
-    {
-        for (const QString &skinName : SkinIO::getSkinList(baseDir))
-        {
-            if (seenNames.contains(skinName))
-                continue;
-            seenNames.insert(skinName);
-            entries.append({skinName, baseDir + "/" + skinName});
-        }
-    }
+    d->skinMenu->clear();
+    bool cacheHit = false;
+    const QVector<CachedSkinEntry> entries = querySkinEntries(&cacheHit);
 
     if (entries.isEmpty())
     {
@@ -169,10 +214,9 @@ void MainWindow::populateSkinMenu()
     }
 
     QString currentSkin = Settings::instance().currentSkin();
-    for (const SkinEntry &entry : entries)
+    for (const CachedSkinEntry &entry : entries)
     {
-        QString displayName = SkinIO::getSkinDisplayName(entry.path);
-        QAction *action = d->skinMenu->addAction(displayName);
+        QAction *action = d->skinMenu->addAction(entry.displayName);
         action->setData(entry.name);
         action->setCheckable(true);
         if (entry.name == currentSkin)
@@ -182,7 +226,7 @@ void MainWindow::populateSkinMenu()
         connect(action, &QAction::triggered, this, [this, entry]()
                 { changeSkin(entry.name); });
     }
-    Logger::debug(QString("Populated skin menu with %1 skins").arg(entries.size()));
+    Logger::debug(QString("Populated skin menu with %1 skins (%2)").arg(entries.size()).arg(cacheHit ? "cache hit" : "cache miss"));
 }
 
 void MainWindow::changeSkin(const QString &skinName)
