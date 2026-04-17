@@ -8,7 +8,6 @@ This folder is the source-side plugin SDK and host integration code.
 - `PluginManager.h/.cpp`: plugin lifecycle and dispatch
 - `ExternalProcessPlugin.h/.cpp`: process-plugin adapter (multi-language)
 - `docs/`: protocol and capability documentation
-- `samples/`: reference plugin source examples
 
 ## Supported plugin types
 
@@ -28,4 +27,4 @@ Plugin tool actions can be mounted to:
 - `docs/PROCESS_PLUGIN_PROTOCOL.md`
 - `docs/ADVANCED_COLOR_EDITOR_PLUGIN.md`
 - `docs/PLUGIN_TEMPLATE.md`
-- `samples/process/python/beat_normalizer/`
+- `plugins/samples/beat_normalizer/`
