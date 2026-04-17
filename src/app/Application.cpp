@@ -112,6 +112,8 @@ bool Application::initialize()
         Logger::info("Plugins loaded.");
 
         connect(m_chartController, &ChartController::chartChanged, m_pluginManager, &PluginManager::notifyChartChanged);
+        connect(m_chartController, &ChartController::chartLoaded, this, [this]()
+                { m_pluginManager->notifyChartLoaded(m_chartController->chartFilePath()); });
 
         loadLastProject();
 

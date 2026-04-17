@@ -1,6 +1,8 @@
 ﻿// MainWindow.cpp - Main window implementation.
 #include "MainWindow.h"
 #include "MainWindowPrivate.h"
+#include "app/Application.h"
+#include "plugin/PluginManager.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "ui/NoteEditPanel.h"
 #include "ui/BPMTimePanel.h"
@@ -32,6 +34,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QDir>
 #include <QSlider>
@@ -56,6 +59,15 @@
 #include <QScrollBar>
 #include <QSet>
 #include <algorithm>
+
+namespace
+{
+PluginManager *activePluginManager()
+{
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    return app ? app->pluginManager() : nullptr;
+}
+}
 
 MainWindow::MainWindow(ChartController *chartCtrl,
                        SelectionController *selCtrl,
@@ -466,6 +478,8 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
     Settings::instance().setLastOpenPath(QFileInfo(savePath).absolutePath());
     d->isModified = false;
     statusBar()->showMessage(tr("Saved: %1").arg(savePath), 2000);
+    if (PluginManager *pm = activePluginManager())
+        pm->notifyChartSaved(savePath);
     return true;
 }
 
@@ -658,6 +672,8 @@ void MainWindow::saveChart()
         d->isModified = false;
         statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
         Logger::info("Chart saved: " + currentPath);
+        if (PluginManager *pm = activePluginManager())
+            pm->notifyChartSaved(currentPath);
     }
     else
     {
@@ -682,6 +698,8 @@ void MainWindow::saveChartAs()
         d->isModified = false;
         statusBar()->showMessage(tr("Saved: %1").arg(fileName), 2000);
         Logger::info("Chart saved as: " + fileName);
+        if (PluginManager *pm = activePluginManager())
+            pm->notifyChartSaved(fileName);
     }
     else
     {

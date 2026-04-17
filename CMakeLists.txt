@@ -42,6 +42,7 @@ set(SOURCES
     src/render/GridRenderer.cpp
     src/render/BackgroundRenderer.cpp
     src/render/HyperfruitDetector.cpp
+    src/plugin/ExternalProcessPlugin.cpp
     src/plugin/PluginManager.cpp
     src/ui/CustomWidgets/RightPanel.cpp
     src/ui/NoteEditPanel.cpp

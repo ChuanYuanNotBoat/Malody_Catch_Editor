@@ -1,35 +1,40 @@
-﻿# Advanced Color Editor Plugin Interface (Reserved)
+# Advanced Color Editor Capability
 
-## Purpose
-This document reserves a stable extension point for future advanced note color editing plugins.
+本文档定义 `advanced_color_editor` 能力的宿主约定。
 
-The built-in editor currently supports:
-- Right-click note(s) -> `Edit Color (By Division)`
-- Only denominator options that preserve exact note time are shown
-- Multi-select uses intersection of exactly-convertible denominator options
+## 1. Capability Key
 
-## Reserved Interface
-`src/plugin/PluginInterface.h` now includes optional methods:
+插件需要在 `capabilities` 中声明：
 
-- `bool supportsAdvancedColorEditor() const`
-- `bool openAdvancedColorEditor(const QVariantMap &context)`
+- `advanced_color_editor`
 
-Default behavior returns `false`, so existing plugins are not broken.
+## 2. Entry Point
 
-## Context Contract (Draft)
-When advanced plugin integration is wired in future versions, `context` is expected to include:
+宿主调用：
+- Native 插件：`openAdvancedColorEditor(const QVariantMap& context)`
+- Process 插件：`request(method="openAdvancedColorEditor", payload=context)`
 
-- `feature`: string, fixed value `note_color_editor`
-- `chart_path`: string, current chart absolute path if available
-- `target_note_ids`: string list, selected or target notes
-- `safe_denominators`: int list, denominator options that keep exact timing
-- `time_division`: int, editor time division
+返回：
+- `true`：插件已处理
+- `false`：宿主回退到内置行为
 
-Plugins should:
-- Never change note timing unless explicitly requested by user
-- Prefer preserving denominators when not needed for color change
-- Return `true` if plugin handled the request; `false` to fallback to built-in editor
+## 3. Context Payload
 
-## Compatibility Notes
-- This is a reserved API draft; keys may be extended but not removed without deprecation.
-- Existing plugins can ignore this feature safely.
+当前约定字段：
+- `feature`: 固定值 `note_color_editor`
+- `chart_path`: 当前谱面绝对路径
+- `target_note_ids`: 目标 note id 列表
+- `safe_denominators`: 安全分母列表（用于保持时间精度）
+- `time_division`: 当前编辑器时间分割
+
+后续字段只做追加，不删除已有字段。
+
+## 4. Safety Rule
+
+- 默认应保证时值不漂移
+- 破坏性修改应要求明确确认
+- 上下文不足时应安全失败并返回 `false`
+
+## 5. Error Handling
+
+插件抛出的异常由宿主捕获并记录日志，不应导致主程序崩溃。
