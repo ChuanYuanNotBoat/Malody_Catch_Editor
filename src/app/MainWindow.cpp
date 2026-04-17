@@ -88,14 +88,18 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->noteSoundMenu = nullptr;
     d->pluginToolsMenu = nullptr;
     d->mainToolBar = nullptr;
+    d->languageMenu = nullptr;
+    d->languageActionGroup = nullptr;
     d->noteSoundVolumeAction = nullptr;
+    d->notePanelAction = nullptr;
+    d->bpmPanelAction = nullptr;
+    d->metaPanelAction = nullptr;
     d->currentChartPath.clear();
     d->isModified = false;
 
     setupUi();
     createCentralArea();
     createMenus();
-    retranslateUi();
 
     connect(d->chartController, &ChartController::chartChanged, this, [this]()
             {
@@ -115,6 +119,15 @@ MainWindow::MainWindow(ChartController *chartCtrl,
             {
         statusBar()->showMessage(msg, 3000);
         Logger::error("PlaybackController error: " + msg); });
+    connect(d->playbackController, &PlaybackController::speedChanged, this, [this](double speed)
+            {
+        if (!d->speedActionGroup)
+            return;
+        for (QAction *action : d->speedActionGroup->actions())
+        {
+            const double actionSpeed = action->data().toDouble();
+            action->setChecked(qFuzzyCompare(actionSpeed, speed));
+        } });
     connect(d->leftPanel, &LeftPanel::pluginQuickActionTriggered, this, &MainWindow::triggerPluginQuickAction);
     QTimer::singleShot(0, this, [this]()
                        {
@@ -144,6 +157,12 @@ void MainWindow::setupUi()
 void MainWindow::createMenus()
 {
     Logger::debug("Creating menus...");
+    menuBar()->clear();
+    if (d->languageActionGroup)
+    {
+        delete d->languageActionGroup;
+        d->languageActionGroup = nullptr;
+    }
 
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     QAction *openAction = fileMenu->addAction(tr("&Open Chart..."), this, &MainWindow::openChart);
@@ -247,6 +266,22 @@ void MainWindow::createMenus()
     connect(d->outlineAction, &QAction::triggered, this, &MainWindow::configureOutline);
     d->noteSoundVolumeAction = settingsMenu->addAction(tr("Note Sound Volume..."));
     connect(d->noteSoundVolumeAction, &QAction::triggered, this, &MainWindow::adjustNoteSoundVolume);
+    settingsMenu->addSeparator();
+    d->languageMenu = settingsMenu->addMenu(tr("Language"));
+    d->languageActionGroup = new QActionGroup(this);
+    d->languageActionGroup->setExclusive(true);
+
+    const QString currentLanguage = Settings::instance().language();
+    const auto langs = Translator::instance().availableLanguages();
+    for (auto it = langs.cbegin(); it != langs.cend(); ++it)
+    {
+        QAction *act = d->languageMenu->addAction(it.value());
+        act->setCheckable(true);
+        act->setData(it.key());
+        act->setActionGroup(d->languageActionGroup);
+        act->setChecked(it.key() == currentLanguage);
+        connect(act, &QAction::triggered, this, &MainWindow::changeLanguage);
+    }
 
     QMenu *playMenu = menuBar()->addMenu(tr("&Playback"));
     d->playAction = playMenu->addAction(tr("&Play/Pause"), this, &MainWindow::togglePlayback);
@@ -267,16 +302,6 @@ void MainWindow::createMenus()
         act->setActionGroup(d->speedActionGroup);
         act->setChecked(qFuzzyCompare(sp, Settings::instance().playbackSpeed()));
     }
-    connect(d->playbackController, &PlaybackController::speedChanged, this, [this](double speed)
-            {
-        if (!d->speedActionGroup)
-            return;
-        for (QAction *action : d->speedActionGroup->actions())
-        {
-            const double actionSpeed = action->data().toDouble();
-            action->setChecked(qFuzzyCompare(actionSpeed, speed));
-        } });
-
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
     QAction *pluginManagerAction = toolsMenu->addAction(tr("&Plugin Manager..."));
     connect(pluginManagerAction, &QAction::triggered, this, &MainWindow::openPluginManager);
@@ -425,20 +450,20 @@ void MainWindow::createCentralArea()
     setCentralWidget(d->splitter);
 
     d->mainToolBar = addToolBar(tr("Tools"));
-    d->mainToolBar->addAction(tr("Note"), [this]()
-                       {
+    d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
+                                                   {
         d->notePanel->setVisible(true);
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(false);
         d->currentRightPanel = d->notePanel; });
-    d->mainToolBar->addAction(tr("BPM"), [this]()
-                       {
+    d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
+                                                  {
         d->notePanel->setVisible(false);
         d->bpmPanel->setVisible(true);
         d->metaPanel->setVisible(false);
         d->currentRightPanel = d->bpmPanel; });
-    d->mainToolBar->addAction(tr("Meta"), [this]()
-                       {
+    d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
+                                                   {
         d->notePanel->setVisible(false);
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(true);
@@ -845,7 +870,31 @@ void MainWindow::changeEvent(QEvent *event)
 void MainWindow::retranslateUi()
 {
     setWindowTitle(tr("Catch Chart Editor"));
+    if (d->mainToolBar)
+    {
+        d->mainToolBar->setWindowTitle(tr("Tools"));
+    }
+    if (d->notePanelAction)
+        d->notePanelAction->setText(tr("Note"));
+    if (d->bpmPanelAction)
+        d->bpmPanelAction->setText(tr("BPM"));
+    if (d->metaPanelAction)
+        d->metaPanelAction->setText(tr("Meta"));
+    if (d->leftPanel)
+        d->leftPanel->retranslateUi();
+    if (d->notePanel)
+        d->notePanel->retranslateUi();
+    if (d->bpmPanel)
+        d->bpmPanel->retranslateUi();
+    if (d->metaPanel)
+        d->metaPanel->retranslateUi();
+    if (d->skinMenu)
+        d->skinMenu->setTitle(tr("&Skin"));
+    if (d->noteSoundMenu)
+        d->noteSoundMenu->setTitle(tr("Note &Sound"));
     populateSkinMenu();
+    populateNoteSoundMenu();
+    populatePluginToolsMenu();
     Logger::debug("UI retranslated");
 }
 
@@ -854,6 +903,36 @@ void MainWindow::togglePaste288Division(bool enabled)
 {
     Settings::instance().setPasteUse288Division(enabled);
     Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+void MainWindow::changeLanguage()
+{
+    QAction *act = qobject_cast<QAction *>(sender());
+    if (!act)
+        return;
+
+    const QString languageCode = act->data().toString();
+    const QString languageName = act->text();
+    if (languageCode.isEmpty() || languageCode == Settings::instance().language())
+        return;
+
+    if (!Translator::instance().setLanguage(languageCode))
+    {
+        QMessageBox::warning(this, tr("Language"), tr("Failed to load language pack: %1").arg(languageCode));
+        return;
+    }
+
+    Settings::instance().setLanguage(languageCode);
+
+    QTimer::singleShot(0, this, [this]()
+                       {
+        if (PluginManager *pm = activePluginManager())
+        {
+            pm->reloadPlugins();
+            refreshPluginUiExtensions();
+        } });
+
+    statusBar()->showMessage(tr("Language changed to %1").arg(languageName), 2000);
 }
 
 

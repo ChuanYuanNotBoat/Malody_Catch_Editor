@@ -54,7 +54,12 @@ public:
     QAction *noteSoundVolumeAction;
     QAction *calibrateSkinAction;
     QAction *outlineAction;
+    QAction *notePanelAction;
+    QAction *bpmPanelAction;
+    QAction *metaPanelAction;
     QToolBar *mainToolBar;
+    QMenu *languageMenu;
+    QActionGroup *languageActionGroup;
     QList<QAction *> pluginToolbarActions;
     QHash<QString, QVariantMap> pluginActionMeta;
 

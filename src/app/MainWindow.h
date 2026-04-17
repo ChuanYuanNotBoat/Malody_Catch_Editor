@@ -60,6 +60,7 @@ private slots:
     void exportDiagnosticsReport();
     void togglePaste288Division(bool enabled);
     void changeNoteSound(const QString &soundPath);
+    void changeLanguage();
 
 private:
     void setupUi();

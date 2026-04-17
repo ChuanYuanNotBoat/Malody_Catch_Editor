@@ -8,6 +8,8 @@ class QCheckBox;
 class QSpinBox;
 class QPushButton;
 class QVBoxLayout;
+class QLabel;
+class QRadioButton;
 
 class NoteEditPanel : public RightPanel
 {
@@ -16,6 +18,7 @@ public:
     explicit NoteEditPanel(QWidget *parent = nullptr);
     void setChartController(ChartController *controller) override;
     void setSelectionController(SelectionController *controller) override;
+    void retranslateUi();
 
 signals:
     void modeChanged(int mode);
@@ -39,7 +42,12 @@ private:
 
     ChartController *m_chartController;
     SelectionController *m_selectionController;
+    QLabel *m_modeLabel;
     QButtonGroup *m_modeGroup;
+    QRadioButton *m_noteRadio;
+    QRadioButton *m_rainRadio;
+    QRadioButton *m_deleteRadio;
+    QLabel *m_timeDivisionLabel;
     QComboBox *m_timeDivisionCombo;
     QCheckBox *m_gridSnapCheck;
     QPushButton *m_gridSettingsBtn;

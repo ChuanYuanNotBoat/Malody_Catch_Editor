@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QLabel>
+#include <QHBoxLayout>
 #include <QFileDialog>
 
 MetaEditPanel::MetaEditPanel(QWidget *parent)
@@ -20,39 +21,48 @@ MetaEditPanel::MetaEditPanel(QWidget *parent)
 void MetaEditPanel::setupUi()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    QFormLayout *form = new QFormLayout;
+    m_formLayout = new QFormLayout;
 
     m_titleEdit = new QLineEdit(this);
-    form->addRow(tr("Title:"), m_titleEdit);
+    m_titleLabel = new QLabel(tr("Title:"), this);
+    m_formLayout->addRow(m_titleLabel, m_titleEdit);
     m_titleOrgEdit = new QLineEdit(this);
-    form->addRow(tr("Original Title:"), m_titleOrgEdit);
+    m_titleOrgLabel = new QLabel(tr("Original Title:"), this);
+    m_formLayout->addRow(m_titleOrgLabel, m_titleOrgEdit);
     m_artistEdit = new QLineEdit(this);
-    form->addRow(tr("Artist:"), m_artistEdit);
+    m_artistLabel = new QLabel(tr("Artist:"), this);
+    m_formLayout->addRow(m_artistLabel, m_artistEdit);
     m_artistOrgEdit = new QLineEdit(this);
-    form->addRow(tr("Original Artist:"), m_artistOrgEdit);
+    m_artistOrgLabel = new QLabel(tr("Original Artist:"), this);
+    m_formLayout->addRow(m_artistOrgLabel, m_artistOrgEdit);
     m_difficultyEdit = new QLineEdit(this);
-    form->addRow(tr("Difficulty:"), m_difficultyEdit);
+    m_difficultyLabel = new QLabel(tr("Difficulty:"), this);
+    m_formLayout->addRow(m_difficultyLabel, m_difficultyEdit);
     m_chartAuthorEdit = new QLineEdit(this);
-    form->addRow(tr("Chart Author:"), m_chartAuthorEdit);
+    m_chartAuthorLabel = new QLabel(tr("Chart Author:"), this);
+    m_formLayout->addRow(m_chartAuthorLabel, m_chartAuthorEdit);
     m_audioFileEdit = new QLineEdit(this);
-    form->addRow(tr("Audio File:"), m_audioFileEdit);
-    QPushButton *audioBrowse = new QPushButton(tr("Browse..."), this);
+    m_audioFileLabel = new QLabel(tr("Audio File:"), this);
+    m_formLayout->addRow(m_audioFileLabel, m_audioFileEdit);
+    m_audioBrowseBtn = new QPushButton(tr("Browse..."), this);
     QHBoxLayout *audioLayout = new QHBoxLayout;
     audioLayout->addWidget(m_audioFileEdit);
-    audioLayout->addWidget(audioBrowse);
-    form->addRow(tr("Audio (ogg):"), audioLayout);
-    connect(audioBrowse, &QPushButton::clicked, [this]()
+    audioLayout->addWidget(m_audioBrowseBtn);
+    m_audioOggLabel = new QLabel(tr("Audio (ogg):"), this);
+    m_formLayout->addRow(m_audioOggLabel, audioLayout);
+    connect(m_audioBrowseBtn, &QPushButton::clicked, [this]()
             {
         QString fileName = QFileDialog::getOpenFileName(this, tr("Select Audio"), QString(), tr("OGG Files (*.ogg)"));
         if (!fileName.isEmpty()) m_audioFileEdit->setText(fileName); });
 
     m_backgroundFileEdit = new QLineEdit(this);
-    QPushButton *bgBrowse = new QPushButton(tr("Browse..."), this);
+    m_bgBrowseBtn = new QPushButton(tr("Browse..."), this);
     QHBoxLayout *bgLayout = new QHBoxLayout;
     bgLayout->addWidget(m_backgroundFileEdit);
-    bgLayout->addWidget(bgBrowse);
-    form->addRow(tr("Background (jpg):"), bgLayout);
-    connect(bgBrowse, &QPushButton::clicked, [this]()
+    bgLayout->addWidget(m_bgBrowseBtn);
+    m_backgroundLabel = new QLabel(tr("Background (jpg):"), this);
+    m_formLayout->addRow(m_backgroundLabel, bgLayout);
+    connect(m_bgBrowseBtn, &QPushButton::clicked, [this]()
             {
         QString fileName = QFileDialog::getOpenFileName(this, tr("Select Background"), QString(), tr("JPEG Files (*.jpg)"));
         if (!fileName.isEmpty()) m_backgroundFileEdit->setText(fileName); });
@@ -60,23 +70,27 @@ void MetaEditPanel::setupUi()
     m_previewTimeSpin = new QSpinBox(this);
     m_previewTimeSpin->setRange(0, 999999);
     m_previewTimeSpin->setSuffix(" ms");
-    form->addRow(tr("Preview Time:"), m_previewTimeSpin);
+    m_previewTimeLabel = new QLabel(tr("Preview Time:"), this);
+    m_formLayout->addRow(m_previewTimeLabel, m_previewTimeSpin);
 
     m_firstBpmSpin = new QDoubleSpinBox(this);
     m_firstBpmSpin->setRange(1, 999);
     m_firstBpmSpin->setDecimals(3);
-    form->addRow(tr("First BPM:"), m_firstBpmSpin);
+    m_firstBpmLabel = new QLabel(tr("First BPM:"), this);
+    m_formLayout->addRow(m_firstBpmLabel, m_firstBpmSpin);
 
     m_offsetSpin = new QSpinBox(this);
     m_offsetSpin->setRange(-9999, 9999);
     m_offsetSpin->setSuffix(" ms");
-    form->addRow(tr("Offset:"), m_offsetSpin);
+    m_offsetLabel = new QLabel(tr("Offset:"), this);
+    m_formLayout->addRow(m_offsetLabel, m_offsetSpin);
 
     m_speedSpin = new QSpinBox(this);
     m_speedSpin->setRange(1, 100);
-    form->addRow(tr("Fall Speed:"), m_speedSpin);
+    m_speedLabel = new QLabel(tr("Fall Speed:"), this);
+    m_formLayout->addRow(m_speedLabel, m_speedSpin);
 
-    mainLayout->addLayout(form);
+    mainLayout->addLayout(m_formLayout);
 
     m_saveBtn = new QPushButton(tr("Save"), this);
     connect(m_saveBtn, &QPushButton::clicked, this, &MetaEditPanel::onSaveClicked);
@@ -140,4 +154,40 @@ void MetaEditPanel::setChartController(ChartController *controller)
 void MetaEditPanel::setSelectionController(SelectionController *controller)
 {
     Q_UNUSED(controller);
+}
+
+void MetaEditPanel::retranslateUi()
+{
+    if (m_titleLabel)
+        m_titleLabel->setText(tr("Title:"));
+    if (m_titleOrgLabel)
+        m_titleOrgLabel->setText(tr("Original Title:"));
+    if (m_artistLabel)
+        m_artistLabel->setText(tr("Artist:"));
+    if (m_artistOrgLabel)
+        m_artistOrgLabel->setText(tr("Original Artist:"));
+    if (m_difficultyLabel)
+        m_difficultyLabel->setText(tr("Difficulty:"));
+    if (m_chartAuthorLabel)
+        m_chartAuthorLabel->setText(tr("Chart Author:"));
+    if (m_audioFileLabel)
+        m_audioFileLabel->setText(tr("Audio File:"));
+    if (m_audioOggLabel)
+        m_audioOggLabel->setText(tr("Audio (ogg):"));
+    if (m_backgroundLabel)
+        m_backgroundLabel->setText(tr("Background (jpg):"));
+    if (m_previewTimeLabel)
+        m_previewTimeLabel->setText(tr("Preview Time:"));
+    if (m_firstBpmLabel)
+        m_firstBpmLabel->setText(tr("First BPM:"));
+    if (m_offsetLabel)
+        m_offsetLabel->setText(tr("Offset:"));
+    if (m_speedLabel)
+        m_speedLabel->setText(tr("Fall Speed:"));
+    if (m_audioBrowseBtn)
+        m_audioBrowseBtn->setText(tr("Browse..."));
+    if (m_bgBrowseBtn)
+        m_bgBrowseBtn->setText(tr("Browse..."));
+    if (m_saveBtn)
+        m_saveBtn->setText(tr("Save"));
 }

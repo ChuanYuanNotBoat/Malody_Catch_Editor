@@ -5,6 +5,17 @@
 #include <QLocale>
 #include <exception>
 
+namespace
+{
+QString currentLocale()
+{
+    QString locale = Settings::instance().language().trimmed();
+    if (locale.isEmpty())
+        locale = QLocale::system().name();
+    return locale;
+}
+}
+
 PluginManager::PluginManager(QObject *parent) : QObject(parent)
 {
     m_disabledPluginIds = Settings::instance().disabledPluginIds();
@@ -28,7 +39,7 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
         Logger::info(QString("Discovered %1 plugin candidates.").arg(loaded.size()));
 
         QVector<PluginInterface *> rejected;
-        const QString locale = QLocale::system().name();
+        const QString locale = currentLocale();
 
         for (int i = 0; i < loaded.size(); ++i)
         {
@@ -203,7 +214,7 @@ QStringList PluginManager::disabledPluginIds() const
 QList<PluginManager::ToolActionEntry> PluginManager::toolActions() const
 {
     QList<ToolActionEntry> entries;
-    const QString locale = QLocale::system().name();
+    const QString locale = currentLocale();
     for (PluginInterface *p : m_plugins)
     {
         if (!p)
@@ -326,7 +337,7 @@ QString PluginManager::localizedNameForLog(PluginInterface *plugin) const
 {
     if (!plugin)
         return "unknown";
-    const QString locale = QLocale::system().name();
+    const QString locale = currentLocale();
     const QString name = plugin->localizedDisplayName(locale);
     if (!name.isEmpty())
         return name;

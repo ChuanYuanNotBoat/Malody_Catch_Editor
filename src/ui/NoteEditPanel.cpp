@@ -27,30 +27,31 @@ void NoteEditPanel::setupUi()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-    QLabel *modeLabel = new QLabel(tr("Mode:"), this);
-    mainLayout->addWidget(modeLabel);
+    m_modeLabel = new QLabel(tr("Mode:"), this);
+    mainLayout->addWidget(m_modeLabel);
 
     m_modeGroup = new QButtonGroup(this);
-    QRadioButton *noteRadio = new QRadioButton(tr("Place Note"), this);
-    QRadioButton *rainRadio = new QRadioButton(tr("Place Rain"), this);
-    QRadioButton *deleteRadio = new QRadioButton(tr("Delete Mode"), this);
-    noteRadio->setChecked(true);
-    m_modeGroup->addButton(noteRadio, 0);
-    m_modeGroup->addButton(rainRadio, 1);
-    m_modeGroup->addButton(deleteRadio, 2);
+    m_noteRadio = new QRadioButton(tr("Place Note"), this);
+    m_rainRadio = new QRadioButton(tr("Place Rain"), this);
+    m_deleteRadio = new QRadioButton(tr("Delete Mode"), this);
+    m_noteRadio->setChecked(true);
+    m_modeGroup->addButton(m_noteRadio, 0);
+    m_modeGroup->addButton(m_rainRadio, 1);
+    m_modeGroup->addButton(m_deleteRadio, 2);
     connect(m_modeGroup, &QButtonGroup::buttonClicked, this, [this](QAbstractButton *button)
             { setMode(m_modeGroup->id(button)); });
 
-    mainLayout->addWidget(noteRadio);
-    mainLayout->addWidget(rainRadio);
-    mainLayout->addWidget(deleteRadio);
+    mainLayout->addWidget(m_noteRadio);
+    mainLayout->addWidget(m_rainRadio);
+    mainLayout->addWidget(m_deleteRadio);
 
     // Copy button.
     m_copyButton = new QPushButton(tr("Copy"), this);
     connect(m_copyButton, &QPushButton::clicked, this, &NoteEditPanel::copyRequested);
     mainLayout->addWidget(m_copyButton);
 
-    mainLayout->addWidget(new QLabel(tr("Time Division:"), this));
+    m_timeDivisionLabel = new QLabel(tr("Time Division:"), this);
+    mainLayout->addWidget(m_timeDivisionLabel);
     m_timeDivisionCombo = new QComboBox(this);
     QStringList divisions = {"1", "2", "3", "4", "6", "8", "12", "16", "24", "32"};
     for (const QString &d : divisions)
@@ -139,5 +140,25 @@ void NoteEditPanel::setChartController(ChartController *controller)
 void NoteEditPanel::setSelectionController(SelectionController *controller)
 {
     m_selectionController = controller;
+}
+
+void NoteEditPanel::retranslateUi()
+{
+    if (m_modeLabel)
+        m_modeLabel->setText(tr("Mode:"));
+    if (m_noteRadio)
+        m_noteRadio->setText(tr("Place Note"));
+    if (m_rainRadio)
+        m_rainRadio->setText(tr("Place Rain"));
+    if (m_deleteRadio)
+        m_deleteRadio->setText(tr("Delete Mode"));
+    if (m_copyButton)
+        m_copyButton->setText(tr("Copy"));
+    if (m_timeDivisionLabel)
+        m_timeDivisionLabel->setText(tr("Time Division:"));
+    if (m_gridSnapCheck)
+        m_gridSnapCheck->setText(tr("Grid Snap"));
+    if (m_gridSettingsBtn)
+        m_gridSettingsBtn->setText(tr("Grid Settings..."));
 }
 

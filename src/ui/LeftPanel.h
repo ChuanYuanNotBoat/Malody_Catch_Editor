@@ -30,6 +30,7 @@ public:
     void setPlaybackController(PlaybackController *controller);
     void setChartCanvas(ChartCanvas *canvas);
     void setPluginQuickActions(const QList<PluginQuickAction> &actions);
+    void retranslateUi();
 
 signals:
     void pluginQuickActionTriggered(const QString &pluginId, const QString &actionId);
@@ -50,9 +51,9 @@ private:
     QPushButton *m_playPauseBtn = nullptr;
     QPushButton *m_zoomInBtn = nullptr;
     QPushButton *m_zoomOutBtn = nullptr;
+    QLabel *m_zoomLabel = nullptr;
     QDoubleSpinBox *m_timeScaleSpin = nullptr;
     QLabel *m_pluginSectionLabel = nullptr;
     QWidget *m_pluginSectionContainer = nullptr;
     QVBoxLayout *m_pluginButtonsLayout = nullptr;
 };
-

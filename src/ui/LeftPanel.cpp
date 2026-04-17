@@ -27,7 +27,7 @@ void LeftPanel::setupUi()
     connect(m_playPauseBtn, &QPushButton::clicked, this, &LeftPanel::onPlayPauseClicked);
 
     QHBoxLayout *zoomLayout = new QHBoxLayout;
-    QLabel *zoomLabel = new QLabel(tr("Zoom:"), this);
+    m_zoomLabel = new QLabel(tr("Zoom:"), this);
     m_zoomOutBtn = new QPushButton("-", this);
     m_zoomOutBtn->setFixedWidth(30);
     m_zoomInBtn = new QPushButton("+", this);
@@ -40,7 +40,7 @@ void LeftPanel::setupUi()
     m_timeScaleSpin->setValue(2.25);
     m_timeScaleSpin->setSuffix("x");
 
-    zoomLayout->addWidget(zoomLabel);
+    zoomLayout->addWidget(m_zoomLabel);
     zoomLayout->addWidget(m_zoomOutBtn);
     zoomLayout->addWidget(m_timeScaleSpin);
     zoomLayout->addWidget(m_zoomInBtn);
@@ -163,3 +163,15 @@ void LeftPanel::setPluginQuickActions(const QList<PluginQuickAction> &actions)
     m_pluginSectionContainer->setVisible(hasActions);
 }
 
+void LeftPanel::retranslateUi()
+{
+    if (!m_playPauseBtn)
+        return;
+
+    const bool isPlaying = (m_playbackController && m_playbackController->state() == PlaybackController::Playing);
+    m_playPauseBtn->setText(isPlaying ? tr("Pause") : tr("Play"));
+    if (m_zoomLabel)
+        m_zoomLabel->setText(tr("Zoom:"));
+    if (m_pluginSectionLabel)
+        m_pluginSectionLabel->setText(tr("Plugin Shortcuts"));
+}

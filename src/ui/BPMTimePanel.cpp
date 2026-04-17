@@ -28,14 +28,16 @@ void BPMTimePanel::setupUi()
 
     // 编辑区域
     QHBoxLayout *timeLayout = new QHBoxLayout;
-    timeLayout->addWidget(new QLabel(tr("Time:")));
+    m_timeLabel = new QLabel(tr("Time:"));
+    timeLayout->addWidget(m_timeLabel);
     m_timeEdit = new QLineEdit(this);
     m_timeEdit->setPlaceholderText("0:1/1");
     timeLayout->addWidget(m_timeEdit);
     mainLayout->addLayout(timeLayout);
 
     QHBoxLayout *bpmLayout = new QHBoxLayout;
-    bpmLayout->addWidget(new QLabel(tr("BPM:")));
+    m_bpmLabel = new QLabel(tr("BPM:"));
+    bpmLayout->addWidget(m_bpmLabel);
     m_bpmSpin = new QDoubleSpinBox(this);
     m_bpmSpin->setRange(1, 999);
     m_bpmSpin->setDecimals(3);
@@ -166,4 +168,16 @@ void BPMTimePanel::setChartController(ChartController *controller)
 void BPMTimePanel::setSelectionController(SelectionController *controller)
 {
     Q_UNUSED(controller);
+}
+
+void BPMTimePanel::retranslateUi()
+{
+    if (m_timeLabel)
+        m_timeLabel->setText(tr("Time:"));
+    if (m_bpmLabel)
+        m_bpmLabel->setText(tr("BPM:"));
+    if (m_addBtn)
+        m_addBtn->setText(tr("Add/Update"));
+    if (m_removeBtn)
+        m_removeBtn->setText(tr("Remove"));
 }

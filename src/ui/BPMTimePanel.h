@@ -7,6 +7,7 @@ class QListWidget;
 class QLineEdit;
 class QDoubleSpinBox;
 class QPushButton;
+class QLabel;
 
 class BPMTimePanel : public RightPanel
 {
@@ -15,6 +16,7 @@ public:
     explicit BPMTimePanel(QWidget *parent = nullptr);
     void setChartController(ChartController *controller) override;
     void setSelectionController(SelectionController *controller) override;
+    void retranslateUi();
 
 private slots:
     void refreshBpmList();
@@ -28,6 +30,8 @@ private:
 
     ChartController *m_chartController;
     QListWidget *m_bpmListWidget;
+    QLabel *m_timeLabel;
+    QLabel *m_bpmLabel;
     QLineEdit *m_timeEdit;
     QDoubleSpinBox *m_bpmSpin;
     QPushButton *m_addBtn;

@@ -1,5 +1,6 @@
 #include "ExternalProcessPlugin.h"
 #include "utils/Logger.h"
+#include "utils/Settings.h"
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -108,7 +109,9 @@ bool ExternalProcessPlugin::initialize(QWidget *mainWindow)
     if (!ensureProcessRunning())
         return false;
 
-    const QString locale = QLocale::system().name();
+    QString locale = Settings::instance().language().trimmed();
+    if (locale.isEmpty())
+        locale = QLocale::system().name();
     const QJsonObject payload{
         {"plugin_id", m_manifest.pluginId},
         {"locale", locale},
