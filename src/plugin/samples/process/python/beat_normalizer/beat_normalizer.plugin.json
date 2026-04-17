@@ -1,20 +1,26 @@
-﻿{
-  "pluginId": "tool.beat_normalizer.py",
-  "displayName": "Beat Fraction Normalizer",
-  "version": "1.0.0",
-  "description": "Provides note beat fraction simplification action.",
-  "author": "Local Script Port",
-  "pluginApiVersion": 2,
-  "executable": "python",
-  "args": ["./malody_catch_colour_changer.py", "--plugin"],
-  "capabilities": ["chart_observer", "advanced_color_editor", "tool_actions"],
-  "localizedDisplayName": {
-    "zh_CN": "拍点分母规范化",
-    "en_US": "Beat Fraction Normalizer"
-  },
-  "localizedDescription": {
-    "zh_CN": "提供谱面 Note 分数化简动作",
-    "en_US": "Provides note beat fraction simplification action"
-  }
+{
+    "pluginId":  "tool.beat_normalizer.py",
+    "displayName":  "Note Color Formatter",
+    "version":  "1.0.0",
+    "description":  "Provides note color formatting action.",
+    "author":  "Local Script Port",
+    "pluginApiVersion":  2,
+    "executable":  "python",
+    "args":  [
+                 "./malody_catch_colour_changer.py",
+                 "--plugin"
+             ],
+    "capabilities":  [
+                         "chart_observer",
+                         "advanced_color_editor",
+                         "tool_actions"
+                     ],
+    "localizedDisplayName":  {
+                                 "zh_CN":  "音符颜色格式化",
+                                 "en_US":  "Note Color Formatter"
+                             },
+    "localizedDescription":  {
+                                 "zh_CN":  "提供谱面音符颜色格式化动作",
+                                 "en_US":  "Provides note color formatting action"
+                             }
 }
-

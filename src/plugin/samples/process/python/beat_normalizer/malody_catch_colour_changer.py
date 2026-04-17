@@ -21,7 +21,30 @@ TRANSLATIONS = {
         "zh": "未找到可处理的 .mc 或 .mcz 文件。",
         "en": "No .mc or .mcz files found.",
     },
+    "action_title": {
+        "zh": "格式化音符颜色",
+        "en": "Format Note Colors",
+    },
+    "action_desc": {
+        "zh": "按规则整理并统一谱面中的音符颜色字段。",
+        "en": "Normalize and format note color fields in the chart.",
+    },
+    "action_confirm": {
+        "zh": "将对当前谱面的音符颜色进行格式化处理，是否继续？",
+        "en": "This will format note colors in the current chart. Continue?",
+    },
 }
+
+
+def normalize_lang(value, default="zh"):
+    if not isinstance(value, str) or not value.strip():
+        return default
+    lower = value.strip().lower()
+    if lower.startswith("zh"):
+        return "zh"
+    if lower.startswith("en"):
+        return "en"
+    return default
 
 
 def detect_lang(default="zh"):
@@ -30,6 +53,27 @@ def detect_lang(default="zh"):
         return "zh"
     if sys_locale and sys_locale.lower().startswith("en"):
         return "en"
+    return default
+
+
+def detect_lang_from_context(context, default="zh"):
+    if isinstance(context, dict):
+        locale_value = context.get("locale")
+        language_value = context.get("language")
+        if isinstance(locale_value, str) and locale_value.strip():
+            return normalize_lang(locale_value, default)
+        if isinstance(language_value, str) and language_value.strip():
+            return normalize_lang(language_value, default)
+    return default
+
+
+def detect_lang_from_env(default="zh"):
+    locale_env = os.environ.get("MALODY_LOCALE", "")
+    language_env = os.environ.get("MALODY_LANGUAGE", "")
+    if locale_env:
+        return normalize_lang(locale_env, default)
+    if language_env:
+        return normalize_lang(language_env, default)
     return default
 
 
@@ -102,7 +146,6 @@ def simplify_mc_beats(mc_path):
 
 
 def process_mcz_file(mcz_path, lang):
-    output_dir = os.path.dirname(os.path.abspath(mcz_path))
     with tempfile.TemporaryDirectory() as tmpdir:
         with zipfile.ZipFile(mcz_path, "r") as zip_ref:
             zip_ref.extractall(tmpdir)
@@ -187,7 +230,7 @@ def resolve_chart_path(context):
 
 
 def run_standalone():
-    lang = detect_lang()
+    lang = detect_lang_from_env(detect_lang())
     cwd = os.getcwd()
     targets = [os.path.join(cwd, n) for n in os.listdir(cwd) if n.lower().endswith((".mc", ".mcz"))]
     if not targets:
@@ -199,7 +242,9 @@ def run_standalone():
 
 
 def run_tool_action_once(action_id, chart_path):
+    lang = detect_lang_from_env(detect_lang())
     if not isinstance(chart_path, str) or not chart_path:
+        print(tr(lang, "failed", file="", error="empty chart path"), file=sys.stderr)
         return 1
     try:
         if action_id == "simplify_note_beats":
@@ -233,7 +278,7 @@ def _send_response_json(req_id, result):
 
 
 def run_process_plugin():
-    lang = "zh"
+    lang = detect_lang_from_env("zh")
 
     for raw in sys.stdin:
         raw = raw.strip()
@@ -251,7 +296,7 @@ def run_process_plugin():
             payload = msg.get("payload", {}) or {}
             if event == "initialize":
                 locale_name = str(payload.get("locale", "zh_CN"))
-                lang = "zh" if locale_name.lower().startswith("zh") else "en"
+                lang = normalize_lang(locale_name, "zh")
             elif event == "shutdown":
                 break
             continue
@@ -267,9 +312,9 @@ def run_process_plugin():
                     [
                         {
                             "action_id": "simplify_note_beats",
-                            "title": "Simplify Note Beats",
-                            "description": "Reduce all note beat fractions to simplest form.",
-                            "confirm_message": "This will simplify all note beat fractions. Continue?",
+                            "title": tr(lang, "action_title"),
+                            "description": tr(lang, "action_desc"),
+                            "confirm_message": tr(lang, "action_confirm"),
                             "placement": "left_sidebar",
                             "requires_undo_snapshot": True,
                         },
@@ -278,6 +323,7 @@ def run_process_plugin():
             elif method == "runToolAction":
                 action_id = payload.get("action_id", "")
                 context = payload.get("context", {}) or {}
+                lang = detect_lang_from_context(context, lang)
                 chart_path = resolve_chart_path(context)
                 if not isinstance(chart_path, str) or not chart_path:
                     _send_response(req_id, False)
