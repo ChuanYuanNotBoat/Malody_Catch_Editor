@@ -83,6 +83,21 @@ QString resolveSkinPathByName(const QString &skinName)
     }
     return QString();
 }
+
+QStringList noteSoundBaseDirs()
+{
+    const QString appDir = QCoreApplication::applicationDirPath();
+    QStringList candidates;
+    candidates << (appDir + "/note_sounds") << (appDir + "/resources/note_sounds");
+
+    QStringList result;
+    for (const QString &dir : candidates)
+    {
+        if (QDir(dir).exists() && !result.contains(dir))
+            result.append(dir);
+    }
+    return result;
+}
 } // namespace
 
 class MainWindow::Private
@@ -109,7 +124,9 @@ public:
     QAction *playAction;
     QActionGroup *speedActionGroup;
     QMenu *skinMenu;
+    QMenu *noteSoundMenu;
     QAction *noteSizeAction;
+    QAction *noteSoundVolumeAction;
     QAction *calibrateSkinAction;
     QAction *outlineAction;
 
@@ -132,6 +149,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->skin = skin;
     d->leftPanel = nullptr;
     d->speedActionGroup = nullptr;
+    d->noteSoundMenu = nullptr;
+    d->noteSoundVolumeAction = nullptr;
     d->currentChartPath.clear();
     d->isModified = false;
 
@@ -180,7 +199,7 @@ void MainWindow::createMenus()
 {
     Logger::debug("Creating menus...");
 
-    // 文件菜单
+    // 鏂囦欢鑿滃崟
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     QAction *openAction = fileMenu->addAction(tr("&Open Chart..."), this, &MainWindow::openChart);
     openAction->setShortcut(QKeySequence::Open);
@@ -196,7 +215,7 @@ void MainWindow::createMenus()
     QAction *exitAction = fileMenu->addAction(tr("E&xit"), this, &QWidget::close);
     exitAction->setShortcut(QKeySequence::Quit);
 
-    // 编辑菜单
+    // 缂栬緫鑿滃崟
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
     d->undoAction = editMenu->addAction(tr("&Undo"), this, &MainWindow::undo);
     d->undoAction->setShortcut(QKeySequence::Undo);
@@ -204,7 +223,7 @@ void MainWindow::createMenus()
     d->redoAction->setShortcut(QKeySequence::Redo);
     editMenu->addSeparator();
     QAction *copyAction = editMenu->addAction(tr("&Copy"));
-    // 连接到画布的 handleCopy 方法
+    // 杩炴帴鍒扮敾甯冪殑 handleCopy 鏂规硶
     connect(copyAction, &QAction::triggered, d->canvas, &ChartCanvas::handleCopy);
     copyAction->setShortcut(QKeySequence::Copy);
     QAction *pasteAction = editMenu->addAction(tr("&Paste"), d->canvas, &ChartCanvas::paste);
@@ -239,7 +258,7 @@ void MainWindow::createMenus()
     paste288Action->setChecked(Settings::instance().pasteUse288Division());
     connect(paste288Action, &QAction::toggled, this, &MainWindow::togglePaste288Division);
 
-    // 视图菜单
+    // 瑙嗗浘鑿滃崟
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     d->colorAction = viewMenu->addAction(tr("&Color Notes"));
     d->colorAction->setCheckable(true);
@@ -263,7 +282,7 @@ void MainWindow::createMenus()
     Settings::instance().setBackgroundImageEnabled(on);
     d->canvas->update(); });
 
-    // 背景色子菜单
+    // 鑳屾櫙鑹插瓙鑿滃崟
     QMenu *bgColorMenu = viewMenu->addMenu(tr("Background Color"));
     bgColorMenu->addAction(tr("Black"), [this]()
                            {
@@ -278,7 +297,7 @@ void MainWindow::createMenus()
     Settings::instance().setBackgroundColor(QColor(40, 40, 40));
     d->canvas->update(); });
 
-    // 设置菜单
+    // 璁剧疆鑿滃崟
     QMenu *settingsMenu = menuBar()->addMenu(tr("&Settings"));
     d->noteSizeAction = settingsMenu->addAction(tr("Note Size..."));
     connect(d->noteSizeAction, &QAction::triggered, this, &MainWindow::adjustNoteSize);
@@ -286,8 +305,10 @@ void MainWindow::createMenus()
     connect(d->calibrateSkinAction, &QAction::triggered, this, &MainWindow::calibrateSkin);
     d->outlineAction = settingsMenu->addAction(tr("Outline Settings..."));
     connect(d->outlineAction, &QAction::triggered, this, &MainWindow::configureOutline);
+    d->noteSoundVolumeAction = settingsMenu->addAction(tr("Note Sound Volume..."));
+    connect(d->noteSoundVolumeAction, &QAction::triggered, this, &MainWindow::adjustNoteSoundVolume);
 
-    // 播放菜单
+    // 鎾斁鑿滃崟
     QMenu *playMenu = menuBar()->addMenu(tr("&Playback"));
     d->playAction = playMenu->addAction(tr("&Play/Pause"), this, &MainWindow::togglePlayback);
     d->playAction->setShortcut(Qt::Key_Space);
@@ -317,7 +338,7 @@ void MainWindow::createMenus()
             action->setChecked(qFuzzyCompare(actionSpeed, speed));
         } });
 
-    // 工具菜单
+    // 宸ュ叿鑿滃崟
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
     QAction *gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
     toolsMenu->addSeparator();
@@ -326,9 +347,11 @@ void MainWindow::createMenus()
     QAction *exportDiagAction = toolsMenu->addAction(tr("&Export Diagnostics Report..."));
     connect(exportDiagAction, &QAction::triggered, this, &MainWindow::exportDiagnosticsReport);
 
-    // 皮肤菜单
+    // 鐨偆鑿滃崟
     d->skinMenu = menuBar()->addMenu(tr("&Skin"));
     populateSkinMenu();
+    d->noteSoundMenu = menuBar()->addMenu(tr("Note &Sound"));
+    populateNoteSoundMenu();
 
     Logger::debug("Menus created");
 }
@@ -350,8 +373,17 @@ void MainWindow::createCentralArea()
     if (d->skin)
         d->canvas->setSkin(d->skin);
     d->canvas->setNoteSize(Settings::instance().noteSize());
+    d->canvas->setNoteSoundVolume(Settings::instance().noteSoundVolume());
+    QString noteSoundPath = Settings::instance().noteSoundPath();
+    if (!noteSoundPath.isEmpty() && !QFile::exists(noteSoundPath))
+    {
+        noteSoundPath.clear();
+        Settings::instance().setNoteSoundPath(QString());
+    }
+    d->canvas->setNoteSoundFile(noteSoundPath);
+    d->canvas->setNoteSoundEnabled(!noteSoundPath.isEmpty());
 
-    // 连接画布的状态栏消息信号
+    // 杩炴帴鐢诲竷鐨勭姸鎬佹爮娑堟伅淇″彿
     connect(d->canvas, &ChartCanvas::statusMessage, this, [this](const QString &msg)
             { statusBar()->showMessage(msg, 2000); });
 
@@ -442,7 +474,7 @@ void MainWindow::createCentralArea()
         d->canvas->setGridSnap(on); });
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode)
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
-    // 连接复制请求信号
+    // 杩炴帴澶嶅埗璇锋眰淇″彿
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
 
     d->splitter = new QSplitter(Qt::Horizontal, this);
@@ -637,7 +669,7 @@ void MainWindow::loadChartFile(const QString &filePath)
     statusBar()->showMessage(tr("Loaded: %1").arg(QFileInfo(actualChartPath).fileName()), 3000);
 }
 
-// ==================== 从列表中选择谱面 ====================
+// ==================== 浠庡垪琛ㄤ腑閫夋嫨璋遍潰 ====================
 QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title)
 {
     QDialog dialog(this);
@@ -667,7 +699,7 @@ QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>> &ch
     return list->currentItem()->data(Qt::UserRole).toString();
 }
 
-// ==================== 切换难度 ====================
+// ==================== 鍒囨崲闅惧害 ====================
 void MainWindow::switchDifficulty()
 {
     if (!d->chartController || !d->chartController->chart())
@@ -706,7 +738,7 @@ void MainWindow::switchDifficulty()
     loadChartFile(newPath);
 }
 
-// ==================== 保存谱面 ====================
+// ==================== 淇濆瓨璋遍潰 ====================
 void MainWindow::saveChart()
 {
     Logger::info("Save chart requested");
@@ -749,7 +781,7 @@ void MainWindow::saveChartAs()
     }
 }
 
-// ==================== 导出 MCZ ====================
+// ==================== 瀵煎嚭 MCZ ====================
 void MainWindow::exportMcz()
 {
     Logger::info("Export .mcz requested");
@@ -815,7 +847,7 @@ void MainWindow::redo()
     }
 }
 
-// ==================== 视图模式切换 ====================
+// ==================== 瑙嗗浘妯″紡鍒囨崲 ====================
 void MainWindow::toggleColorMode(bool on)
 {
     Logger::info(QString("Color mode toggled to %1").arg(on));
@@ -837,7 +869,7 @@ void MainWindow::toggleVerticalFlip(bool flipped)
     d->canvas->setVerticalFlip(flipped);
 }
 
-// ==================== 播放控制 ====================
+// ==================== 鎾斁鎺у埗 ====================
 void MainWindow::togglePlayback()
 {
     if (d->playbackController->state() == PlaybackController::Playing)
@@ -861,7 +893,7 @@ void MainWindow::togglePlayback()
     }
 }
 
-// ==================== 界面翻译 ====================
+// ==================== 鐣岄潰缈昏瘧 ====================
 void MainWindow::changeEvent(QEvent *event)
 {
     if (event->type() == QEvent::LanguageChange)
@@ -878,7 +910,7 @@ void MainWindow::retranslateUi()
     Logger::debug("UI retranslated");
 }
 
-// ==================== 日志设置 ====================
+// ==================== 鏃ュ織璁剧疆 ====================
 void MainWindow::openLogSettings()
 {
     Logger::info("Log settings dialog opened");
@@ -937,7 +969,7 @@ void MainWindow::openLogSettings()
     dialog.exec();
 }
 
-// ==================== 导出诊断报告 ====================
+// ==================== 瀵煎嚭璇婃柇鎶ュ憡 ====================
 void MainWindow::exportDiagnosticsReport()
 {
     Logger::info("Diagnostics report export requested");
@@ -999,7 +1031,7 @@ void MainWindow::exportDiagnosticsReport()
     }
 }
 
-// ==================== 音符大小调整 ====================
+// ==================== 闊崇澶у皬璋冩暣 ====================
 void MainWindow::adjustNoteSize()
 {
     QDialog dialog(this);
@@ -1067,7 +1099,7 @@ void MainWindow::adjustNoteSize()
     }
 }
 
-// ==================== 皮肤校准 ====================
+// ==================== 鐨偆鏍″噯 ====================
 void MainWindow::calibrateSkin()
 {
     if (!d->skin)
@@ -1156,7 +1188,7 @@ void MainWindow::calibrateSkin()
     dialog.exec();
 }
 
-// ==================== 轮廓设置 ====================
+// ==================== 杞粨璁剧疆 ====================
 void MainWindow::configureOutline()
 {
     QDialog dialog(this);
@@ -1194,7 +1226,143 @@ void MainWindow::configureOutline()
     }
 }
 
-// ==================== 皮肤菜单 ====================
+// ==================== 鐨偆鑿滃崟 ====================
+void MainWindow::adjustNoteSoundVolume()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Note Sound Volume"));
+    dialog.setModal(true);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QLabel *valueLabel = new QLabel;
+    valueLabel->setAlignment(Qt::AlignCenter);
+    QSlider *slider = new QSlider(Qt::Horizontal);
+    slider->setRange(0, 200);
+    slider->setValue(Settings::instance().noteSoundVolume());
+    slider->setFixedSize(420, 26);
+    slider->setStyleSheet(
+        "QSlider::groove:horizontal {"
+        "height: 10px;"
+        "border: 1px solid #666;"
+        "background: #d8d8d8;"
+        "border-radius: 2px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        "background: #444;"
+        "width: 18px;"
+        "margin: -5px 0;"
+        "border-radius: 2px;"
+        "}");
+
+    auto refreshLabel = [valueLabel, slider]()
+    { valueLabel->setText(QObject::tr("Volume: %1%").arg(slider->value())); };
+    refreshLabel();
+    connect(slider, &QSlider::valueChanged, this, [this, refreshLabel, slider]()
+            {
+        refreshLabel();
+        if (d->canvas)
+            d->canvas->setNoteSoundVolume(slider->value()); });
+
+    layout->addWidget(valueLabel);
+    layout->addWidget(slider, 0, Qt::AlignCenter);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    const int originalVolume = Settings::instance().noteSoundVolume();
+    if (dialog.exec() == QDialog::Accepted)
+    {
+        Settings::instance().setNoteSoundVolume(slider->value());
+        Logger::info(QString("Note sound volume set to %1%").arg(slider->value()));
+    }
+    else if (d->canvas)
+    {
+        d->canvas->setNoteSoundVolume(originalVolume);
+    }
+}
+
+void MainWindow::changeNoteSound(const QString &soundPath)
+{
+    Settings::instance().setNoteSoundPath(soundPath);
+    if (d->canvas)
+    {
+        d->canvas->setNoteSoundFile(soundPath);
+        d->canvas->setNoteSoundEnabled(!soundPath.isEmpty());
+    }
+
+    if (soundPath.isEmpty())
+        statusBar()->showMessage(tr("Note sound disabled."), 2000);
+    else
+        statusBar()->showMessage(tr("Note sound set: %1").arg(QFileInfo(soundPath).fileName()), 2000);
+}
+
+void MainWindow::populateNoteSoundMenu()
+{
+    if (!d->noteSoundMenu)
+        return;
+
+    d->noteSoundMenu->clear();
+    QActionGroup *group = new QActionGroup(d->noteSoundMenu);
+    group->setExclusive(true);
+
+    const QString currentPath = Settings::instance().noteSoundPath();
+    bool hasCurrentPathInMenu = currentPath.isEmpty();
+
+    QAction *noneAction = d->noteSoundMenu->addAction(tr("None (No Note Sound)"));
+    noneAction->setCheckable(true);
+    noneAction->setActionGroup(group);
+    noneAction->setChecked(currentPath.isEmpty());
+    connect(noneAction, &QAction::triggered, this, [this]()
+            { changeNoteSound(QString()); });
+
+    d->noteSoundMenu->addSeparator();
+
+    QStringList filters;
+    filters << "*.wav" << "*.ogg" << "*.mp3" << "*.flac" << "*.m4a";
+    QVector<QFileInfo> soundEntries;
+    QSet<QString> seenCanonical;
+    for (const QString &baseDir : noteSoundBaseDirs())
+    {
+        QDir dir(baseDir);
+        const QFileInfoList files = dir.entryInfoList(filters, QDir::Files | QDir::Readable, QDir::Name);
+        for (const QFileInfo &fi : files)
+        {
+            const QString canonical = fi.canonicalFilePath().isEmpty() ? fi.absoluteFilePath() : fi.canonicalFilePath();
+            if (seenCanonical.contains(canonical))
+                continue;
+            seenCanonical.insert(canonical);
+            soundEntries.append(fi);
+        }
+    }
+
+    if (soundEntries.isEmpty())
+    {
+        QAction *emptyAction = d->noteSoundMenu->addAction(tr("No sound files found"));
+        emptyAction->setEnabled(false);
+        return;
+    }
+
+    std::sort(soundEntries.begin(), soundEntries.end(), [](const QFileInfo &a, const QFileInfo &b)
+              { return a.fileName().toLower() < b.fileName().toLower(); });
+
+    for (const QFileInfo &fi : soundEntries)
+    {
+        const QString absPath = fi.absoluteFilePath();
+        if (!currentPath.isEmpty() && QFileInfo(currentPath).absoluteFilePath() == absPath)
+            hasCurrentPathInMenu = true;
+        QAction *act = d->noteSoundMenu->addAction(fi.fileName());
+        act->setCheckable(true);
+        act->setActionGroup(group);
+        act->setChecked(!currentPath.isEmpty() && QFileInfo(currentPath).absoluteFilePath() == absPath);
+        connect(act, &QAction::triggered, this, [this, absPath]()
+                { changeNoteSound(absPath); });
+    }
+
+    if (!hasCurrentPathInMenu)
+        noneAction->setChecked(true);
+}
 void MainWindow::populateSkinMenu()
 {
     d->skinMenu->clear();
@@ -1292,4 +1460,5 @@ void MainWindow::togglePaste288Division(bool enabled)
     Settings::instance().setPasteUse288Division(enabled);
     Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
 }
+
 

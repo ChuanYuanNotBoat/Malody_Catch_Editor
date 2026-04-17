@@ -1,6 +1,7 @@
 #include "Settings.h"
 #include <QDir>
 #include <QCoreApplication>
+#include <QtGlobal>
 
 Settings::Settings() : m_settings("CatchEditor", "CatchChartEditor") {}
 
@@ -71,6 +72,22 @@ int Settings::globalAudioOffset() const
 void Settings::setGlobalAudioOffset(int offset)
 {
     m_settings.setValue("audio/globalOffset", offset);
+}
+QString Settings::noteSoundPath() const
+{
+    return m_settings.value("audio/noteSoundPath", "").toString();
+}
+void Settings::setNoteSoundPath(const QString &path)
+{
+    m_settings.setValue("audio/noteSoundPath", path);
+}
+int Settings::noteSoundVolume() const
+{
+    return m_settings.value("audio/noteSoundVolume", 100).toInt();
+}
+void Settings::setNoteSoundVolume(int volume)
+{
+    m_settings.setValue("audio/noteSoundVolume", qBound(0, volume, 200));
 }
 
 QString Settings::currentSkin() const

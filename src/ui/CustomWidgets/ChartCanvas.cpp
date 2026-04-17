@@ -2,6 +2,7 @@
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
 #include "controller/PlaybackController.h"
+#include "audio/NoteSoundPlayer.h"
 #include "render/NoteRenderer.h"
 #include "render/GridRenderer.h"
 #include "render/BackgroundRenderer.h"
@@ -96,7 +97,10 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_lastScrollSignalTimeMs(0),
       m_hasPlaybackAnchor(false),
       m_playbackAnchorMs(0.0),
-      m_playbackAnchorWallMs(0)
+      m_playbackAnchorWallMs(0),
+      m_noteSoundPlayer(nullptr),
+      m_nextPlayableNoteIndex(0),
+      m_lastNoteSoundTimeMs(0.0)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -105,6 +109,11 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     setAttribute(Qt::WA_NativeWindow);
 
     m_noteRenderer->setNoteSize(Settings::instance().noteSize());
+    m_noteSoundPlayer = new NoteSoundPlayer(this);
+    m_noteSoundPlayer->setVolumePercent(Settings::instance().noteSoundVolume());
+    const QString noteSoundPath = Settings::instance().noteSoundPath();
+    m_noteSoundPlayer->setSoundFile(noteSoundPath);
+    m_noteSoundPlayer->setEnabled(!noteSoundPath.isEmpty());
 
     m_repaintTimer = new QTimer(this);
     m_repaintTimer->setSingleShot(true);
@@ -164,6 +173,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteXPositions.clear();
         m_noteTimesMs.clear();
         m_noteTypes.clear();
+        m_playableNoteTimesMs.clear();
+        m_nextPlayableNoteIndex = 0;
         m_timesDirty = false;
         m_noteDataDirty = false;
         return;
@@ -180,6 +191,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteXPositions.clear();
         m_noteTimesMs.clear();
         m_noteTypes.clear();
+        m_playableNoteTimesMs.clear();
+        m_nextPlayableNoteIndex = 0;
         m_timesDirty = false;
         m_noteDataDirty = false;
         return;
@@ -194,6 +207,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteXPositions.clear();
         m_noteTimesMs.clear();
         m_noteTypes.clear();
+        m_playableNoteTimesMs.clear();
+        m_nextPlayableNoteIndex = 0;
         m_timesDirty = false;
         m_noteDataDirty = false;
         return;
@@ -205,6 +220,8 @@ void ChartCanvas::rebuildNoteTimesCache()
     m_noteXPositions.resize(N);
     m_noteTimesMs.resize(N);
     m_noteTypes.resize(N);
+    m_playableNoteTimesMs.clear();
+    m_playableNoteTimesMs.reserve(N);
 
     for (int i = 0; i < N; ++i)
     {
@@ -222,6 +239,7 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteBeatPositions[i] = beat;
         // 浣跨敤缂撳瓨蹇€熻绠楁绉掓椂锟?
         m_noteTimesMs[i] = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmCache);
+        m_playableNoteTimesMs.append(m_noteTimesMs[i]);
         if (note.type == NoteType::RAIN)
         {
             double endBeat = MathUtils::beatToFloat(note.endBeatNum, note.endNumerator, note.endDenominator);
@@ -233,6 +251,12 @@ void ChartCanvas::rebuildNoteTimesCache()
         }
         m_noteXPositions[i] = static_cast<double>(note.x) / 512.0;
     }
+
+    std::sort(m_playableNoteTimesMs.begin(), m_playableNoteTimesMs.end());
+    m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
+        m_playableNoteTimesMs.begin(),
+        m_playableNoteTimesMs.end(),
+        m_lastNoteSoundTimeMs) - m_playableNoteTimesMs.begin());
 
     m_timesDirty = false;
     m_noteDataDirty = false;
@@ -292,6 +316,11 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
                 m_hasPlaybackAnchor = false;
                 m_playbackAnchorMs = m_playbackController ? m_playbackController->currentTime() : m_currentPlayTime;
                 m_playbackAnchorWallMs = QDateTime::currentMSecsSinceEpoch();
+                m_lastNoteSoundTimeMs = m_playbackAnchorMs;
+                m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
+                    m_playableNoteTimesMs.begin(),
+                    m_playableNoteTimesMs.end(),
+                    m_lastNoteSoundTimeMs) - m_playableNoteTimesMs.begin());
                 // 浼樺寲4锛氬惎鍔ㄦ挱鏀惧畾鏃跺櫒
                 if (m_playbackTimer)
                     m_playbackTimer->start();
@@ -299,6 +328,7 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
             } else {
                 m_isPlaying = false;
                 m_hasPlaybackAnchor = false;
+                m_lastNoteSoundTimeMs = m_currentPlayTime;
                 // 浼樺寲4锛氬仠姝㈡挱鏀惧畾鏃跺櫒
                 if (m_playbackTimer)
                     m_playbackTimer->stop();
@@ -402,6 +432,27 @@ void ChartCanvas::setMode(Mode mode)
     }
     m_currentMode = mode;
     update();
+}
+
+void ChartCanvas::setNoteSoundFile(const QString &filePath)
+{
+    if (!m_noteSoundPlayer)
+        return;
+    m_noteSoundPlayer->setSoundFile(filePath);
+}
+
+void ChartCanvas::setNoteSoundEnabled(bool enabled)
+{
+    if (!m_noteSoundPlayer)
+        return;
+    m_noteSoundPlayer->setEnabled(enabled);
+}
+
+void ChartCanvas::setNoteSoundVolume(int volumePercent)
+{
+    if (!m_noteSoundPlayer)
+        return;
+    m_noteSoundPlayer->setVolumePercent(volumePercent);
 }
 
 // ==================== 澶嶅埗绮樿创鏍稿績鍔熻兘 ====================
@@ -1921,10 +1972,18 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
 
 void ChartCanvas::playbackPositionChanged(double timeMs)
 {
+    if (m_timesDirty || m_noteDataDirty)
+        rebuildNoteTimesCache();
+
     if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing)
     {
         m_hasPlaybackAnchor = false;
         m_currentPlayTime = timeMs;
+        m_lastNoteSoundTimeMs = timeMs;
+        m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
+            m_playableNoteTimesMs.begin(),
+            m_playableNoteTimesMs.end(),
+            m_lastNoteSoundTimeMs) - m_playableNoteTimesMs.begin());
         update();
         return;
     }
@@ -1973,6 +2032,34 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
         m_currentPlayTime = timeMs;
         update();
     }
+
+    if (m_noteSoundPlayer &&
+        m_noteSoundPlayer->isEnabled() &&
+        m_noteSoundPlayer->hasValidSound() &&
+        !m_playableNoteTimesMs.isEmpty())
+    {
+        if (timeMs < m_lastNoteSoundTimeMs - 2.0)
+        {
+            m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
+                m_playableNoteTimesMs.begin(),
+                m_playableNoteTimesMs.end(),
+                timeMs) - m_playableNoteTimesMs.begin());
+        }
+
+        bool hasHit = false;
+        while (m_nextPlayableNoteIndex < m_playableNoteTimesMs.size() &&
+               m_playableNoteTimesMs[m_nextPlayableNoteIndex] <= timeMs + 0.5)
+        {
+            if (m_playableNoteTimesMs[m_nextPlayableNoteIndex] > m_lastNoteSoundTimeMs + 0.5)
+                hasHit = true;
+            ++m_nextPlayableNoteIndex;
+        }
+
+        if (hasHit)
+            m_noteSoundPlayer->playHitSound();
+    }
+
+    m_lastNoteSoundTimeMs = timeMs;
 }
 
 void ChartCanvas::playFromReferenceLine()

@@ -49,11 +49,13 @@ private slots:
     void changeSkin(const QString &skinName);
     void switchDifficulty();
     void adjustNoteSize();
+    void adjustNoteSoundVolume();
     void calibrateSkin();
     void configureOutline();
     void openLogSettings();
     void exportDiagnosticsReport();
     void togglePaste288Division(bool enabled);
+    void changeNoteSound(const QString &soundPath);
 
 private:
     void setupUi();
@@ -61,6 +63,7 @@ private:
     void createCentralArea();
     void retranslateUi();
     void populateSkinMenu();
+    void populateNoteSoundMenu();
     bool confirmSaveIfModified(const QString &reasonText);
     void loadChartFile(const QString &filePath);
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);

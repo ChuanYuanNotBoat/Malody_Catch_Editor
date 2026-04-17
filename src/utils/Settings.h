@@ -28,6 +28,10 @@ public:
     void setAudioLatency(int latency);
     int globalAudioOffset() const;
     void setGlobalAudioOffset(int offset);
+    QString noteSoundPath() const;
+    void setNoteSoundPath(const QString &path);
+    int noteSoundVolume() const;
+    void setNoteSoundVolume(int volume);
 
     QString currentSkin() const;
     void setCurrentSkin(const QString &skinName);

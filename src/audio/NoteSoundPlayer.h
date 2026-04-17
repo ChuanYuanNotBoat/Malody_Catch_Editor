@@ -1,25 +1,25 @@
-// src/audio/NoteSoundPlayer.h - 音符音效播放器
-
 #pragma once
 
 #include <QObject>
-#include <QMediaPlayer>
+#include <QSoundEffect>
+#include <QString>
 
-/**
- * @brief 播放内置的音符击打音效。
- *
- * 线程安全：主线程调用。
- */
 class NoteSoundPlayer : public QObject
 {
     Q_OBJECT
 public:
     explicit NoteSoundPlayer(QObject *parent = nullptr);
 
-    void playHitSound(); // 播放击中音效
+    void playHitSound();
+    void setSoundFile(const QString &filePath);
+    QString soundFile() const;
     void setEnabled(bool enabled);
+    bool isEnabled() const { return m_enabled; }
+    void setVolumePercent(int volume);
+    int volumePercent() const;
+    bool hasValidSound() const;
 
 private:
-    QMediaPlayer *m_player;
+    QSoundEffect *m_effect;
     bool m_enabled;
 };

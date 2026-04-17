@@ -1,40 +1,62 @@
 #include "NoteSoundPlayer.h"
-#include <QMediaPlayer>
-#include <QAudioOutput>
+
+#include <QFile>
 #include <QUrl>
-#include <QCoreApplication>
-#include <QFile> // 添加这行
+#include <QtGlobal>
 
 NoteSoundPlayer::NoteSoundPlayer(QObject *parent)
-    : QObject(parent), m_enabled(true)
+    : QObject(parent),
+      m_effect(new QSoundEffect(this)),
+      m_enabled(false)
 {
-    m_player = new QMediaPlayer(this);
-    QAudioOutput *audioOut = new QAudioOutput(this);
-    audioOut->setVolume(0.5);
-    m_player->setAudioOutput(audioOut);
-
-    QString soundPath = QCoreApplication::applicationDirPath() + "/sounds/hit.wav";
-    if (QFile::exists(soundPath))
-    {
-        m_player->setSource(QUrl::fromLocalFile(soundPath));
-    }
-    else
-    {
-        // 尝试资源
-        m_player->setSource(QUrl("qrc:/sounds/hit.wav"));
-    }
+    m_effect->setLoopCount(1);
+    setVolumePercent(100);
 }
 
 void NoteSoundPlayer::playHitSound()
 {
-    if (!m_enabled)
+    if (!m_enabled || !hasValidSound())
         return;
-    if (m_player->playbackState() == QMediaPlayer::PlayingState)
-        m_player->stop();
-    m_player->play();
+
+    // Restart to make sure repeated hits are audible during dense playback.
+    if (m_effect->isPlaying())
+        m_effect->stop();
+    m_effect->play();
+}
+
+void NoteSoundPlayer::setSoundFile(const QString &filePath)
+{
+    if (filePath.isEmpty() || !QFile::exists(filePath))
+    {
+        m_effect->setSource(QUrl());
+        return;
+    }
+
+    m_effect->setSource(QUrl::fromLocalFile(filePath));
+}
+
+QString NoteSoundPlayer::soundFile() const
+{
+    return m_effect->source().toLocalFile();
 }
 
 void NoteSoundPlayer::setEnabled(bool enabled)
 {
     m_enabled = enabled;
+}
+
+void NoteSoundPlayer::setVolumePercent(int volume)
+{
+    const int clamped = qBound(0, volume, 200);
+    m_effect->setVolume(static_cast<qreal>(clamped) / 100.0);
+}
+
+int NoteSoundPlayer::volumePercent() const
+{
+    return qRound(m_effect->volume() * 100.0);
+}
+
+bool NoteSoundPlayer::hasValidSound() const
+{
+    return !m_effect->source().isEmpty();
 }

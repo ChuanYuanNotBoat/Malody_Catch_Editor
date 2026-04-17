@@ -9,6 +9,7 @@
 #include <QVector>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QString>
 #include "model/Note.h"
 #include "utils/MathUtils.h"
 
@@ -20,6 +21,7 @@ class HyperfruitDetector;
 class BackgroundRenderer;
 class Skin;
 class PlaybackController;
+class NoteSoundPlayer;
 
 class ChartCanvas : public QWidget
 {
@@ -47,6 +49,9 @@ public:
     void setScrollPos(double timeMs);
     void setNoteSize(int size);
     void setMode(Mode mode);
+    void setNoteSoundFile(const QString &filePath);
+    void setNoteSoundEnabled(bool enabled);
+    void setNoteSoundVolume(int volumePercent);
 
     // Copy/paste
     void handleCopy();
@@ -242,6 +247,10 @@ private:
     bool m_hasPlaybackAnchor;
     double m_playbackAnchorMs;
     qint64 m_playbackAnchorWallMs;
+    NoteSoundPlayer *m_noteSoundPlayer;
+    QVector<double> m_playableNoteTimesMs;
+    int m_nextPlayableNoteIndex;
+    double m_lastNoteSoundTimeMs;
 
     int leftMargin() const;
     int rightMargin() const;

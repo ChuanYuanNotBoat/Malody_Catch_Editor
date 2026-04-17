@@ -80,5 +80,13 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         $<TARGET_FILE_DIR:${PROJECT_NAME}>/skins/default
 )
 
+if(EXISTS "${CMAKE_SOURCE_DIR}/resources/note_sounds")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/resources/note_sounds
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/note_sounds
+    )
+endif()
+
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(DIRECTORY resources/ DESTINATION share/${PROJECT_NAME})
