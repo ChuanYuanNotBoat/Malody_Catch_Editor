@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 
 namespace
 {
@@ -98,6 +99,55 @@ bool isNoteConvertibleToDenominator(const Note &note, int targetDen)
     }
 
     return true;
+}
+
+int reduceFractionDenominator(int numerator, int denominator)
+{
+    if (denominator <= 0)
+        return 1;
+    const int g = std::gcd(std::abs(numerator), denominator);
+    const int reduced = denominator / qMax(1, g);
+    return qMax(1, reduced);
+}
+
+int computeMinimalDenominatorForColor(const Note &note)
+{
+    int minimal = reduceFractionDenominator(note.numerator, note.denominator);
+    if (note.type == NoteType::RAIN)
+    {
+        const int endMinimal = reduceFractionDenominator(note.endNumerator, note.endDenominator);
+        minimal = std::lcm(qMax(1, minimal), qMax(1, endMinimal));
+    }
+    return qMax(1, minimal);
+}
+
+bool isRegularColorDenominator(int denominator)
+{
+    for (const ColorDivisionOption &option : kColorDivisionOptions)
+    {
+        if (option.denominator == denominator)
+            return true;
+    }
+    return false;
+}
+
+int computeSmallIrregularDenominatorForColor(const Note &note)
+{
+    const int base = qMax(1, computeMinimalDenominatorForColor(note));
+    if (!isRegularColorDenominator(base))
+        return base;
+
+    // Keep exact timing by using multiples of the minimal denominator.
+    for (int k = 2; k <= 1024; ++k)
+    {
+        const qint64 candidate64 = static_cast<qint64>(base) * k;
+        if (candidate64 > std::numeric_limits<int>::max())
+            break;
+        const int candidate = static_cast<int>(candidate64);
+        if (!isRegularColorDenominator(candidate))
+            return candidate;
+    }
+    return base;
 }
 } // namespace
 
@@ -1912,7 +1962,11 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
             return;
         }
 
-        m_selectionController->clearSelection();
+        const bool hadSelection = m_selectionController && !m_selectionController->selectedIndices().isEmpty();
+        if (m_selectionController)
+            m_selectionController->clearSelection();
+        if (hadSelection)
+            return;
 
         if (m_currentMode == PlaceNote)
         {
@@ -1926,6 +1980,8 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
         QAction *playFromRefAction = menu.addAction(tr("Play from Reference Time"));
         QAction *pasteAction = menu.addAction(tr("Paste"));
         pasteAction->setEnabled(m_selectionController && !m_selectionController->getClipboard().isEmpty());
+        QMenu *colorMenu = menu.addMenu(tr("Edit Color (By Division)"));
+        colorMenu->setEnabled(false);
 
         if (m_chartController && m_chartController->chart())
         {
@@ -1982,7 +2038,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
 
                 if (!availableDenominators.isEmpty())
                 {
-                    QMenu *colorMenu = menu.addMenu(tr("Edit Color (By Division)"));
+                    colorMenu->setEnabled(true);
                     for (const ColorDivisionOption &option : kColorDivisionOptions)
                     {
                         if (!availableDenominators.contains(option.denominator))
@@ -2028,6 +2084,48 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
                             } });
                     }
                 }
+
+                QAction *minimalIrregularAction = colorMenu->addAction(tr("Minimal Irregular (Red)"));
+                connect(minimalIrregularAction, &QAction::triggered, this, [this, targetIndices]()
+                        {
+                    if (!m_chartController || !m_chartController->chart())
+                        return;
+
+                    QVector<Note> &notesRef = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+                    QList<QPair<Note, Note>> changes;
+                    for (int idx : targetIndices)
+                    {
+                        if (idx < 0 || idx >= notesRef.size())
+                            continue;
+                        const Note &original = notesRef[idx];
+                        if (original.type == NoteType::SOUND)
+                            continue;
+
+                        const int targetDen = computeSmallIrregularDenominatorForColor(original);
+
+                        Note updated = original;
+                        if (!convertBeatDenExactly(original.beatNum, original.numerator, original.denominator,
+                                                   targetDen, updated.beatNum, updated.numerator, updated.denominator))
+                            continue;
+                        if (original.type == NoteType::RAIN)
+                        {
+                            if (!convertBeatDenExactly(original.endBeatNum, original.endNumerator, original.endDenominator,
+                                                       targetDen, updated.endBeatNum, updated.endNumerator, updated.endDenominator))
+                                continue;
+                        }
+
+                        if (!(updated == original))
+                            changes.append(qMakePair(original, updated));
+                    }
+
+                    if (!changes.isEmpty())
+                    {
+                        m_chartController->moveNotes(changes);
+                        emit statusMessage(tr("Applied minimal irregular denominator for %1 note(s).")
+                                               .arg(changes.size()));
+                    } });
+                minimalIrregularAction->setEnabled(true);
+                colorMenu->setEnabled(true);
             }
         }
 

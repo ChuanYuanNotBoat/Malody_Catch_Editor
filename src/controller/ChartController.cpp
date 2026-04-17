@@ -6,6 +6,101 @@
 #include <QDebug>
 #include <QList>
 #include <QPair>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+namespace
+{
+bool bpmLess(const BpmEntry &a, const BpmEntry &b)
+{
+    if (a.beatNum != b.beatNum)
+        return a.beatNum < b.beatNum;
+
+    const double aPos = static_cast<double>(a.numerator) / a.denominator;
+    const double bPos = static_cast<double>(b.numerator) / b.denominator;
+    return aPos < bPos;
+}
+
+bool bpmExactEqual(const BpmEntry &a, const BpmEntry &b)
+{
+    return a.beatNum == b.beatNum &&
+           a.numerator == b.numerator &&
+           a.denominator == b.denominator &&
+           std::abs(a.bpm - b.bpm) < 1e-9;
+}
+
+bool bpmPositionEqual(const BpmEntry &a, const BpmEntry &b)
+{
+    return a.beatNum == b.beatNum &&
+           a.numerator == b.numerator &&
+           a.denominator == b.denominator;
+}
+
+int findBpmExactIndex(const QVector<BpmEntry> &list, const BpmEntry &target)
+{
+    for (int i = 0; i < list.size(); ++i)
+    {
+        if (bpmExactEqual(list[i], target))
+            return i;
+    }
+    return -1;
+}
+
+int findBpmIndexByPosition(const QVector<BpmEntry> &list, const BpmEntry &target)
+{
+    int bestIndex = -1;
+    double bestDelta = std::numeric_limits<double>::max();
+    for (int i = 0; i < list.size(); ++i)
+    {
+        if (!bpmPositionEqual(list[i], target))
+            continue;
+        const double delta = std::abs(list[i].bpm - target.bpm);
+        if (delta < bestDelta)
+        {
+            bestDelta = delta;
+            bestIndex = i;
+        }
+    }
+    return bestIndex;
+}
+
+void sortBpmList(QVector<BpmEntry> &list)
+{
+    std::sort(list.begin(), list.end(), bpmLess);
+}
+
+bool removeBpmByValue(Chart &chart, const BpmEntry &entry, int fallbackIndex)
+{
+    QVector<BpmEntry> &list = chart.bpmList();
+    int idx = findBpmExactIndex(list, entry);
+    if (idx < 0)
+        idx = findBpmIndexByPosition(list, entry);
+    if (idx < 0 && fallbackIndex >= 0 && fallbackIndex < list.size())
+        idx = fallbackIndex;
+    if (idx < 0 || idx >= list.size())
+        return false;
+
+    list.removeAt(idx);
+    return true;
+}
+
+bool replaceBpmByValue(Chart &chart, const BpmEntry &from, const BpmEntry &to, int fallbackIndex)
+{
+    QVector<BpmEntry> &list = chart.bpmList();
+    int idx = findBpmExactIndex(list, from);
+    if (idx < 0)
+        idx = findBpmIndexByPosition(list, from);
+    if (idx < 0 && fallbackIndex >= 0 && fallbackIndex < list.size())
+        idx = fallbackIndex;
+    if (idx < 0 || idx >= list.size())
+        return false;
+
+    list[idx] = to;
+    sortBpmList(list);
+    return true;
+}
+} // namespace
 
 // 撤销命令基类
 class ChartController::ChartCommand : public QUndoCommand
@@ -160,7 +255,7 @@ public:
     AddBpmCommand(ChartController *controller, const BpmEntry &bpm) : ChartCommand(controller, "Add BPM"), m_bpm(bpm) {}
     void undo() override
     {
-        m_controller->m_chart.removeBpm(m_controller->m_chart.bpmList().size() - 1);
+        removeBpmByValue(m_controller->m_chart, m_bpm, m_controller->m_chart.bpmList().size() - 1);
         m_controller->chartChanged();
     }
     void redo() override
@@ -186,7 +281,7 @@ public:
     }
     void redo() override
     {
-        m_controller->m_chart.removeBpm(m_index);
+        removeBpmByValue(m_controller->m_chart, m_bpm, m_index);
         m_controller->chartChanged();
     }
 
@@ -203,12 +298,12 @@ public:
         : ChartCommand(controller, "Update BPM"), m_index(index), m_old(oldBpm), m_new(newBpm) {}
     void undo() override
     {
-        m_controller->m_chart.updateBpm(m_index, m_old);
+        replaceBpmByValue(m_controller->m_chart, m_new, m_old, m_index);
         m_controller->chartChanged();
     }
     void redo() override
     {
-        m_controller->m_chart.updateBpm(m_index, m_new);
+        replaceBpmByValue(m_controller->m_chart, m_old, m_new, m_index);
         m_controller->chartChanged();
     }
 
