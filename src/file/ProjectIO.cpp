@@ -1,13 +1,13 @@
-#include "ProjectIO.h"
+﻿#include "ProjectIO.h"
 #include "utils/Logger.h"
 #include <QDir>
 #include <QFile>
 #include <QProcess>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
-#include <QDateTime> // 用于生成安全临时文件名
 
 // 递归复制目录
 static bool copyDir(const QString &srcDir, const QString &destDir)
@@ -65,9 +65,17 @@ bool ProjectIO::extractMcz(const QString &mczPath, const QString &outputDir, QSt
     process.setWorkingDirectory(outputDir);
 
 #ifdef Q_OS_WIN
-    // 1. 复制 MCZ 到安全名称的临时 ZIP（Qt 能处理特殊字符）
-    QString tempZipName = "temp_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".zip";
-    QString tempZipPath = QDir::toNativeSeparators(outputDir + "/" + tempZipName);
+    QTemporaryFile tempZipFile(QDir(outputDir).filePath("mcz_extract_XXXXXX.zip"));
+    tempZipFile.setAutoRemove(false);
+    if (!tempZipFile.open())
+    {
+        Logger::error("ProjectIO::extractMcz - Failed to create temporary ZIP path");
+        return false;
+    }
+
+    const QString tempZipPath = QDir::toNativeSeparators(tempZipFile.fileName());
+    tempZipFile.close();
+    QFile::remove(tempZipPath);
 
     if (!QFile::copy(mczPath, tempZipPath))
     {
@@ -75,31 +83,16 @@ bool ProjectIO::extractMcz(const QString &mczPath, const QString &outputDir, QSt
         return false;
     }
 
-    // 2. 创建临时 PowerShell 脚本，避免命令行解析问题
-    QString scriptPath = outputDir + "/extract.ps1";
-    QFile scriptFile(scriptPath);
-    if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Text))
-    {
-        Logger::error("ProjectIO::extractMcz - Failed to create extraction script");
-        QFile::remove(tempZipPath);
-        return false;
-    }
-
-    QTextStream out(&scriptFile);
-    // 对路径中的单引号进行转义（PowerShell 中单引号字符串内的单引号需写为两个）
-    QString safeZipPath = tempZipPath;
-    safeZipPath.replace('\'', "''");
-    QString safeOutputDir = QDir::toNativeSeparators(outputDir);
-    safeOutputDir.replace('\'', "''");
-
-    out << QString("Expand-Archive -Path '%1' -DestinationPath '%2' -Force\n")
-               .arg(safeZipPath, safeOutputDir);
-    out << QString("Remove-Item '%1'\n").arg(safeZipPath);
-    scriptFile.close();
-
-    // 3. 执行脚本
+    // 固定命令 + 位置参数，避免命令拼接带来的 PowerShell 注入问题。
     QStringList args;
-    args << "-NoProfile" << "-NonInteractive" << "-File" << QDir::toNativeSeparators(scriptPath);
+    args << "-NoProfile"
+         << "-NonInteractive"
+         << "-Command"
+         << "$ErrorActionPreference='Stop'; "
+            "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force; "
+            "Remove-Item -LiteralPath $args[0] -Force"
+         << tempZipPath
+         << QDir::toNativeSeparators(outputDir);
     process.start("powershell.exe", args);
 #else
     process.start("unzip", QStringList() << "-o" << mczPath << "-d" << outputDir);
@@ -110,7 +103,6 @@ bool ProjectIO::extractMcz(const QString &mczPath, const QString &outputDir, QSt
         Logger::error("ProjectIO::extractMcz - Extraction timeout");
         process.kill();
 #ifdef Q_OS_WIN
-        QFile::remove(scriptPath);
         QFile::remove(tempZipPath);
 #endif
         return false;
@@ -121,16 +113,12 @@ bool ProjectIO::extractMcz(const QString &mczPath, const QString &outputDir, QSt
         QString errMsg = process.readAllStandardError();
         Logger::error(QString("ProjectIO::extractMcz - Extraction failed: %1").arg(errMsg));
 #ifdef Q_OS_WIN
-        QFile::remove(scriptPath);
         QFile::remove(tempZipPath);
 #endif
         return false;
     }
 
 #ifdef Q_OS_WIN
-    // 清理临时文件
-    QFile::remove(scriptPath);
-    // tempZipPath 已由脚本中的 Remove-Item 删除，但为确保，再次检查
     if (QFile::exists(tempZipPath))
         QFile::remove(tempZipPath);
 #endif
@@ -173,26 +161,16 @@ bool ProjectIO::exportToMcz(const QString &outputMczPath, const QString &sourceC
     QProcess process;
 
 #ifdef Q_OS_WIN
-    // 同样使用脚本方式避免转义问题
-    QString scriptPath = tempDir.path() + "/compress.ps1";
-    QFile scriptFile(scriptPath);
-    if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Text))
-    {
-        Logger::error("ProjectIO::exportToMcz - Failed to create compression script");
-        return false;
-    }
-
-    QTextStream out(&scriptFile);
-    QString safePackDir = QDir::toNativeSeparators(packDir);
-    safePackDir.replace('\'', "''");
-    QString safeTempZip = QDir::toNativeSeparators(tempZipPath);
-    safeTempZip.replace('\'', "''");
-    out << QString("Compress-Archive -Path '%1\\*' -DestinationPath '%2' -CompressionLevel Optimal -Force\n")
-               .arg(safePackDir, safeTempZip);
-    scriptFile.close();
-
+    // 固定命令 + 位置参数，避免命令拼接带来的 PowerShell 注入问题。
     QStringList args;
-    args << "-NoProfile" << "-NonInteractive" << "-File" << QString("\"%1\"").arg(scriptPath);
+    args << "-NoProfile"
+         << "-NonInteractive"
+         << "-Command"
+         << "$ErrorActionPreference='Stop'; "
+            "$items = Get-ChildItem -LiteralPath $args[0] -Force; "
+            "$items | Compress-Archive -DestinationPath $args[1] -CompressionLevel Optimal -Force"
+         << QDir::toNativeSeparators(packDir)
+         << QDir::toNativeSeparators(tempZipPath);
     process.start("powershell.exe", args);
 #else
     process.setWorkingDirectory(packDir);

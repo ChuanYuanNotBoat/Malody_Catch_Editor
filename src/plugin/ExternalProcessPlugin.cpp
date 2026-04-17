@@ -1,10 +1,8 @@
 #include "ExternalProcessPlugin.h"
 #include "utils/Logger.h"
 #include "utils/Settings.h"
-#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -35,10 +33,6 @@ int requestTimeoutMsForMethod(const QString &method)
     return 5000;
 }
 
-void pumpUiEvents()
-{
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
-}
 }
 
 ExternalProcessPlugin::ExternalProcessPlugin(Manifest manifest)
@@ -275,36 +269,21 @@ bool ExternalProcessPlugin::requestJson(const QString &method, const QJsonObject
         const int remaining = static_cast<int>(deadline - QDateTime::currentMSecsSinceEpoch());
         const int waitSlice = qMax(1, qMin(remaining, 50));
         if (!m_process.waitForReadyRead(waitSlice))
-        {
-            pumpUiEvents();
             continue;
-        }
         const QString responseLine = QString::fromUtf8(m_process.readLine()).trimmed();
         if (responseLine.isEmpty())
-        {
-            pumpUiEvents();
             continue;
-        }
 
         QJsonParseError err;
         const QJsonDocument doc = QJsonDocument::fromJson(responseLine.toUtf8(), &err);
         if (err.error != QJsonParseError::NoError || !doc.isObject())
-        {
-            pumpUiEvents();
             continue;
-        }
 
         const QJsonObject obj = doc.object();
         if (obj.value("type").toString() != "response")
-        {
-            pumpUiEvents();
             continue;
-        }
         if (obj.value("id").toString() != requestId)
-        {
-            pumpUiEvents();
             continue;
-        }
 
         if (result)
             *result = obj.value("result");
@@ -409,13 +388,7 @@ bool ExternalProcessPlugin::runToolActionOneShot(const QString &actionId, const 
         return false;
     }
 
-    const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 120000;
-    while (oneShot.state() != QProcess::NotRunning && QDateTime::currentMSecsSinceEpoch() < deadline)
-    {
-        oneShot.waitForFinished(50);
-        pumpUiEvents();
-    }
-    if (oneShot.state() != QProcess::NotRunning)
+    if (!oneShot.waitForFinished(120000))
     {
         oneShot.kill();
         oneShot.waitForFinished(1000);
