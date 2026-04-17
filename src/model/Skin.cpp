@@ -10,9 +10,9 @@
 
 Skin::Skin() : m_valid(false), m_skinPath("")
 {
-    // 初始化默认缩放为 1.0
+    // 初始化默认缩放为 0.25
     for (int i = 0; i <= 5; ++i)
-        m_noteScales[i] = 1.0;
+        m_noteScales[i] = 0.25;
 }
 
 bool Skin::loadFromDir(const QString &skinPath)
@@ -101,7 +101,7 @@ void Skin::clear()
     m_valid = false;
     m_noteScales.clear();
     for (int i = 0; i <= 5; ++i)
-        m_noteScales[i] = 1.0;
+        m_noteScales[i] = 0.25;
     m_skinPath.clear();
 }
 
@@ -128,7 +128,7 @@ const QPixmap *Skin::getLightPixmap(int lightIndex) const
 
 double Skin::getNoteScale(int noteType) const
 {
-    return m_noteScales.value(noteType, 1.0);
+    return m_noteScales.value(noteType, 0.25);
 }
 
 void Skin::setNoteScale(int noteType, double scale)
@@ -146,7 +146,7 @@ bool Skin::saveConfig() const
     QJsonArray scales;
     for (int i = 0; i <= 5; ++i)
     {
-        scales.append(m_noteScales.value(i, 1.0));
+        scales.append(m_noteScales.value(i, 0.25));
     }
     root["noteScales"] = scales;
     QJsonDocument doc(root);

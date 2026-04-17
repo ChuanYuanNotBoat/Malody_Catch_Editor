@@ -56,7 +56,7 @@ void NoteEditPanel::setupUi()
     for (const QString &d : divisions)
         m_timeDivisionCombo->addItem(d);
     m_timeDivisionCombo->setEditable(true);
-    m_timeDivisionCombo->setCurrentText("16");
+    m_timeDivisionCombo->setCurrentText("4");
     connect(m_timeDivisionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &NoteEditPanel::onTimeDivisionChanged);
     mainLayout->addWidget(m_timeDivisionCombo);
 

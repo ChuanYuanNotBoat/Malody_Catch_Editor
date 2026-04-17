@@ -40,7 +40,7 @@ void LeftPanel::setupUi()
     m_timeScaleSpin->setRange(0.1, 10.0); // 手动输入无严格限制
     m_timeScaleSpin->setSingleStep(0.1);
     m_timeScaleSpin->setDecimals(2);
-    m_timeScaleSpin->setValue(1.0);
+    m_timeScaleSpin->setValue(2.25);
     m_timeScaleSpin->setSuffix("x");
 
     zoomLayout->addWidget(zoomLabel);
