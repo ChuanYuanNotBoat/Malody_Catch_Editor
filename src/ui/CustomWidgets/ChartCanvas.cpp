@@ -34,6 +34,73 @@
 #include <cmath>
 #include <limits>
 
+namespace
+{
+struct ColorDivisionOption
+{
+    int denominator;
+    const char *label;
+};
+
+const ColorDivisionOption kColorDivisionOptions[] = {
+    {1, "1/1"},
+    {2, "1/2"},
+    {3, "1/3"},
+    {4, "1/4"},
+    {6, "1/6"},
+    {8, "1/8"},
+    {12, "1/12"},
+    {16, "1/16"},
+    {24, "1/24"},
+    {32, "1/32"},
+    {288, "1/288"}};
+
+bool convertBeatDenExactly(int beatNum, int numerator, int denominator, int targetDen,
+                           int &outBeatNum, int &outNumerator, int &outDenominator)
+{
+    if (denominator <= 0 || targetDen <= 0)
+        return false;
+
+    const qint64 scaledNumerator = static_cast<qint64>(beatNum) * denominator + numerator;
+    const qint64 scaledTarget = scaledNumerator * targetDen;
+    if (scaledTarget % denominator != 0)
+        return false;
+
+    qint64 ticks = scaledTarget / denominator;
+    qint64 beat = ticks / targetDen;
+    qint64 num = ticks % targetDen;
+    if (num < 0)
+    {
+        num += targetDen;
+        --beat;
+    }
+
+    outBeatNum = static_cast<int>(beat);
+    outNumerator = static_cast<int>(num);
+    outDenominator = targetDen;
+    return true;
+}
+
+bool isNoteConvertibleToDenominator(const Note &note, int targetDen)
+{
+    if (note.type == NoteType::SOUND)
+        return false;
+
+    int b = 0, n = 0, d = 1;
+    if (!convertBeatDenExactly(note.beatNum, note.numerator, note.denominator, targetDen, b, n, d))
+        return false;
+
+    if (note.type == NoteType::RAIN)
+    {
+        int eb = 0, en = 0, ed = 1;
+        if (!convertBeatDenExactly(note.endBeatNum, note.endNumerator, note.endDenominator, targetDen, eb, en, ed))
+            return false;
+    }
+
+    return true;
+}
+} // namespace
+
 ChartCanvas::ChartCanvas(QWidget *parent)
     : QWidget(parent),
       m_chartController(nullptr),
@@ -941,7 +1008,8 @@ void ChartCanvas::showGridSettings()
 
 void ChartCanvas::setTimeScale(double scale)
 {
-    if (qFuzzyCompare(m_timeScale, scale))
+    const double clampedScale = qBound(0.2, scale, 5.0);
+    if (qFuzzyCompare(m_timeScale, clampedScale))
         return;
 
     double baselineRatio = 0.8;
@@ -955,7 +1023,7 @@ void ChartCanvas::setTimeScale(double scale)
         baselineBeat = m_scrollBeat + baselineRatio * effectiveVisibleBeatRange();
     }
 
-    m_timeScale = scale;
+    m_timeScale = clampedScale;
 
     if (m_verticalFlip)
     {
@@ -1858,6 +1926,111 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
         QAction *playFromRefAction = menu.addAction(tr("Play from Reference Time"));
         QAction *pasteAction = menu.addAction(tr("Paste"));
         pasteAction->setEnabled(m_selectionController && !m_selectionController->getClipboard().isEmpty());
+
+        if (m_chartController && m_chartController->chart())
+        {
+            const QVector<Note> &notes = m_chartController->chart()->notes();
+            QVector<int> targetIndices;
+            const int hitIndex = hitTestNote(event->pos());
+            const QSet<int> selected = m_selectionController ? m_selectionController->selectedIndices() : QSet<int>();
+
+            if (hitIndex >= 0 && hitIndex < notes.size())
+            {
+                if (!selected.isEmpty() && selected.contains(hitIndex))
+                {
+                    QList<int> sorted = selected.values();
+                    std::sort(sorted.begin(), sorted.end());
+                    for (int idx : sorted)
+                    {
+                        if (idx >= 0 && idx < notes.size() && notes[idx].type != NoteType::SOUND)
+                            targetIndices.append(idx);
+                    }
+                }
+                else if (notes[hitIndex].type != NoteType::SOUND)
+                {
+                    targetIndices.append(hitIndex);
+                }
+            }
+            else if (!selected.isEmpty())
+            {
+                QList<int> sorted = selected.values();
+                std::sort(sorted.begin(), sorted.end());
+                for (int idx : sorted)
+                {
+                    if (idx >= 0 && idx < notes.size() && notes[idx].type != NoteType::SOUND)
+                        targetIndices.append(idx);
+                }
+            }
+
+            if (!targetIndices.isEmpty())
+            {
+                QVector<int> availableDenominators;
+                for (const ColorDivisionOption &option : kColorDivisionOptions)
+                {
+                    bool allConvertible = true;
+                    for (int idx : targetIndices)
+                    {
+                        if (!isNoteConvertibleToDenominator(notes[idx], option.denominator))
+                        {
+                            allConvertible = false;
+                            break;
+                        }
+                    }
+                    if (allConvertible)
+                        availableDenominators.append(option.denominator);
+                }
+
+                if (!availableDenominators.isEmpty())
+                {
+                    QMenu *colorMenu = menu.addMenu(tr("Edit Color (By Division)"));
+                    for (const ColorDivisionOption &option : kColorDivisionOptions)
+                    {
+                        if (!availableDenominators.contains(option.denominator))
+                            continue;
+
+                        QAction *act = colorMenu->addAction(tr(option.label));
+                        connect(act, &QAction::triggered, this, [this, targetIndices, option]()
+                                {
+                            if (!m_chartController || !m_chartController->chart())
+                                return;
+
+                            QVector<Note> &notesRef = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+                            QList<QPair<Note, Note>> changes;
+                            for (int idx : targetIndices)
+                            {
+                                if (idx < 0 || idx >= notesRef.size())
+                                    continue;
+                                const Note &original = notesRef[idx];
+                                if (original.type == NoteType::SOUND)
+                                    continue;
+
+                                Note updated = original;
+                                if (!convertBeatDenExactly(original.beatNum, original.numerator, original.denominator,
+                                                           option.denominator, updated.beatNum, updated.numerator, updated.denominator))
+                                    continue;
+                                if (original.type == NoteType::RAIN)
+                                {
+                                    if (!convertBeatDenExactly(original.endBeatNum, original.endNumerator, original.endDenominator,
+                                                               option.denominator, updated.endBeatNum, updated.endNumerator, updated.endDenominator))
+                                        continue;
+                                }
+
+                                if (!(updated == original))
+                                    changes.append(qMakePair(original, updated));
+                            }
+
+                            if (!changes.isEmpty())
+                            {
+                                m_chartController->moveNotes(changes);
+                                emit statusMessage(tr("Color division changed to %1 for %2 note(s).")
+                                                       .arg(option.denominator)
+                                                       .arg(changes.size()));
+                            } });
+                    }
+                }
+            }
+        }
+
         QAction *selectedAction = menu.exec(event->globalPos());
         if (selectedAction == playFromRefAction)
         {

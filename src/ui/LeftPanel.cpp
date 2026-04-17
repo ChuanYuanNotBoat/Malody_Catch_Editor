@@ -19,16 +19,16 @@ void LeftPanel::setupUi()
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
 
-    // 密度曲线
+    // 瀵嗗害鏇茬嚎
     m_densityCurve = new DensityCurve(this);
     layout->addWidget(m_densityCurve);
 
-    // 播放/暂停按钮
+    // 鎾斁/鏆傚仠鎸夐挳
     m_playPauseBtn = new QPushButton(tr("Play"), this);
     layout->addWidget(m_playPauseBtn);
     connect(m_playPauseBtn, &QPushButton::clicked, this, &LeftPanel::onPlayPauseClicked);
 
-    // 时间轴缩放控制
+    // 鏃堕棿杞寸缉鏀炬帶鍒?
     QHBoxLayout *zoomLayout = new QHBoxLayout;
     QLabel *zoomLabel = new QLabel(tr("Zoom:"), this);
     m_zoomOutBtn = new QPushButton("-", this);
@@ -37,7 +37,7 @@ void LeftPanel::setupUi()
     m_zoomInBtn->setFixedWidth(30);
 
     m_timeScaleSpin = new QDoubleSpinBox(this);
-    m_timeScaleSpin->setRange(0.1, 10.0); // 手动输入无严格限制
+    m_timeScaleSpin->setRange(0.2, 5.0); // 鎵嬪姩杈撳叆鏃犱弗鏍奸檺鍒?
     m_timeScaleSpin->setSingleStep(0.1);
     m_timeScaleSpin->setDecimals(2);
     m_timeScaleSpin->setValue(2.25);
@@ -77,11 +77,11 @@ void LeftPanel::onZoomInClicked()
 {
     if (!m_chartCanvas)
         return;
-    double newScale = m_chartCanvas->timeScale() * 1.2; // 增加 20%
+    double newScale = m_chartCanvas->timeScale() * 1.2; // 澧炲姞 20%
     m_chartCanvas->setTimeScale(newScale);
-    // 更新 spinbox 显示（信号会触发更新，但为了防止循环，先 block）
+    // 鏇存柊 spinbox 鏄剧ず锛堜俊鍙蜂細瑙﹀彂鏇存柊锛屼絾涓轰簡闃叉寰幆锛屽厛 block锛?
     m_timeScaleSpin->blockSignals(true);
-    m_timeScaleSpin->setValue(newScale);
+    m_timeScaleSpin->setValue(m_chartCanvas->timeScale());
     m_timeScaleSpin->blockSignals(false);
 }
 
@@ -89,10 +89,10 @@ void LeftPanel::onZoomOutClicked()
 {
     if (!m_chartCanvas)
         return;
-    double newScale = m_chartCanvas->timeScale() / 1.2; // 减少 20%
+    double newScale = m_chartCanvas->timeScale() / 1.2; // 鍑忓皯 20%
     m_chartCanvas->setTimeScale(newScale);
     m_timeScaleSpin->blockSignals(true);
-    m_timeScaleSpin->setValue(newScale);
+    m_timeScaleSpin->setValue(m_chartCanvas->timeScale());
     m_timeScaleSpin->blockSignals(false);
 }
 
@@ -122,13 +122,15 @@ void LeftPanel::setChartCanvas(ChartCanvas *canvas)
     m_chartCanvas = canvas;
     if (canvas)
     {
-        // 当画布缩放改变时，同步更新 spinbox 显示
+        // 褰撶敾甯冪缉鏀炬敼鍙樻椂锛屽悓姝ユ洿鏂?spinbox 鏄剧ず
         connect(canvas, &ChartCanvas::timeScaleChanged, this, [this](double scale)
                 {
             m_timeScaleSpin->blockSignals(true);
             m_timeScaleSpin->setValue(scale);
             m_timeScaleSpin->blockSignals(false); });
-        // 初始化 spinbox 为当前缩放值
+        // 鍒濆鍖?spinbox 涓哄綋鍓嶇缉鏀惧€?
         m_timeScaleSpin->setValue(canvas->timeScale());
     }
 }
+
+
