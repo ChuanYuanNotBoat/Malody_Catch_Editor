@@ -1,4 +1,4 @@
-﻿// src/ui/CustomWidgets/ChartCanvas.h
+﻿// src/ui/CustomWidgets/ChartCanvas/ChartCanvas.h
 #pragma once
 
 #include <QWidget>
@@ -77,7 +77,7 @@ signals:
     void verticalFlipChanged(bool flipped);
     void scrollPositionChanged(double beat);
     void timeScaleChanged(double scale);
-    void statusMessage(const QString &msg); // 鐢ㄤ簬鐘舵€佹爮鎻愮ず
+    void statusMessage(const QString &msg); // Status bar message hook.
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -101,7 +101,7 @@ private:
     int hitTestNote(const QPointF &pos) const;
     QRectF getRainNoteRect(const Note &note) const;
     void invalidateCache();
-    void updateNotePosCacheIfNeeded(); // 宸插簾寮冿紙淇濈暀绌哄疄鐜板吋瀹癸級
+    void updateNotePosCacheIfNeeded(); // Deprecated; kept as a no-op for compatibility.
     void updateBackgroundCache();
 
     void beginMoveSelection(const QPointF &startPos, int referenceIndex = -1);
@@ -129,7 +129,7 @@ private:
     // Paste preview helpers
     double calculatePasteReferenceTime() const;
     double yToTime(double y) const;
-    // 鏂板锛氬尯闂撮€夋嫨
+    // Interval copy selection state.
     enum IntervalState
     {
         IntervalNone,
@@ -148,9 +148,9 @@ private:
     QPointF m_pasteDragStartPos;
     double m_pasteTimeOffset;
     double m_pasteXOffset;
-    double m_pasteTimeOffsetRaw;                         // 粘贴预览原始时间偏移（未吸附）
-    double m_pasteXOffsetRaw;                            // 粘贴预览原始 X 偏移
-    double m_pasteAnchorBeat;                            // 进入预览时锁定的参考拍
+    double m_pasteTimeOffsetRaw;                         // Raw paste-preview time offset (unsnapped).
+    double m_pasteXOffsetRaw;                            // Raw paste-preview X offset.
+    double m_pasteAnchorBeat;                            // Reference beat locked when preview starts.
     double m_pasteRefBeat;
     int m_pasteDragReferenceIndex;
     void cancelPaste();
@@ -200,8 +200,8 @@ private:
     QSet<int> m_draggedNotes;
 
     bool m_isPasting;
-    bool m_useCursorPaste;   // 鏄惁浣跨敤鍏夋爣浣嶇疆绮樿创锛堝彸閿Е鍙戯級
-    QPoint m_pasteCursorPos; // 鍙抽敭绮樿创鏃剁殑鍏夋爣浣嶇疆
+    bool m_useCursorPaste;   // Paste anchored to cursor position (right-click action).
+    QPoint m_pasteCursorPos; // Cursor position used for right-click paste.
     QVector<Note> m_pasteNotes;
     QVector<double> m_pasteOriginalTimesMs;
     double m_pasteBaseOriginalTimeMs;
@@ -211,7 +211,7 @@ private:
     QPointF m_moveStartPos;
     double m_moveDeltaBeatRaw;
     double m_moveDeltaXRaw;
-    QHash<int, QPair<Note, Note>> m_moveChanges; // 瀛樺偍鍘熷闊崇蹇収锛宬ey=绱㈠紩
+    QHash<int, QPair<Note, Note>> m_moveChanges; // Original->updated note snapshot by index.
     QSet<int> m_originalSelectedIndices;
     int m_dragReferenceIndex;
 
@@ -260,3 +260,4 @@ private slots:
     void performDelayedRepaint();
     void requestNextFrame();
 };
+

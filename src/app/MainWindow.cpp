@@ -1,6 +1,7 @@
-// MainWindow.cpp - Main window implementation.
+﻿// MainWindow.cpp - Main window implementation.
 #include "MainWindow.h"
-#include "ui/CustomWidgets/ChartCanvas.h"
+#include "MainWindowPrivate.h"
+#include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "ui/NoteEditPanel.h"
 #include "ui/BPMTimePanel.h"
 #include "ui/MetaEditPanel.h"
@@ -55,84 +56,6 @@
 #include <QScrollBar>
 #include <QSet>
 #include <algorithm>
-
-namespace
-{
-QStringList skinBaseDirs()
-{
-    const QString appDir = QCoreApplication::applicationDirPath();
-    QStringList candidates;
-    candidates << (appDir + "/skins") << (appDir + "/resources/default_skin");
-
-    QStringList result;
-    for (const QString &dir : candidates)
-    {
-        if (QDir(dir).exists() && !result.contains(dir))
-            result.append(dir);
-    }
-    return result;
-}
-
-QString resolveSkinPathByName(const QString &skinName)
-{
-    for (const QString &baseDir : skinBaseDirs())
-    {
-        const QString fullPath = baseDir + "/" + skinName;
-        if (QDir(fullPath).exists())
-            return fullPath;
-    }
-    return QString();
-}
-
-QStringList noteSoundBaseDirs()
-{
-    const QString appDir = QCoreApplication::applicationDirPath();
-    QStringList candidates;
-    candidates << (appDir + "/note_sounds") << (appDir + "/resources/note_sounds");
-
-    QStringList result;
-    for (const QString &dir : candidates)
-    {
-        if (QDir(dir).exists() && !result.contains(dir))
-            result.append(dir);
-    }
-    return result;
-}
-} // namespace
-
-class MainWindow::Private
-{
-public:
-    ChartController *chartController;
-    SelectionController *selectionController;
-    PlaybackController *playbackController;
-    Skin *skin;
-    ChartCanvas *canvas;
-    QScrollBar *verticalScrollBar;
-    QSplitter *splitter;
-    QWidget *rightPanelContainer;
-    RightPanel *currentRightPanel;
-    NoteEditPanel *notePanel;
-    BPMTimePanel *bpmPanel;
-    MetaEditPanel *metaPanel;
-    LeftPanel *leftPanel;
-    QAction *undoAction;
-    QAction *redoAction;
-    QAction *colorAction;
-    QAction *hyperfruitAction;
-    QAction *verticalFlipAction;
-    QAction *playAction;
-    QActionGroup *speedActionGroup;
-    QMenu *skinMenu;
-    QMenu *noteSoundMenu;
-    QAction *noteSizeAction;
-    QAction *noteSoundVolumeAction;
-    QAction *calibrateSkinAction;
-    QAction *outlineAction;
-
-    QString currentChartPath;
-    bool isModified = false;
-};
 
 MainWindow::MainWindow(ChartController *chartCtrl,
                        SelectionController *selCtrl,
@@ -199,7 +122,6 @@ void MainWindow::createMenus()
 {
     Logger::debug("Creating menus...");
 
-    // 鏂囦欢鑿滃崟
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     QAction *openAction = fileMenu->addAction(tr("&Open Chart..."), this, &MainWindow::openChart);
     openAction->setShortcut(QKeySequence::Open);
@@ -215,7 +137,6 @@ void MainWindow::createMenus()
     QAction *exitAction = fileMenu->addAction(tr("E&xit"), this, &QWidget::close);
     exitAction->setShortcut(QKeySequence::Quit);
 
-    // 缂栬緫鑿滃崟
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
     d->undoAction = editMenu->addAction(tr("&Undo"), this, &MainWindow::undo);
     d->undoAction->setShortcut(QKeySequence::Undo);
@@ -223,7 +144,6 @@ void MainWindow::createMenus()
     d->redoAction->setShortcut(QKeySequence::Redo);
     editMenu->addSeparator();
     QAction *copyAction = editMenu->addAction(tr("&Copy"));
-    // 杩炴帴鍒扮敾甯冪殑 handleCopy 鏂规硶
     connect(copyAction, &QAction::triggered, d->canvas, &ChartCanvas::handleCopy);
     copyAction->setShortcut(QKeySequence::Copy);
     QAction *pasteAction = editMenu->addAction(tr("&Paste"), d->canvas, &ChartCanvas::paste);
@@ -258,7 +178,6 @@ void MainWindow::createMenus()
     paste288Action->setChecked(Settings::instance().pasteUse288Division());
     connect(paste288Action, &QAction::toggled, this, &MainWindow::togglePaste288Division);
 
-    // 瑙嗗浘鑿滃崟
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
     d->colorAction = viewMenu->addAction(tr("&Color Notes"));
     d->colorAction->setCheckable(true);
@@ -282,7 +201,6 @@ void MainWindow::createMenus()
     Settings::instance().setBackgroundImageEnabled(on);
     d->canvas->update(); });
 
-    // 鑳屾櫙鑹插瓙鑿滃崟
     QMenu *bgColorMenu = viewMenu->addMenu(tr("Background Color"));
     bgColorMenu->addAction(tr("Black"), [this]()
                            {
@@ -297,7 +215,6 @@ void MainWindow::createMenus()
     Settings::instance().setBackgroundColor(QColor(40, 40, 40));
     d->canvas->update(); });
 
-    // 璁剧疆鑿滃崟
     QMenu *settingsMenu = menuBar()->addMenu(tr("&Settings"));
     d->noteSizeAction = settingsMenu->addAction(tr("Note Size..."));
     connect(d->noteSizeAction, &QAction::triggered, this, &MainWindow::adjustNoteSize);
@@ -308,7 +225,6 @@ void MainWindow::createMenus()
     d->noteSoundVolumeAction = settingsMenu->addAction(tr("Note Sound Volume..."));
     connect(d->noteSoundVolumeAction, &QAction::triggered, this, &MainWindow::adjustNoteSoundVolume);
 
-    // 鎾斁鑿滃崟
     QMenu *playMenu = menuBar()->addMenu(tr("&Playback"));
     d->playAction = playMenu->addAction(tr("&Play/Pause"), this, &MainWindow::togglePlayback);
     d->playAction->setShortcut(Qt::Key_Space);
@@ -338,7 +254,6 @@ void MainWindow::createMenus()
             action->setChecked(qFuzzyCompare(actionSpeed, speed));
         } });
 
-    // 宸ュ叿鑿滃崟
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
     QAction *gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
     toolsMenu->addSeparator();
@@ -347,7 +262,6 @@ void MainWindow::createMenus()
     QAction *exportDiagAction = toolsMenu->addAction(tr("&Export Diagnostics Report..."));
     connect(exportDiagAction, &QAction::triggered, this, &MainWindow::exportDiagnosticsReport);
 
-    // 鐨偆鑿滃崟
     d->skinMenu = menuBar()->addMenu(tr("&Skin"));
     populateSkinMenu();
     d->noteSoundMenu = menuBar()->addMenu(tr("Note &Sound"));
@@ -383,7 +297,6 @@ void MainWindow::createCentralArea()
     d->canvas->setNoteSoundFile(noteSoundPath);
     d->canvas->setNoteSoundEnabled(!noteSoundPath.isEmpty());
 
-    // 杩炴帴鐢诲竷鐨勭姸鎬佹爮娑堟伅淇″彿
     connect(d->canvas, &ChartCanvas::statusMessage, this, [this](const QString &msg)
             { statusBar()->showMessage(msg, 2000); });
 
@@ -474,7 +387,6 @@ void MainWindow::createCentralArea()
         d->canvas->setGridSnap(on); });
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode)
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
-    // 杩炴帴澶嶅埗璇锋眰淇″彿
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
 
     d->splitter = new QSplitter(Qt::Horizontal, this);
@@ -669,7 +581,6 @@ void MainWindow::loadChartFile(const QString &filePath)
     statusBar()->showMessage(tr("Loaded: %1").arg(QFileInfo(actualChartPath).fileName()), 3000);
 }
 
-// ==================== 浠庡垪琛ㄤ腑閫夋嫨璋遍潰 ====================
 QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title)
 {
     QDialog dialog(this);
@@ -699,7 +610,6 @@ QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>> &ch
     return list->currentItem()->data(Qt::UserRole).toString();
 }
 
-// ==================== 鍒囨崲闅惧害 ====================
 void MainWindow::switchDifficulty()
 {
     if (!d->chartController || !d->chartController->chart())
@@ -738,7 +648,6 @@ void MainWindow::switchDifficulty()
     loadChartFile(newPath);
 }
 
-// ==================== 淇濆瓨璋遍潰 ====================
 void MainWindow::saveChart()
 {
     Logger::info("Save chart requested");
@@ -781,7 +690,6 @@ void MainWindow::saveChartAs()
     }
 }
 
-// ==================== 瀵煎嚭 MCZ ====================
 void MainWindow::exportMcz()
 {
     Logger::info("Export .mcz requested");
@@ -847,7 +755,6 @@ void MainWindow::redo()
     }
 }
 
-// ==================== 瑙嗗浘妯″紡鍒囨崲 ====================
 void MainWindow::toggleColorMode(bool on)
 {
     Logger::info(QString("Color mode toggled to %1").arg(on));
@@ -869,7 +776,6 @@ void MainWindow::toggleVerticalFlip(bool flipped)
     d->canvas->setVerticalFlip(flipped);
 }
 
-// ==================== 鎾斁鎺у埗 ====================
 void MainWindow::togglePlayback()
 {
     if (d->playbackController->state() == PlaybackController::Playing)
@@ -893,7 +799,6 @@ void MainWindow::togglePlayback()
     }
 }
 
-// ==================== 鐣岄潰缈昏瘧 ====================
 void MainWindow::changeEvent(QEvent *event)
 {
     if (event->type() == QEvent::LanguageChange)
@@ -910,555 +815,12 @@ void MainWindow::retranslateUi()
     Logger::debug("UI retranslated");
 }
 
-// ==================== 鏃ュ織璁剧疆 ====================
-void MainWindow::openLogSettings()
-{
-    Logger::info("Log settings dialog opened");
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Log Settings"));
-    dialog.setMinimumSize(400, 300);
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-
-    QCheckBox *jsonLoggingCheck = new QCheckBox(tr("Enable JSON Logging"));
-    jsonLoggingCheck->setChecked(Logger::isJsonLoggingEnabled());
-    layout->addWidget(jsonLoggingCheck);
-
-    QCheckBox *verboseCheck = new QCheckBox(tr("Enable Verbose Logging"));
-    verboseCheck->setChecked(Logger::isVerbose());
-    layout->addWidget(verboseCheck);
-
-    QHBoxLayout *logPathLayout = new QHBoxLayout;
-    QLabel *pathLabel = new QLabel(tr("Log File:"));
-    QLineEdit *pathEdit = new QLineEdit;
-    pathEdit->setText(Logger::logFilePath());
-    pathEdit->setReadOnly(true);
-    QPushButton *openLogBtn = new QPushButton(tr("Open Log Folder"));
-    connect(openLogBtn, &QPushButton::clicked, [this]()
-            {
-        QString logDir = QFileInfo(Logger::logFilePath()).absolutePath();
-        QDesktopServices::openUrl(QUrl::fromLocalFile(logDir));
-        Logger::debug("Opened log folder"); });
-    logPathLayout->addWidget(pathLabel);
-    logPathLayout->addWidget(pathEdit);
-    logPathLayout->addWidget(openLogBtn);
-    layout->addLayout(logPathLayout);
-
-    QHBoxLayout *jsonPathLayout = new QHBoxLayout;
-    QLabel *jsonPathLabel = new QLabel(tr("JSON Log File:"));
-    QLineEdit *jsonPathEdit = new QLineEdit;
-    jsonPathEdit->setText(Logger::jsonLogFilePath());
-    jsonPathEdit->setReadOnly(true);
-    jsonPathLayout->addWidget(jsonPathLabel);
-    jsonPathLayout->addWidget(jsonPathEdit);
-    layout->addLayout(jsonPathLayout);
-
-    layout->addStretch();
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]()
-            {
-        Logger::setJsonLoggingEnabled(jsonLoggingCheck->isChecked());
-        Logger::setVerbose(verboseCheck->isChecked());
-        Logger::info(QString("Log settings changed - JSON logging: %1, Verbose: %2")
-                     .arg(jsonLoggingCheck->isChecked() ? "enabled" : "disabled")
-                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled"));
-        dialog.accept(); });
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-
-    dialog.exec();
-}
-
-// ==================== 瀵煎嚭璇婃柇鎶ュ憡 ====================
-void MainWindow::exportDiagnosticsReport()
-{
-    Logger::info("Diagnostics report export requested");
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Export Diagnostics Report"),
-                                                    Settings::instance().lastOpenPath(),
-                                                    tr("Text Files (*.txt);;JSON Files (*.json);;All Files (*.*)"));
-    if (fileName.isEmpty())
-    {
-        Logger::debug("Export diagnostics cancelled");
-        return;
-    }
-
-    try
-    {
-        DiagnosticCollector &collector = DiagnosticCollector::instance();
-        DiagnosticCollector::DiagnosticReport report = collector.generateReport();
-
-        if (fileName.endsWith(".json"))
-        {
-            QJsonDocument doc = collector.toJsonDocument();
-            QFile file(fileName);
-            if (file.open(QIODevice::WriteOnly))
-            {
-                file.write(doc.toJson());
-                file.close();
-                Logger::info("Diagnostics report exported to JSON: " + fileName);
-                QMessageBox::information(this, tr("Export Successful"),
-                                         tr("Diagnostics report exported to:\n%1").arg(fileName));
-            }
-            else
-            {
-                Logger::error("Failed to open file for writing: " + fileName);
-                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
-            }
-        }
-        else
-        {
-            QFile file(fileName);
-            if (file.open(QIODevice::WriteOnly | QIODevice::Text))
-            {
-                QTextStream stream(&file);
-                stream << report.toFormattedString();
-                file.close();
-                Logger::info("Diagnostics report exported to text: " + fileName);
-                QMessageBox::information(this, tr("Export Successful"),
-                                         tr("Diagnostics report exported to:\n%1").arg(fileName));
-            }
-            else
-            {
-                Logger::error("Failed to open file for writing: " + fileName);
-                QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing."));
-            }
-        }
-    }
-    catch (const std::exception &e)
-    {
-        Logger::error(QString("Exception during diagnostics export: %1").arg(e.what()));
-        QMessageBox::critical(this, tr("Error"), tr("Exception during export:\n%1").arg(e.what()));
-    }
-}
-
-// ==================== 闊崇澶у皬璋冩暣 ====================
-void MainWindow::adjustNoteSize()
-{
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Note Size"));
-    dialog.setMinimumSize(400, 300);
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-
-    QHBoxLayout *sizeLayout = new QHBoxLayout;
-    QLabel *label = new QLabel(tr("Size (pixels):"));
-    QSpinBox *sizeSpin = new QSpinBox;
-    sizeSpin->setRange(8, 64);
-    sizeSpin->setValue(Settings::instance().noteSize());
-    sizeLayout->addWidget(label);
-    sizeLayout->addWidget(sizeSpin);
-    layout->addLayout(sizeLayout);
-
-    QLabel *previewLabel = new QLabel;
-    previewLabel->setFixedSize(128, 128);
-    previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
-    previewLabel->setAlignment(Qt::AlignCenter);
-    layout->addWidget(previewLabel, 0, Qt::AlignCenter);
-
-    auto updatePreview = [previewLabel, sizeSpin, this]()
-    {
-        int sz = sizeSpin->value();
-        QPixmap pix(sz, sz);
-        pix.fill(Qt::white);
-        QPainter painter(&pix);
-        Note exampleNote(0, 1, 4, 256);
-        if (d->skin && d->skin->isValid())
-        {
-            const QPixmap *notePix = d->skin->getNotePixmap(2);
-            if (notePix && !notePix->isNull())
-            {
-                QPixmap scaled = notePix->scaled(sz, sz, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                painter.drawPixmap((sz - scaled.width()) / 2, (sz - scaled.height()) / 2, scaled);
-            }
-            else
-            {
-                painter.setBrush(Qt::lightGray);
-                painter.drawEllipse(0, 0, sz, sz);
-            }
-        }
-        else
-        {
-            painter.setBrush(Qt::lightGray);
-            painter.drawEllipse(0, 0, sz, sz);
-        }
-        previewLabel->setPixmap(pix);
-    };
-    updatePreview();
-    connect(sizeSpin, QOverload<int>::of(&QSpinBox::valueChanged), updatePreview);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-
-    if (dialog.exec() == QDialog::Accepted)
-    {
-        int newSize = sizeSpin->value();
-        Settings::instance().setNoteSize(newSize);
-        d->canvas->setNoteSize(newSize);
-        Logger::info(QString("Note size set to %1").arg(newSize));
-    }
-}
-
-// ==================== 鐨偆鏍″噯 ====================
-void MainWindow::calibrateSkin()
-{
-    if (!d->skin)
-    {
-        QMessageBox::information(this, tr("No Skin"), tr("No skin loaded, cannot calibrate."));
-        return;
-    }
-
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Calibrate Skin: %1").arg(d->skin->title()));
-    dialog.setMinimumSize(600, 400);
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-
-    QTabWidget *tabs = new QTabWidget;
-    QStringList typeNames = {"1/1", "1/2", "1/4", "1/8/16/32", "1/3/6/12/24", "Rain"};
-    for (int i = 0; i <= 5; ++i)
-    {
-        QWidget *page = new QWidget;
-        QVBoxLayout *pageLayout = new QVBoxLayout(page);
-
-        QHBoxLayout *scaleLayout = new QHBoxLayout;
-        QLabel *scaleLabel = new QLabel(tr("Scale Factor:"));
-        QDoubleSpinBox *scaleSpin = new QDoubleSpinBox;
-        scaleSpin->setRange(0.2, 3.0);
-        scaleSpin->setSingleStep(0.05);
-        scaleSpin->setValue(d->skin->getNoteScale(i));
-        scaleLayout->addWidget(scaleLabel);
-        scaleLayout->addWidget(scaleSpin);
-        pageLayout->addLayout(scaleLayout);
-
-        QLabel *previewLabel = new QLabel;
-        previewLabel->setFixedSize(128, 128);
-        previewLabel->setStyleSheet("border: 1px solid gray; background: white;");
-        previewLabel->setAlignment(Qt::AlignCenter);
-        pageLayout->addWidget(previewLabel, 0, Qt::AlignCenter);
-
-        auto updatePreview = [previewLabel, scaleSpin, this, i]()
-        {
-            double scale = scaleSpin->value();
-            QPixmap pix(128, 128);
-            pix.fill(Qt::white);
-            QPainter painter(&pix);
-            const QPixmap *notePix = d->skin->getNotePixmap(i);
-            if (notePix && !notePix->isNull())
-            {
-                int scaledW = notePix->width() * scale;
-                int scaledH = notePix->height() * scale;
-                QPixmap scaled = notePix->scaled(scaledW, scaledH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                painter.drawPixmap((128 - scaled.width()) / 2, (128 - scaled.height()) / 2, scaled);
-            }
-            else
-            {
-                painter.setBrush(Qt::lightGray);
-                painter.drawEllipse(20, 20, 88, 88);
-            }
-            previewLabel->setPixmap(pix);
-        };
-        updatePreview();
-        connect(scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), updatePreview);
-
-        pageLayout->addStretch();
-        tabs->addTab(page, typeNames[i]);
-
-        scaleSpin->setProperty("noteType", i);
-        page->setProperty("scaleSpin", QVariant::fromValue(scaleSpin));
-    }
-    layout->addWidget(tabs);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]()
-            {
-        for (int i = 0; i <= 5; ++i) {
-            QWidget* page = tabs->widget(i);
-            QDoubleSpinBox* scaleSpin = page->property("scaleSpin").value<QDoubleSpinBox*>();
-            if (scaleSpin) {
-                d->skin->setNoteScale(i, scaleSpin->value());
-            }
-        }
-        d->skin->saveConfig();
-        d->canvas->update();
-        Logger::info("Skin calibration saved");
-        dialog.accept(); });
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-
-    dialog.exec();
-}
-
-// ==================== 杞粨璁剧疆 ====================
-void MainWindow::configureOutline()
-{
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Outline Settings"));
-    QFormLayout form(&dialog);
-
-    QSpinBox *widthSpin = new QSpinBox;
-    widthSpin->setRange(1, 8);
-    widthSpin->setValue(Settings::instance().outlineWidth());
-    form.addRow(tr("Outline Width (px):"), widthSpin);
-
-    QPushButton *colorBtn = new QPushButton;
-    QColor outlineColor = Settings::instance().outlineColor();
-    colorBtn->setStyleSheet(QString("background-color: %1").arg(outlineColor.name()));
-    connect(colorBtn, &QPushButton::clicked, [&]()
-            {
-        QColor newColor = QColorDialog::getColor(outlineColor, &dialog);
-        if (newColor.isValid()) {
-            outlineColor = newColor;
-            colorBtn->setStyleSheet(QString("background-color: %1").arg(outlineColor.name()));
-        } });
-    form.addRow(tr("Outline Color:"), colorBtn);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    form.addRow(buttons);
-
-    if (dialog.exec() == QDialog::Accepted)
-    {
-        Settings::instance().setOutlineWidth(widthSpin->value());
-        Settings::instance().setOutlineColor(outlineColor);
-        d->canvas->update();
-        Logger::info("Outline settings updated");
-    }
-}
-
-// ==================== 鐨偆鑿滃崟 ====================
-void MainWindow::adjustNoteSoundVolume()
-{
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Note Sound Volume"));
-    dialog.setModal(true);
-
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-    QLabel *valueLabel = new QLabel;
-    valueLabel->setAlignment(Qt::AlignCenter);
-    QSlider *slider = new QSlider(Qt::Horizontal);
-    slider->setRange(0, 200);
-    slider->setValue(Settings::instance().noteSoundVolume());
-    slider->setFixedSize(420, 26);
-    slider->setStyleSheet(
-        "QSlider::groove:horizontal {"
-        "height: 10px;"
-        "border: 1px solid #666;"
-        "background: #d8d8d8;"
-        "border-radius: 2px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        "background: #444;"
-        "width: 18px;"
-        "margin: -5px 0;"
-        "border-radius: 2px;"
-        "}");
-
-    auto refreshLabel = [valueLabel, slider]()
-    { valueLabel->setText(QObject::tr("Volume: %1%").arg(slider->value())); };
-    refreshLabel();
-    connect(slider, &QSlider::valueChanged, this, [this, refreshLabel, slider]()
-            {
-        refreshLabel();
-        if (d->canvas)
-            d->canvas->setNoteSoundVolume(slider->value()); });
-
-    layout->addWidget(valueLabel);
-    layout->addWidget(slider, 0, Qt::AlignCenter);
-
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    layout->addWidget(buttons);
-
-    const int originalVolume = Settings::instance().noteSoundVolume();
-    if (dialog.exec() == QDialog::Accepted)
-    {
-        Settings::instance().setNoteSoundVolume(slider->value());
-        Logger::info(QString("Note sound volume set to %1%").arg(slider->value()));
-    }
-    else if (d->canvas)
-    {
-        d->canvas->setNoteSoundVolume(originalVolume);
-    }
-}
-
-void MainWindow::changeNoteSound(const QString &soundPath)
-{
-    Settings::instance().setNoteSoundPath(soundPath);
-    if (d->canvas)
-    {
-        d->canvas->setNoteSoundFile(soundPath);
-        d->canvas->setNoteSoundEnabled(!soundPath.isEmpty());
-    }
-
-    if (soundPath.isEmpty())
-        statusBar()->showMessage(tr("Note sound disabled."), 2000);
-    else
-        statusBar()->showMessage(tr("Note sound set: %1").arg(QFileInfo(soundPath).fileName()), 2000);
-}
-
-void MainWindow::populateNoteSoundMenu()
-{
-    if (!d->noteSoundMenu)
-        return;
-
-    d->noteSoundMenu->clear();
-    QActionGroup *group = new QActionGroup(d->noteSoundMenu);
-    group->setExclusive(true);
-
-    const QString currentPath = Settings::instance().noteSoundPath();
-    bool hasCurrentPathInMenu = currentPath.isEmpty();
-
-    QAction *noneAction = d->noteSoundMenu->addAction(tr("None (No Note Sound)"));
-    noneAction->setCheckable(true);
-    noneAction->setActionGroup(group);
-    noneAction->setChecked(currentPath.isEmpty());
-    connect(noneAction, &QAction::triggered, this, [this]()
-            { changeNoteSound(QString()); });
-
-    d->noteSoundMenu->addSeparator();
-
-    QStringList filters;
-    filters << "*.wav" << "*.ogg" << "*.mp3" << "*.flac" << "*.m4a";
-    QVector<QFileInfo> soundEntries;
-    QSet<QString> seenCanonical;
-    for (const QString &baseDir : noteSoundBaseDirs())
-    {
-        QDir dir(baseDir);
-        const QFileInfoList files = dir.entryInfoList(filters, QDir::Files | QDir::Readable, QDir::Name);
-        for (const QFileInfo &fi : files)
-        {
-            const QString canonical = fi.canonicalFilePath().isEmpty() ? fi.absoluteFilePath() : fi.canonicalFilePath();
-            if (seenCanonical.contains(canonical))
-                continue;
-            seenCanonical.insert(canonical);
-            soundEntries.append(fi);
-        }
-    }
-
-    if (soundEntries.isEmpty())
-    {
-        QAction *emptyAction = d->noteSoundMenu->addAction(tr("No sound files found"));
-        emptyAction->setEnabled(false);
-        return;
-    }
-
-    std::sort(soundEntries.begin(), soundEntries.end(), [](const QFileInfo &a, const QFileInfo &b)
-              { return a.fileName().toLower() < b.fileName().toLower(); });
-
-    for (const QFileInfo &fi : soundEntries)
-    {
-        const QString absPath = fi.absoluteFilePath();
-        if (!currentPath.isEmpty() && QFileInfo(currentPath).absoluteFilePath() == absPath)
-            hasCurrentPathInMenu = true;
-        QAction *act = d->noteSoundMenu->addAction(fi.fileName());
-        act->setCheckable(true);
-        act->setActionGroup(group);
-        act->setChecked(!currentPath.isEmpty() && QFileInfo(currentPath).absoluteFilePath() == absPath);
-        connect(act, &QAction::triggered, this, [this, absPath]()
-                { changeNoteSound(absPath); });
-    }
-
-    if (!hasCurrentPathInMenu)
-        noneAction->setChecked(true);
-}
-void MainWindow::populateSkinMenu()
-{
-    d->skinMenu->clear();
-    struct SkinEntry
-    {
-        QString name;
-        QString path;
-    };
-    QVector<SkinEntry> entries;
-    QSet<QString> seenNames;
-
-    for (const QString &baseDir : skinBaseDirs())
-    {
-        for (const QString &skinName : SkinIO::getSkinList(baseDir))
-        {
-            if (seenNames.contains(skinName))
-                continue;
-            seenNames.insert(skinName);
-            entries.append({skinName, baseDir + "/" + skinName});
-        }
-    }
-
-    if (entries.isEmpty())
-    {
-        d->skinMenu->addAction(tr("No skins found"))->setEnabled(false);
-        Logger::warn("No skin directories found");
-        return;
-    }
-
-    QString currentSkin = Settings::instance().currentSkin();
-    for (const SkinEntry &entry : entries)
-    {
-        QString displayName = SkinIO::getSkinDisplayName(entry.path);
-        QAction *action = d->skinMenu->addAction(displayName);
-        action->setData(entry.name);
-        action->setCheckable(true);
-        if (entry.name == currentSkin)
-        {
-            action->setChecked(true);
-        }
-        connect(action, &QAction::triggered, this, [this, entry]()
-                { changeSkin(entry.name); });
-    }
-    Logger::debug(QString("Populated skin menu with %1 skins").arg(entries.size()));
-}
-
-void MainWindow::changeSkin(const QString &skinName)
-{
-    Logger::info(QString("Changing skin to %1").arg(skinName));
-
-    QString skinPath = resolveSkinPathByName(skinName);
-    if (skinPath.isEmpty())
-    {
-        Logger::error(QString("Skin path not found for %1").arg(skinName));
-        QMessageBox::warning(this, tr("Skin Error"), tr("Failed to locate skin: %1").arg(skinName));
-        populateSkinMenu();
-        return;
-    }
-
-    Skin *newSkin = new Skin();
-    if (SkinIO::loadSkin(skinPath, *newSkin))
-    {
-        if (d->skin)
-            delete d->skin;
-        d->skin = newSkin;
-        Settings::instance().setCurrentSkin(skinName);
-        d->canvas->setSkin(d->skin);
-        d->canvas->update();
-        Logger::info(QString("Skin changed to %1").arg(skinName));
-    }
-    else
-    {
-        Logger::error(QString("Failed to load skin %1").arg(skinName));
-        delete newSkin;
-        QMessageBox::warning(this, tr("Skin Error"), tr("Failed to load skin: %1").arg(skinName));
-    }
-    populateSkinMenu();
-}
-
-void MainWindow::setSkin(Skin *skin)
-{
-    if (d->skin == skin)
-        return;
-    if (d->skin)
-        delete d->skin;
-    d->skin = skin;
-    if (d->canvas)
-        d->canvas->setSkin(skin);
-    Logger::debug("Skin set externally");
-}
-
 // ==================== Paste 288 division option slot ====================
 void MainWindow::togglePaste288Division(bool enabled)
 {
     Settings::instance().setPasteUse288Division(enabled);
     Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
 }
+
 
 

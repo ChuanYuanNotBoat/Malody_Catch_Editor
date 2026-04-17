@@ -1,4 +1,4 @@
-#include "Application.h"
+﻿#include "Application.h"
 #include "MainWindow.h"
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
@@ -32,7 +32,6 @@ bool Application::initialize()
 {
     try
     {
-        // 初始化日志系统
         Logger::init("logs");
         Logger::info("========== Application Starting ==========");
         Logger::info(QString("Log file: %1").arg(Logger::logFilePath()));
@@ -48,11 +47,9 @@ bool Application::initialize()
         m_playbackController = new PlaybackController(new AudioPlayer(this), this);
         Logger::info("Controllers created.");
 
-        // 加载皮肤
         m_skin = new Skin();
         QString skinName = Settings::instance().currentSkin();
 
-        // 首先尝试 skins 目录（开发目录），然后尝试 resources/default_skin（发布目录）
         QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/skins";
         if (!QDir(skinsBaseDir).exists())
         {
@@ -60,17 +57,15 @@ bool Application::initialize()
         }
         Logger::info(QString("Looking for skins in: %1").arg(skinsBaseDir));
 
-        // 扫描所有皮肤目录
         QStringList skinDirs = SkinIO::getSkinList(skinsBaseDir);
         if (skinDirs.isEmpty())
         {
             Logger::warn("No skin directories found, using fallback colors.");
-            m_skin = nullptr; // 不使用皮肤
+            m_skin = nullptr; // Fall back to built-in note colors.
         }
         else
         {
             bool loaded = false;
-            // 如果当前皮肤名在列表中，则加载它；否则加载第一个
             if (!skinName.isEmpty() && skinDirs.contains(skinName))
             {
                 QString skinPath = skinsBaseDir + "/" + skinName;
@@ -87,7 +82,6 @@ bool Application::initialize()
             }
             if (!loaded)
             {
-                // 使用第一个可用皮肤
                 QString firstSkin = skinDirs.first();
                 QString skinPath = skinsBaseDir + "/" + firstSkin;
                 Logger::info(QString("Loading first skin: %1 from %2").arg(firstSkin).arg(skinPath));
@@ -95,7 +89,6 @@ bool Application::initialize()
                 {
                     loaded = true;
                     Logger::info(QString("Skin '%1' loaded successfully").arg(firstSkin));
-                    // 保存为新默认皮肤
                     Settings::instance().setCurrentSkin(firstSkin);
                     Logger::info(QString("Set default skin to %1").arg(firstSkin));
                 }

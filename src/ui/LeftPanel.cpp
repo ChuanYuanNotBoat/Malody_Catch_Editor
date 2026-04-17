@@ -2,7 +2,7 @@
 #include "DensityCurve.h"
 #include "controller/ChartController.h"
 #include "controller/PlaybackController.h"
-#include "ui/CustomWidgets/ChartCanvas.h"
+#include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>

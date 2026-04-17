@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QMainWindow>
 
@@ -67,7 +67,7 @@ private:
     bool confirmSaveIfModified(const QString &reasonText);
     void loadChartFile(const QString &filePath);
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
-    QString beatmapRootPath() const; // 新增：返回 beatmap 根目录
+    QString beatmapRootPath() const; // Return beatmap root directory.
 
     class Private;
     Private *d;

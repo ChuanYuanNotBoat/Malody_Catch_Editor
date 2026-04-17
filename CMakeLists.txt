@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+﻿cmake_minimum_required(VERSION 3.16)
 project(CatchChartEditor VERSION 0.0.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -15,6 +15,8 @@ set(SOURCES
     src/main.cpp
     src/app/Application.cpp
     src/app/MainWindow.cpp
+    src/app/MainWindowDialogs.cpp
+    src/app/MainWindowSkinAudio.cpp
     src/model/Note.cpp
     src/model/BpmEntry.cpp
     src/model/MetaData.cpp
@@ -50,7 +52,12 @@ set(SOURCES
     src/ui/TimelineWidget.cpp
     src/ui/DensityCurve.cpp
     src/ui/NoteItem.cpp
-    src/ui/CustomWidgets/ChartCanvas.cpp
+    src/ui/CustomWidgets/ChartCanvas/ChartCanvas.cpp
+    src/ui/CustomWidgets/ChartCanvas/ChartCanvasPlayback.cpp
+    src/ui/CustomWidgets/ChartCanvas/ChartCanvasPaste.cpp
+    src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp
+    src/ui/CustomWidgets/ChartCanvas/ChartCanvasInteraction.cpp
+    src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp
     src/ui/dialogs/LogSettingsDialog.cpp
 )
 
@@ -62,10 +69,10 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Multimedia
 )
 
-# 关键：添加 src 到包含目录，使 #include "model/Note.h" 能正确找到
+# Add `src` include dir so project headers can be included as "model/Note.h".
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
-# 翻译文件（可选）
+# Translation files (optional).
 # qt6_add_translations(${PROJECT_NAME}
 #     RESOURCE_PREFIX /translations
 #     TS_FILES resources/translations/catch_editor_zh_CN.ts
@@ -73,7 +80,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE src)
 #              resources/translations/catch_editor_ja_JP.ts
 # )
 
-# 复制默认皮肤
+# Copy default skin assets after build.
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/resources/default_skin
