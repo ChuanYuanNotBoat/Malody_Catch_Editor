@@ -13,7 +13,14 @@
 #include <QDebug>
 
 Application::Application(int &argc, char **argv)
-    : QApplication(argc, argv), m_mainWindow(nullptr)
+    : QApplication(argc, argv),
+      m_chartController(nullptr),
+      m_selectionController(nullptr),
+      m_playbackController(nullptr),
+      m_pluginManager(nullptr),
+      m_pluginSystemReady(false),
+      m_skin(nullptr),
+      m_mainWindow(nullptr)
 {
     setOrganizationName("CatchEditor");
     setApplicationName("Malody Catch Chart Editor");
@@ -112,6 +119,7 @@ bool Application::initialize()
         QDir().mkpath(pluginsDir);
         Logger::info(QString("Plugin directory: %1").arg(QDir(pluginsDir).absolutePath()));
         m_pluginManager->loadPlugins(pluginsDir, m_mainWindow);
+        m_pluginSystemReady = true;
         Logger::info("Plugins loaded.");
 
         connect(m_chartController, &ChartController::chartChanged, m_pluginManager, &PluginManager::notifyChartChanged);

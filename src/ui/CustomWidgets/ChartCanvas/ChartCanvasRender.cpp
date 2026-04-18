@@ -24,7 +24,9 @@ namespace
 PluginManager *activePluginManager()
 {
     auto *app = qobject_cast<Application *>(QCoreApplication::instance());
-    return app ? app->pluginManager() : nullptr;
+    if (!app || !app->pluginSystemReady())
+        return nullptr;
+    return app->pluginManager();
 }
 }
 

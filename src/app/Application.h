@@ -20,6 +20,7 @@ public:
     SelectionController *selectionController() const { return m_selectionController; }
     PlaybackController *playbackController() const { return m_playbackController; }
     PluginManager *pluginManager() const { return m_pluginManager; }
+    bool pluginSystemReady() const { return m_pluginSystemReady; }
     Skin *skin() const { return m_skin; }
     MainWindow *mainWindow() const { return m_mainWindow; }
 
@@ -28,10 +29,11 @@ public:
     void loadLanguage();
 
 private:
-    ChartController *m_chartController;
-    SelectionController *m_selectionController;
-    PlaybackController *m_playbackController;
-    PluginManager *m_pluginManager;
-    Skin *m_skin;
-    MainWindow *m_mainWindow;
+    ChartController *m_chartController = nullptr;
+    SelectionController *m_selectionController = nullptr;
+    PlaybackController *m_playbackController = nullptr;
+    PluginManager *m_pluginManager = nullptr;
+    bool m_pluginSystemReady = false;
+    Skin *m_skin = nullptr;
+    MainWindow *m_mainWindow = nullptr;
 };
