@@ -20,6 +20,7 @@ class MetaEditPanel;
 class QToolBar;
 class QAction;
 class QWidget;
+class QTabWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -87,8 +88,10 @@ private:
     QString beatmapRootPath() const; // Return beatmap root directory.
     void applySidebarTheme();
     bool useCompactMobileLayout() const;
-    void setupMobileFloatingPanels(QWidget *canvasContainer);
+    void setupMobileCentralArea(QWidget *canvasContainer);
     void populateMobilePrimaryToolbar();
+    void showEditorPanel(QWidget *panel);
+    void retranslateMobileUi();
 
     class Private;
     Private *d;

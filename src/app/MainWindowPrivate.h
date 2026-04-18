@@ -28,6 +28,7 @@ class ChartCanvas;
 class QToolBar;
 class QDialog;
 class QDockWidget;
+class QTabWidget;
 
 class MainWindow::Private
 {
@@ -63,9 +64,15 @@ public:
     QAction *notePanelAction = nullptr;
     QAction *bpmPanelAction = nullptr;
     QAction *metaPanelAction = nullptr;
+    QAction *mobileOpenAction = nullptr;
+    QAction *mobileSaveAction = nullptr;
+    QAction *mobilePlayAction = nullptr;
+    QAction *mobileLibraryAction = nullptr;
+    QAction *mobileEditorAction = nullptr;
     QToolBar *mainToolBar = nullptr;
     QDockWidget *leftDock = nullptr;
     QDockWidget *rightDock = nullptr;
+    QTabWidget *mobileTabs = nullptr;
     bool compactUiMode = false;
     QMenu *languageMenu = nullptr;
     QActionGroup *languageActionGroup = nullptr;

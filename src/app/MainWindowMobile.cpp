@@ -1,16 +1,15 @@
 #include "MainWindow.h"
 #include "MainWindowPrivate.h"
-#include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "ui/LeftPanel.h"
 #include "utils/Logger.h"
 
 #include <QAction>
+#include <QBoxLayout>
 #include <QDockWidget>
 #include <QMenuBar>
-#include <QScreen>
-#include <QTimer>
+#include <QTabWidget>
 #include <QToolBar>
-#include <QWindow>
+#include <QToolButton>
 
 bool MainWindow::useCompactMobileLayout() const
 {
@@ -21,63 +20,43 @@ bool MainWindow::useCompactMobileLayout() const
 #endif
 }
 
-void MainWindow::setupMobileFloatingPanels(QWidget *canvasContainer)
+void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
 {
     if (!canvasContainer)
         return;
 
-    // Keep desktop splitter behavior untouched. Mobile uses floating side panels.
     d->compactUiMode = true;
-    setCentralWidget(canvasContainer);
-
-    if (!d->leftDock)
+    if (d->leftDock)
     {
-        d->leftDock = new QDockWidget(tr("Left Panel"), this);
-        d->leftDock->setObjectName("mobileLeftDock");
-        d->leftDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-        d->leftDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-        d->leftDock->setWidget(d->leftPanel);
-        addDockWidget(Qt::LeftDockWidgetArea, d->leftDock);
+        d->leftDock->hide();
+        d->leftDock->deleteLater();
+        d->leftDock = nullptr;
+    }
+    if (d->rightDock)
+    {
+        d->rightDock->hide();
+        d->rightDock->deleteLater();
+        d->rightDock = nullptr;
     }
 
-    if (!d->rightDock)
-    {
-        d->rightDock = new QDockWidget(tr("Edit Panel"), this);
-        d->rightDock->setObjectName("mobileRightDock");
-        d->rightDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-        d->rightDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-        d->rightDock->setWidget(d->rightPanelContainer);
-        addDockWidget(Qt::RightDockWidgetArea, d->rightDock);
-    }
+    QWidget *mobileRoot = new QWidget(this);
+    QVBoxLayout *mobileLayout = new QVBoxLayout(mobileRoot);
+    mobileLayout->setContentsMargins(0, 0, 0, 0);
+    mobileLayout->setSpacing(0);
+    mobileLayout->addWidget(canvasContainer, 1);
 
-    d->leftDock->setFloating(true);
-    d->rightDock->setFloating(true);
+    d->mobileTabs = new QTabWidget(mobileRoot);
+    d->mobileTabs->setObjectName("mobileMainTabs");
+    d->mobileTabs->setTabPosition(QTabWidget::South);
+    d->mobileTabs->setDocumentMode(true);
+    d->mobileTabs->setElideMode(Qt::ElideRight);
+    d->mobileTabs->addTab(d->leftPanel, tr("Library"));
+    d->mobileTabs->addTab(d->rightPanelContainer, tr("Editor"));
+    d->mobileTabs->setCurrentWidget(d->rightPanelContainer);
+    mobileLayout->addWidget(d->mobileTabs, 0);
 
-    QTimer::singleShot(0, this, [this]() {
-        if (!d->leftDock || !d->rightDock)
-            return;
-
-        QRect availableRect = geometry();
-        if (windowHandle() && windowHandle()->screen())
-            availableRect = windowHandle()->screen()->availableGeometry();
-
-        const int maxPanelWidth = qMax(220, availableRect.width() - 48);
-        const int maxPanelHeight = qMax(260, availableRect.height() - 120);
-        const int sideWidth = qBound(220, availableRect.width() / 2, maxPanelWidth);
-        const int sideHeight = qBound(260, availableRect.height() / 2, maxPanelHeight);
-
-        d->leftDock->resize(sideWidth, sideHeight);
-        d->rightDock->resize(sideWidth, sideHeight);
-
-        const int leftX = availableRect.left() + 16;
-        const int rightX = qMax(availableRect.left() + 16, availableRect.right() - sideWidth - 16);
-        const int topY = availableRect.top() + 56;
-
-        d->leftDock->move(leftX, topY);
-        d->rightDock->move(rightX, topY);
-    });
-
-    Logger::info("Compact mobile layout enabled: using floating side panels.");
+    setCentralWidget(mobileRoot);
+    Logger::info("Compact mobile layout enabled: canvas + bottom tabbed panels.");
 }
 
 void MainWindow::populateMobilePrimaryToolbar()
@@ -87,11 +66,12 @@ void MainWindow::populateMobilePrimaryToolbar()
 
     d->mainToolBar->setMovable(false);
     d->mainToolBar->setFloatable(false);
+    d->mainToolBar->setAllowedAreas(Qt::TopToolBarArea | Qt::BottomToolBarArea);
+    addToolBar(Qt::BottomToolBarArea, d->mainToolBar);
     d->mainToolBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    d->mainToolBar->setVisible(true);
 
     QAction *anchor = d->mainToolBar->actions().isEmpty() ? nullptr : d->mainToolBar->actions().first();
-    auto insertPrimaryAction = [this, anchor](const QString &text, auto slot) {
+    auto insertPrimaryAction = [this, anchor](const QString &text, auto slot) -> QAction * {
         QAction *action = new QAction(text, d->mainToolBar);
         connect(action, &QAction::triggered, this, slot);
         if (anchor)
@@ -101,26 +81,49 @@ void MainWindow::populateMobilePrimaryToolbar()
         return action;
     };
 
-    insertPrimaryAction(tr("Open"), &MainWindow::openChart);
-    insertPrimaryAction(tr("Save"), &MainWindow::saveChart);
-    insertPrimaryAction(tr("Play"), &MainWindow::togglePlayback);
+    d->mobileOpenAction = insertPrimaryAction(tr("Open"), &MainWindow::openChart);
+    d->mobileSaveAction = insertPrimaryAction(tr("Save"), &MainWindow::saveChart);
+    d->mobilePlayAction = insertPrimaryAction(tr("Play"), &MainWindow::togglePlayback);
 
-    QAction *leftPanelAction = insertPrimaryAction(tr("Left"), [this]() {
-        if (!d->leftDock)
+    d->mobileLibraryAction = insertPrimaryAction(tr("Library"), [this]() {
+        if (!d->mobileTabs)
             return;
-        d->leftDock->setVisible(true);
-        d->leftDock->raise();
+        d->mobileTabs->setCurrentWidget(d->leftPanel);
     });
-    Q_UNUSED(leftPanelAction);
 
-    QAction *rightPanelAction = insertPrimaryAction(tr("Right"), [this]() {
-        if (!d->rightDock)
+    d->mobileEditorAction = insertPrimaryAction(tr("Editor"), [this]() {
+        if (!d->mobileTabs)
             return;
-        d->rightDock->setVisible(true);
-        d->rightDock->raise();
+        d->mobileTabs->setCurrentWidget(d->rightPanelContainer);
     });
-    Q_UNUSED(rightPanelAction);
 
     if (menuBar())
         menuBar()->setVisible(false);
+}
+
+void MainWindow::retranslateMobileUi()
+{
+    if (!useCompactMobileLayout())
+        return;
+
+    if (d->mobileOpenAction)
+        d->mobileOpenAction->setText(tr("Open"));
+    if (d->mobileSaveAction)
+        d->mobileSaveAction->setText(tr("Save"));
+    if (d->mobilePlayAction)
+        d->mobilePlayAction->setText(tr("Play"));
+    if (d->mobileLibraryAction)
+        d->mobileLibraryAction->setText(tr("Library"));
+    if (d->mobileEditorAction)
+        d->mobileEditorAction->setText(tr("Editor"));
+
+    if (d->mobileTabs)
+    {
+        const int libraryIndex = d->mobileTabs->indexOf(d->leftPanel);
+        if (libraryIndex >= 0)
+            d->mobileTabs->setTabText(libraryIndex, tr("Library"));
+        const int editorIndex = d->mobileTabs->indexOf(d->rightPanelContainer);
+        if (editorIndex >= 0)
+            d->mobileTabs->setTabText(editorIndex, tr("Editor"));
+    }
 }

@@ -671,6 +671,7 @@ void MainWindow::createCentralArea()
 {
     Logger::debug("Creating central area...");
 
+    d->mobileTabs = nullptr;
     d->leftPanel = new LeftPanel(this);
     d->leftPanel->setObjectName("leftPanelRoot");
     d->leftPanel->setAttribute(Qt::WA_StyledBackground, true);
@@ -790,40 +791,32 @@ void MainWindow::createCentralArea()
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
 
-    d->splitter = new QSplitter(Qt::Horizontal, this);
-    d->splitter->addWidget(d->leftPanel);
-    d->splitter->addWidget(canvasContainer);
-    d->splitter->addWidget(d->rightPanelContainer);
-    d->splitter->setSizes({150, 800, 300});
     if (useCompactMobileLayout())
     {
-        setupMobileFloatingPanels(canvasContainer);
+        setupMobileCentralArea(canvasContainer);
     }
     else
     {
+        d->splitter = new QSplitter(Qt::Horizontal, this);
+        d->splitter->addWidget(d->leftPanel);
+        d->splitter->addWidget(canvasContainer);
+        d->splitter->addWidget(d->rightPanelContainer);
+        d->splitter->setSizes({150, 800, 300});
         setCentralWidget(d->splitter);
     }
 
     d->mainToolBar = addToolBar(tr("Tools"));
     d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
                                                    {
-        d->notePanel->setVisible(true);
-        d->bpmPanel->setVisible(false);
-        d->metaPanel->setVisible(false);
-        d->currentRightPanel = d->notePanel; });
+        showEditorPanel(d->notePanel); });
     d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
                                                   {
-        d->notePanel->setVisible(false);
-        d->bpmPanel->setVisible(true);
-        d->metaPanel->setVisible(false);
-        d->currentRightPanel = d->bpmPanel; });
+        showEditorPanel(d->bpmPanel); });
     d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
                                                    {
-        d->notePanel->setVisible(false);
-        d->bpmPanel->setVisible(false);
-        d->metaPanel->setVisible(true);
-        d->currentRightPanel = d->metaPanel; });
+        showEditorPanel(d->metaPanel); });
     populateMobilePrimaryToolbar();
+    showEditorPanel(d->notePanel);
     applySidebarTheme();
 
     Logger::debug("Central area created with LeftPanel.");
@@ -1384,8 +1377,30 @@ void MainWindow::retranslateUi()
     populateSkinMenu();
     populateNoteSoundMenu();
     populatePluginToolsMenu();
+    retranslateMobileUi();
     applySidebarTheme();
     Logger::debug("UI retranslated");
+}
+
+void MainWindow::showEditorPanel(QWidget *panel)
+{
+    if (!panel)
+        return;
+
+    d->notePanel->setVisible(panel == d->notePanel);
+    d->bpmPanel->setVisible(panel == d->bpmPanel);
+    d->metaPanel->setVisible(panel == d->metaPanel);
+    if (panel == d->notePanel)
+        d->currentRightPanel = d->notePanel;
+    else if (panel == d->bpmPanel)
+        d->currentRightPanel = d->bpmPanel;
+    else if (panel == d->metaPanel)
+        d->currentRightPanel = d->metaPanel;
+
+    if (d->mobileTabs)
+    {
+        d->mobileTabs->setCurrentWidget(d->rightPanelContainer);
+    }
 }
 
 // ==================== Paste 288 division option slot ====================
