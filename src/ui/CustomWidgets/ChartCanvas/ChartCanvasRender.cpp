@@ -222,8 +222,8 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
                 previewAssignBeatWithDen(previewBeatFloat, targetPreviewDen, previewBeatNum, previewNum, previewDen);
                 const double beat = MathUtils::beatToFloat(previewBeatNum, previewNum, previewDen);
                 const double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
-                const int previewShiftedX = qBound(0, note.x + qRound(m_pasteXOffset), 512);
-                const double x = lmargin + (previewShiftedX / 512.0) * availableWidth;
+                const int previewShiftedX = qBound(0, note.x + qRound(m_pasteXOffset), kLaneWidth);
+                const double x = lmargin + (previewShiftedX / static_cast<double>(kLaneWidth)) * availableWidth;
                 m_noteRenderer->drawNote(painter, note, QPointF(x, y), false, -1);
             }
         }
@@ -235,7 +235,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.drawText(QRect(120, 10, 100, 30), Qt::AlignCenter, tr("Cancel"));
     }
 
-    double baselineY = canvasHeight * 0.8;
+    double baselineY = canvasHeight * kReferenceLineRatio;
     painter.setPen(QPen(QColor(0, 0, 255), 3));
     painter.drawLine(lmargin, baselineY, canvasWidth - rmargin, baselineY);
 
@@ -400,7 +400,7 @@ QPointF ChartCanvas::noteToPos(const Note &note) const
     int lmargin = leftMargin();
     int rmargin = rightMargin();
     int availableWidth = qMax(1, width() - lmargin - rmargin);
-    double x = lmargin + (note.x / 512.0) * availableWidth;
+    double x = lmargin + (note.x / static_cast<double>(kLaneWidth)) * availableWidth;
     return QPointF(x, y);
 }
 
@@ -412,14 +412,14 @@ Note ChartCanvas::posToNote(const QPointF &pos) const
     int lmargin = leftMargin();
     int rmargin = rightMargin();
     int availableWidth = qMax(1, width() - lmargin - rmargin);
-    int x = static_cast<int>((pos.x() - lmargin) / availableWidth * 512);
+    int x = static_cast<int>((pos.x() - lmargin) / availableWidth * kLaneWidth);
 
     if (m_gridSnap)
     {
         x = MathUtils::snapXToGrid(x, m_gridDivision);
     }
 
-    x = qBound(0, x, 512);
+    x = qBound(0, x, kLaneWidth);
 
     Note note(beat, num, den, x);
 

@@ -166,12 +166,12 @@ void ChartCanvas::keyPressEvent(QKeyEvent *event)
 
 int ChartCanvas::leftMargin() const
 {
-    return width() / 20;
+    return width() / kSideMarginDivisor;
 }
 
 int ChartCanvas::rightMargin() const
 {
-    return width() / 20;
+    return width() / kSideMarginDivisor;
 }
 
 void ChartCanvas::snapPlayheadToGrid()

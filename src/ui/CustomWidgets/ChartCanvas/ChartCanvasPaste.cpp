@@ -162,7 +162,7 @@ void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cu
     }
     else
     {
-        const double baselineRatio = 0.8;
+        const double baselineRatio = kReferenceLineRatio;
         if (m_verticalFlip)
             m_pasteAnchorBeat = m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange();
         else
@@ -233,7 +233,7 @@ double ChartCanvas::calculatePasteReferenceTime() const
     }
     else
     {
-        double baselineRatio = 0.8;
+        const double baselineRatio = kReferenceLineRatio;
         double baselineBeat;
         if (m_verticalFlip)
             baselineBeat = m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange();
@@ -283,7 +283,7 @@ void ChartCanvas::updateDragPaste(const QPointF &currentPos)
 
     double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
     const int availableWidth = qMax(1, width() - leftMargin() - rightMargin());
-    double deltaX = delta.x() / static_cast<double>(availableWidth) * 512.0;
+    double deltaX = delta.x() / static_cast<double>(availableWidth) * static_cast<double>(kLaneWidth);
 
     m_pasteTimeOffsetRaw += deltaBeat;
     m_pasteXOffsetRaw += deltaX;
@@ -436,7 +436,7 @@ void ChartCanvas::confirmPaste()
         }
 
         newNote.x = originalNote.x + qRound(finalXShift);
-        newNote.x = qBound(0, newNote.x, 512);
+        newNote.x = qBound(0, newNote.x, kLaneWidth);
 
         newNotes.append(newNote);
     }

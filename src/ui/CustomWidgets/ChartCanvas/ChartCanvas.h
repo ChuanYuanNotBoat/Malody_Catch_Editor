@@ -93,6 +93,13 @@ protected:
     void showEvent(QShowEvent *event) override;
 
 private:
+    static constexpr int kLaneWidth = 512;
+    static constexpr double kReferenceLineRatio = 0.8;
+    static constexpr int kPlaybackFrameIntervalMs = 16;
+    static constexpr int kScrollSignalIntervalMs = 33;
+    static constexpr double kWheelScrollBeatStepRatio = 0.1;
+    static constexpr int kSideMarginDivisor = 20;
+
     void drawBackground(QPainter &painter);
     void drawGrid(QPainter &painter);
     QPointF noteToPos(const Note &note) const;

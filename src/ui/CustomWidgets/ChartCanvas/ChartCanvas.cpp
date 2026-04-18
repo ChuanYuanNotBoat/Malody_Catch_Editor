@@ -113,7 +113,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     m_noteSoundPlayer->setEnabled(!noteSoundPath.isEmpty());
 
     m_playbackTimer = new QTimer(this);
-    m_playbackTimer->setInterval(16);
+    m_playbackTimer->setInterval(kPlaybackFrameIntervalMs);
     m_playbackTimer->setTimerType(Qt::PreciseTimer);
     connect(m_playbackTimer, &QTimer::timeout, this, &ChartCanvas::requestNextFrame);
 
@@ -254,7 +254,7 @@ void ChartCanvas::rebuildNoteTimesCache()
         {
             m_noteEndBeatPositions[i] = beat;
         }
-        m_noteXPositions[i] = static_cast<double>(note.x) / 512.0;
+        m_noteXPositions[i] = static_cast<double>(note.x) / static_cast<double>(kLaneWidth);
     }
 
     std::sort(m_playableNoteTimesMs.begin(), m_playableNoteTimesMs.end());

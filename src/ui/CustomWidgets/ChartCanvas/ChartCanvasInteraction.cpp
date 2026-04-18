@@ -65,7 +65,7 @@ void ChartCanvas::setTimeScale(double scale)
     if (qFuzzyCompare(m_timeScale, clampedScale))
         return;
 
-    double baselineRatio = 0.8;
+    const double baselineRatio = kReferenceLineRatio;
     double baselineBeat;
     if (m_verticalFlip)
     {
@@ -157,7 +157,7 @@ void ChartCanvas::requestNextFrame()
         };
         const double beat = beatFromTimeMs(m_currentPlayTime);
 
-        double baselineRatio = 0.8;
+        const double baselineRatio = kReferenceLineRatio;
         double targetScrollBeat;
         if (m_verticalFlip)
         {
@@ -172,7 +172,7 @@ void ChartCanvas::requestNextFrame()
         if (m_scrollBeat < 0)
             m_scrollBeat = 0;
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-        if (m_lastScrollSignalTimeMs == 0 || nowMs - m_lastScrollSignalTimeMs >= 33)
+        if (m_lastScrollSignalTimeMs == 0 || nowMs - m_lastScrollSignalTimeMs >= kScrollSignalIntervalMs)
         {
             emit scrollPositionChanged(m_scrollBeat);
             m_lastScrollSignalTimeMs = nowMs;

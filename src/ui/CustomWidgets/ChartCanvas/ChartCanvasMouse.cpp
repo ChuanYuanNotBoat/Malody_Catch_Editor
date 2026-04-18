@@ -176,7 +176,7 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
 
     const int availableWidth = qMax(1, width() - leftMargin() - rightMargin());
     const double deltaBeat = (deltaY / height()) * effectiveVisibleBeatRange();
-    const double deltaX = delta.x() / static_cast<double>(availableWidth) * 512.0;
+    const double deltaX = delta.x() / static_cast<double>(availableWidth) * static_cast<double>(kLaneWidth);
 
     m_moveDeltaBeatRaw += deltaBeat;
     m_moveDeltaXRaw += deltaX;
@@ -213,7 +213,7 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
             newBeat = 0;
         MathUtils::floatToBeat(newBeat, newNote.beatNum, newNote.numerator, newNote.denominator);
 
-        newNote.x = qBound(0, qRound(original.x + appliedDeltaX), 512);
+        newNote.x = qBound(0, qRound(original.x + appliedDeltaX), kLaneWidth);
 
         if (original.type == NoteType::RAIN)
         {
@@ -279,7 +279,7 @@ void ChartCanvas::endMoveSelection()
             newBeat = 0.0;
         MathUtils::floatToBeat(newBeat, snappedNote.beatNum, snappedNote.numerator, snappedNote.denominator);
 
-        snappedNote.x = qBound(0, qRound(original.x + finalAppliedDeltaX), 512);
+        snappedNote.x = qBound(0, qRound(original.x + finalAppliedDeltaX), kLaneWidth);
 
         if (original.type == NoteType::RAIN)
         {
@@ -683,7 +683,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
     double delta = event->angleDelta().y();
     if (delta != 0)
     {
-        double step = effectiveVisibleBeatRange() * 0.1;
+        double step = effectiveVisibleBeatRange() * kWheelScrollBeatStepRatio;
         double newPos = m_scrollBeat - (delta / 120.0) * step;
         if (newPos < 0)
             newPos = 0;
@@ -697,7 +697,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
             const auto &bpmList = chart()->bpmList();
             int offset = chart()->meta().offset;
 
-            double baselineRatio = 0.8;
+            const double baselineRatio = kReferenceLineRatio;
             double baselineBeat;
             if (m_verticalFlip)
             {
