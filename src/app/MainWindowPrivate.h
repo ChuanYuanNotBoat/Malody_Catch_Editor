@@ -29,6 +29,7 @@ class QToolBar;
 class QDialog;
 class QDockWidget;
 class QTabWidget;
+class QScrollArea;
 
 class MainWindow::Private
 {
@@ -77,6 +78,8 @@ public:
     QDockWidget *leftDock = nullptr;
     QDockWidget *rightDock = nullptr;
     QTabWidget *mobileTabs = nullptr;
+    QScrollArea *mobileLeftPanelHost = nullptr;
+    QScrollArea *mobileRightPanelHost = nullptr;
     bool compactUiMode = false;
     QMenu *languageMenu = nullptr;
     QActionGroup *languageActionGroup = nullptr;
