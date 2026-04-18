@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 #include "app/MainWindowPrivate.h"
 #include "ui/LeftPanel.h"
+#include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
 
@@ -18,6 +19,7 @@
 #include <QScreen>
 #include <QSizePolicy>
 #include <QSplitter>
+#include <QScrollBar>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -57,6 +59,14 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
 
     if (d->splitter)
     {
+        if (d->canvas)
+        {
+            d->canvas->setMinimumSize(0, 0);
+            d->canvas->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        }
+        if (d->verticalScrollBar)
+            d->verticalScrollBar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+
         const int leftIndex = d->splitter->indexOf(d->leftPanel);
         const int rightIndex = d->splitter->indexOf(d->rightPanelContainer);
 
@@ -68,6 +78,8 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
             d->mobileLeftPanelHost->setWidgetResizable(true);
             d->mobileLeftPanelHost->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
             d->mobileLeftPanelHost->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            d->mobileLeftPanelHost->setMinimumSize(0, 0);
+            d->mobileLeftPanelHost->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
         }
         if (!d->mobileRightPanelHost)
         {
@@ -77,6 +89,8 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
             d->mobileRightPanelHost->setWidgetResizable(true);
             d->mobileRightPanelHost->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
             d->mobileRightPanelHost->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            d->mobileRightPanelHost->setMinimumSize(0, 0);
+            d->mobileRightPanelHost->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
         }
 
         if (leftIndex >= 0 && d->splitter->indexOf(d->mobileLeftPanelHost) < 0)
@@ -103,6 +117,11 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         d->splitter->setCollapsible(0, true);
         d->splitter->setCollapsible(1, false);
         d->splitter->setCollapsible(2, true);
+        d->splitter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        d->splitter->setMinimumSize(0, 0);
+        d->splitter->setStretchFactor(0, 0);
+        d->splitter->setStretchFactor(1, 1);
+        d->splitter->setStretchFactor(2, 0);
         setCentralWidget(d->splitter);
 
         auto rebalanceSplitter = [this]() {

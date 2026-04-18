@@ -34,6 +34,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QGuiApplication>
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QDir>
@@ -64,6 +65,7 @@
 #include <QScrollBar>
 #include <QSet>
 #include <QTimer>
+#include <QScreen>
 #include <algorithm>
 
 namespace
@@ -354,7 +356,19 @@ MainWindow::~MainWindow()
 void MainWindow::setupUi()
 {
     setWindowTitle(tr("Catch Chart Editor"));
-    resize(1200, 800);
+    if (useCompactMobileLayout())
+    {
+        const QScreen *screen = QGuiApplication::primaryScreen();
+        if (screen)
+            resize(screen->availableGeometry().size());
+        else
+            resize(1080, 1920);
+        setMinimumSize(0, 0);
+    }
+    else
+    {
+        resize(1200, 800);
+    }
     Logger::debug("MainWindow UI setup completed");
 }
 
