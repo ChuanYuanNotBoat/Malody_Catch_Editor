@@ -14,6 +14,7 @@ public:
 
     QString lastProjectPath() const;
     void setLastProjectPath(const QString &path);
+    QString defaultBeatmapPath() const;
 
     bool colorNoteEnabled() const;
     void setColorNoteEnabled(bool enabled);

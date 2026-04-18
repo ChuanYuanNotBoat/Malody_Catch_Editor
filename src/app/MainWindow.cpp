@@ -56,6 +56,8 @@
 #include <QJsonDocument>
 #include <QInputDialog>
 #include <QListWidget>
+#include <QPushButton>
+#include <QTreeWidget>
 #include <QScrollBar>
 #include <QSet>
 #include <QTimer>
@@ -521,7 +523,7 @@ void MainWindow::createCentralArea()
 // ==================== beatmap root path ====================
 QString MainWindow::beatmapRootPath() const
 {
-    return QCoreApplication::applicationDirPath() + "/beatmap";
+    return Settings::instance().defaultBeatmapPath();
 }
 
 bool MainWindow::confirmSaveIfModified(const QString &reasonText)
@@ -627,29 +629,72 @@ void MainWindow::loadChartFile(const QString &filePath)
     if (fi.suffix().toLower() == "mcz")
     {
         QString beatmapDir = beatmapRootPath();
-        QString targetDir = beatmapDir + "/" + fi.completeBaseName();
+        const QString baseName = fi.completeBaseName();
+        const QString defaultTargetDir = beatmapDir + "/" + baseName;
+        QString targetDir = defaultTargetDir;
 
         QDir().mkpath(beatmapDir);
 
-        QString extractedDir;
-        if (!ProjectIO::extractMcz(filePath, targetDir, extractedDir))
+        const bool defaultDirExists = QDir(defaultTargetDir).exists();
+        const bool hasExistingImportedCharts = !ProjectIO::findChartsInDirectory(defaultTargetDir).isEmpty();
+        if (defaultDirExists && hasExistingImportedCharts)
         {
-            QMessageBox::critical(this, tr("Error"), tr("Failed to extract MCZ file."));
-            return;
+            QMessageBox chooser(this);
+            chooser.setIcon(QMessageBox::Question);
+            chooser.setWindowTitle(tr("Chart Already Imported"));
+            chooser.setText(tr("This song appears to be imported already."));
+            chooser.setInformativeText(tr("Open an imported chart from the local library, or import this MCZ again into a new folder?"));
+
+            QPushButton *openImportedBtn = chooser.addButton(tr("Open Imported"), QMessageBox::AcceptRole);
+            QPushButton *reimportBtn = chooser.addButton(tr("Import Again"), QMessageBox::ActionRole);
+            chooser.addButton(QMessageBox::Cancel);
+            chooser.setDefaultButton(openImportedBtn);
+            chooser.exec();
+
+            if (chooser.clickedButton() == openImportedBtn)
+            {
+                const QString selectedChart = selectChartFromLibrary(beatmapDir, baseName);
+                if (selectedChart.isEmpty())
+                    return;
+                actualChartPath = selectedChart;
+                Settings::instance().setLastProjectPath(beatmapDir);
+            }
+            else if (chooser.clickedButton() == reimportBtn)
+            {
+                // 避免重复导入同名 MCZ 时目录冲突：自动追加序号。
+                for (int i = 2; QDir(targetDir).exists(); ++i)
+                {
+                    targetDir = QString("%1/%2 (%3)").arg(beatmapDir, baseName).arg(i);
+                }
+            }
+            else
+            {
+                return;
+            }
         }
 
-        QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(extractedDir);
-        if (charts.isEmpty())
+        if (actualChartPath == filePath)
         {
-            QMessageBox::critical(this, tr("Error"), tr("No .mc files found in the extracted content."));
-            return;
+            QString extractedDir;
+            if (!ProjectIO::extractMcz(filePath, targetDir, extractedDir))
+            {
+                QMessageBox::critical(this, tr("Error"), tr("Failed to extract MCZ file."));
+                return;
+            }
+
+            QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(extractedDir);
+            if (charts.isEmpty())
+            {
+                QMessageBox::critical(this, tr("Error"), tr("No .mc files found in the extracted content."));
+                return;
+            }
+
+            actualChartPath = selectChartFromList(charts, tr("Select Chart from MCZ"));
+            if (actualChartPath.isEmpty())
+                return;
+
+            Settings::instance().setLastProjectPath(beatmapDir);
         }
-
-        actualChartPath = selectChartFromList(charts, tr("Select Chart from MCZ"));
-        if (actualChartPath.isEmpty())
-            return;
-
-        Settings::instance().setLastProjectPath(beatmapDir);
     }
 
     closePluginPanels(tr("Plugin panels were closed after chart switch."));
@@ -711,6 +756,80 @@ QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>> &ch
         return QString();
 
     return list->currentItem()->data(Qt::UserRole).toString();
+}
+
+QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong)
+{
+    QDir rootDir(libraryRoot);
+    if (!rootDir.exists())
+        return QString();
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Imported Chart Library"));
+    dialog.resize(560, 420);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(tr("Select a chart from imported songs:")));
+
+    QTreeWidget *tree = new QTreeWidget(&dialog);
+    tree->setColumnCount(2);
+    tree->setHeaderLabels(QStringList() << tr("Song / Chart") << tr("Difficulty"));
+    tree->setRootIsDecorated(true);
+    layout->addWidget(tree);
+
+    QStringList songDirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString &songName : songDirs)
+    {
+        const QString songPath = rootDir.absoluteFilePath(songName);
+        const QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(songPath);
+        if (charts.isEmpty())
+            continue;
+
+        QTreeWidgetItem *songItem = new QTreeWidgetItem(tree);
+        songItem->setText(0, songName);
+        songItem->setExpanded(songName == preferredSong);
+
+        for (const auto &chart : charts)
+        {
+            QTreeWidgetItem *chartItem = new QTreeWidgetItem(songItem);
+            chartItem->setText(0, QFileInfo(chart.first).fileName());
+            chartItem->setText(1, chart.second);
+            chartItem->setData(0, Qt::UserRole, chart.first);
+            chartItem->setToolTip(0, chart.first);
+        }
+
+        if (songName == preferredSong && songItem->childCount() > 0)
+            tree->setCurrentItem(songItem->child(0));
+    }
+
+    if (tree->topLevelItemCount() == 0)
+    {
+        QMessageBox::information(this, tr("No Charts"), tr("No imported .mc files were found in the local library."));
+        return QString();
+    }
+
+    tree->expandToDepth(0);
+    connect(tree, &QTreeWidget::itemDoubleClicked, &dialog, [&dialog](QTreeWidgetItem *item, int) {
+        if (!item->data(0, Qt::UserRole).toString().isEmpty())
+            dialog.accept();
+    });
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted || tree->currentItem() == nullptr)
+        return QString();
+
+    const QString selectedPath = tree->currentItem()->data(0, Qt::UserRole).toString();
+    if (selectedPath.isEmpty())
+    {
+        QMessageBox::information(this, tr("Select Chart"), tr("Please select a chart item, not a song folder."));
+        return QString();
+    }
+
+    return selectedPath;
 }
 
 void MainWindow::switchDifficulty()

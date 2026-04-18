@@ -1,6 +1,7 @@
 #include "Settings.h"
 #include <QDir>
 #include <QCoreApplication>
+#include <QStandardPaths>
 #include <QtGlobal>
 
 Settings::Settings() : m_settings("CatchEditor", "CatchChartEditor") {}
@@ -22,12 +23,21 @@ void Settings::setLastOpenPath(const QString &path)
 
 QString Settings::lastProjectPath() const
 {
-    QString defaultPath = QCoreApplication::applicationDirPath() + "/beatmap";
-    return m_settings.value("lastProjectPath", defaultPath).toString();
+    return m_settings.value("lastProjectPath", defaultBeatmapPath()).toString();
 }
 void Settings::setLastProjectPath(const QString &path)
 {
     m_settings.setValue("lastProjectPath", path);
+}
+
+QString Settings::defaultBeatmapPath() const
+{
+    const QString appDataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (!appDataDir.isEmpty())
+        return QDir(appDataDir).filePath("beatmap");
+
+    // Fallback for environments where AppLocalDataLocation is unavailable.
+    return QDir::home().filePath("CatchChartEditor/beatmap");
 }
 
 bool Settings::colorNoteEnabled() const

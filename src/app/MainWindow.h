@@ -78,6 +78,7 @@ private:
     bool confirmSaveIfModified(const QString &reasonText);
     void loadChartFile(const QString &filePath);
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
+    QString selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong = QString());
     QString beatmapRootPath() const; // Return beatmap root directory.
     void applySidebarTheme();
 

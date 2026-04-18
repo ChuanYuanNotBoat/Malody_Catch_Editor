@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
+#include <QProcessEnvironment>
 
 // 递归复制目录
 static bool copyDir(const QString &srcDir, const QString &destDir)
@@ -65,34 +66,39 @@ bool ProjectIO::extractMcz(const QString &mczPath, const QString &outputDir, QSt
     process.setWorkingDirectory(outputDir);
 
 #ifdef Q_OS_WIN
-    QTemporaryFile tempZipFile(QDir(outputDir).filePath("mcz_extract_XXXXXX.zip"));
-    tempZipFile.setAutoRemove(false);
-    if (!tempZipFile.open())
+    QTemporaryDir tempZipDir;
+    if (!tempZipDir.isValid())
     {
-        Logger::error("ProjectIO::extractMcz - Failed to create temporary ZIP path");
+        Logger::error("ProjectIO::extractMcz - Failed to create temporary directory for ZIP conversion");
         return false;
     }
 
-    const QString tempZipPath = QDir::toNativeSeparators(tempZipFile.fileName());
-    tempZipFile.close();
-    QFile::remove(tempZipPath);
+    const QString tempZipPath = QDir(tempZipDir.path()).filePath("mcz_extract.zip");
 
     if (!QFile::copy(mczPath, tempZipPath))
     {
-        Logger::error("ProjectIO::extractMcz - Failed to copy MCZ to temporary ZIP");
+        Logger::error(QString("ProjectIO::extractMcz - Failed to copy MCZ to temporary ZIP: src=%1, dst=%2")
+                          .arg(mczPath, tempZipPath));
         return false;
     }
 
     // 固定命令 + 位置参数，避免命令拼接带来的 PowerShell 注入问题。
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("MALODY_MCZ_TEMP_ZIP", QDir::toNativeSeparators(tempZipPath));
+    env.insert("MALODY_MCZ_OUTPUT_DIR", QDir::toNativeSeparators(outputDir));
+    process.setProcessEnvironment(env);
+
     QStringList args;
     args << "-NoProfile"
          << "-NonInteractive"
          << "-Command"
          << "$ErrorActionPreference='Stop'; "
-            "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force; "
-            "Remove-Item -LiteralPath $args[0] -Force"
-         << tempZipPath
-         << QDir::toNativeSeparators(outputDir);
+            "$zip = $env:MALODY_MCZ_TEMP_ZIP; "
+            "$dst = $env:MALODY_MCZ_OUTPUT_DIR; "
+            "if ([string]::IsNullOrWhiteSpace($zip) -or [string]::IsNullOrWhiteSpace($dst)) "
+            "{ throw 'Missing extraction paths in environment.' }; "
+            "Expand-Archive -LiteralPath $zip -DestinationPath $dst -Force; "
+            "Remove-Item -LiteralPath $zip -Force";
     process.start("powershell.exe", args);
 #else
     process.start("unzip", QStringList() << "-o" << mczPath << "-d" << outputDir);
