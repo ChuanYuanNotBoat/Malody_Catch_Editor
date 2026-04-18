@@ -142,6 +142,7 @@ void MainWindow::refreshPluginUiExtensions()
     }
 
     d->pluginActionMeta.clear();
+    d->batchEditDisabledActions.clear();
     for (QAction *a : d->pluginToolbarActions)
     {
         if (d->mainToolBar && a)
@@ -250,8 +251,12 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
                      .arg(actionId)
                      .arg(chartPath));
 
+    const QString actionKey = pluginId + "::" + actionId;
     PluginInterface::BatchEdit batchEdit;
-    if (app->pluginManager()->supportsHostBatchEdit(pluginId) &&
+    const bool batchEditAvailable =
+        app->pluginManager()->supportsHostBatchEdit(pluginId) &&
+        !d->batchEditDisabledActions.contains(actionKey);
+    if (batchEditAvailable &&
         app->pluginManager()->buildToolActionBatchEdit(pluginId, actionId, context, &batchEdit))
     {
         const bool ok = d->chartController->applyBatchEdit(
@@ -266,6 +271,12 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
         }
         statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
         return true;
+    }
+    else if (batchEditAvailable)
+    {
+        d->batchEditDisabledActions.insert(actionKey);
+        Logger::warn(QString("Plugin action batch-edit disabled for this session after failure: %1")
+                         .arg(actionKey));
     }
 
     if (!app->pluginManager()->runToolAction(pluginId, actionId, context))
