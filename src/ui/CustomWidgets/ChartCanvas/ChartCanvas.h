@@ -9,8 +9,10 @@
 #include <QVector>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QList>
 #include <QString>
 #include "model/Note.h"
+#include "plugin/PluginInterface.h"
 #include "utils/MathUtils.h"
 
 class ChartController;
@@ -100,6 +102,9 @@ private:
     static constexpr int kScrollSignalIntervalMs = 33;
     static constexpr double kWheelScrollBeatStepRatio = 0.1;
     static constexpr int kSideMarginDivisor = 20;
+    static constexpr int kOverlayQueryIntervalMs = 120;
+    static constexpr int kOverlaySlowCallThresholdMs = 40;
+    static constexpr int kOverlaySlowCallBackoffMs = 1000;
 
     void drawBackground(QPainter &painter);
     void drawGrid(QPainter &painter);
@@ -259,6 +264,9 @@ private:
     bool m_isScrolling;
 
     QTimer *m_playbackTimer; // Playback tick timer (~16ms).
+    QList<PluginInterface::CanvasOverlayItem> m_overlayCache;
+    qint64 m_lastOverlayQueryMs;
+    qint64 m_overlayQueryBlockedUntilMs;
 
     QSet<int> m_cachedHyperSet;
     bool m_hyperCacheValid;

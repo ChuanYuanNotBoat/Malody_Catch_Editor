@@ -33,7 +33,7 @@ int requestTimeoutMsForMethod(const QString &method)
     if (method == "buildBatchEdit")
         return 8000;
     if (method == "listCanvasOverlays")
-        return 5000;
+        return 120;
     return 5000;
 }
 

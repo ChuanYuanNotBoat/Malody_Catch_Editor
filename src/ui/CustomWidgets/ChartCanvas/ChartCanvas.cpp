@@ -74,6 +74,8 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_snapTimerId(0),
       m_isScrolling(false),
       m_playbackTimer(nullptr),
+      m_lastOverlayQueryMs(0),
+      m_overlayQueryBlockedUntilMs(0),
       m_hyperCacheValid(false),
       m_backgroundCacheDirty(true),
       m_noteDataDirty(true),
