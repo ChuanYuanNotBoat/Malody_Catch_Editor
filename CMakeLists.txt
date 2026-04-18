@@ -69,6 +69,20 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Multimedia
 )
 
+if(WIN32)
+    get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
+    if(QT_QMAKE_EXECUTABLE)
+        get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
+        set(WINDEPLOYQT_EXECUTABLE "${QT_BIN_DIR}/windeployqt.exe")
+        if(EXISTS "${WINDEPLOYQT_EXECUTABLE}")
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-translations "$<TARGET_FILE:${PROJECT_NAME}>"
+                COMMENT "Deploying Qt runtime dependencies with windeployqt"
+            )
+        endif()
+    endif()
+endif()
+
 # Add `src` include dir so project headers can be included as "model/Note.h".
 target_include_directories(${PROJECT_NAME} PRIVATE src)
 
