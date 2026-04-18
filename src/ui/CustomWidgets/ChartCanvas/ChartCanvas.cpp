@@ -73,11 +73,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_snapToGrid(true),
       m_snapTimerId(0),
       m_isScrolling(false),
-      m_repaintTimer(nullptr),
       m_playbackTimer(nullptr),
-      m_repaintPending(false),
-      m_forceRepaint(false),
-      m_lastRepaintTime(0),
       m_hyperCacheValid(false),
       m_backgroundCacheDirty(true),
       m_noteDataDirty(true),
@@ -115,10 +111,6 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     const QString noteSoundPath = Settings::instance().noteSoundPath();
     m_noteSoundPlayer->setSoundFile(noteSoundPath);
     m_noteSoundPlayer->setEnabled(!noteSoundPath.isEmpty());
-
-    m_repaintTimer = new QTimer(this);
-    m_repaintTimer->setSingleShot(true);
-    connect(m_repaintTimer, &QTimer::timeout, this, &ChartCanvas::performDelayedRepaint);
 
     m_playbackTimer = new QTimer(this);
     m_playbackTimer->setInterval(16);

@@ -227,11 +227,7 @@ private:
     int m_snapTimerId;
     bool m_isScrolling;
 
-    QTimer *m_repaintTimer;
     QTimer *m_playbackTimer; // Playback tick timer (~16ms).
-    bool m_repaintPending;
-    bool m_forceRepaint;
-    qint64 m_lastRepaintTime;
 
     QSet<int> m_cachedHyperSet;
     bool m_hyperCacheValid;
@@ -258,7 +254,6 @@ private:
 
 private slots:
     void onSelectionChanged();
-    void performDelayedRepaint();
     void requestNextFrame();
 };
 

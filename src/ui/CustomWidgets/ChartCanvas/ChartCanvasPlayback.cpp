@@ -224,17 +224,6 @@ void ChartCanvas::timerEvent(QTimerEvent *event)
     QWidget::timerEvent(event);
 }
 
-void ChartCanvas::performDelayedRepaint()
-{
-    if (m_repaintPending || m_forceRepaint)
-    {
-        m_repaintPending = false;
-        m_forceRepaint = false;
-        m_lastRepaintTime = QDateTime::currentMSecsSinceEpoch();
-        update();
-    }
-}
-
 void ChartCanvas::invalidateCache()
 {
 }

@@ -112,3 +112,26 @@ install(DIRECTORY resources/ DESTINATION share/${PROJECT_NAME})
 if(EXISTS "${CMAKE_SOURCE_DIR}/plugins")
     install(DIRECTORY plugins/ DESTINATION bin/plugins)
 endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(CatchChartEditorTests
+        tests/minimal_tests.cpp
+        src/model/Note.cpp
+        src/model/BpmEntry.cpp
+        src/model/MetaData.cpp
+        src/model/Chart.cpp
+        src/utils/MathUtils.cpp
+        src/utils/Logger.cpp
+        src/file/ProjectIO.cpp
+    )
+
+    target_include_directories(CatchChartEditorTests PRIVATE src)
+    target_link_libraries(CatchChartEditorTests Qt6::Core)
+
+    add_test(NAME core_minimal_tests COMMAND CatchChartEditorTests)
+    if(WIN32)
+        set_tests_properties(core_minimal_tests PROPERTIES
+            ENVIRONMENT "PATH=$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}")
+    endif()
+endif()
