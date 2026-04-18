@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QList>
 #include <QPair>
+#include <QSet>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -98,6 +99,96 @@ bool replaceBpmByValue(Chart &chart, const BpmEntry &from, const BpmEntry &to, i
 
     list[idx] = to;
     sortBpmList(list);
+    return true;
+}
+
+QString noteSignature(const Note &note)
+{
+    return QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12")
+        .arg(note.id)
+        .arg(static_cast<int>(note.type))
+        .arg(note.beatNum)
+        .arg(note.numerator)
+        .arg(note.denominator)
+        .arg(note.x)
+        .arg(note.endBeatNum)
+        .arg(note.endNumerator)
+        .arg(note.endDenominator)
+        .arg(note.sound)
+        .arg(note.vol)
+        .arg(note.offset);
+}
+
+bool isReferenceNoteValid(const Note &note)
+{
+    // Remove/move-from notes are references to existing data.
+    // We still require basic timeline/lane validity to block malformed payloads.
+    return note.isTimeValid() && note.isXValid();
+}
+
+bool isTargetNoteValid(const Note &note)
+{
+    // Add/move-to notes must be full valid notes before mutating chart data.
+    return note.isValid() && note.isTimeValid() && note.isXValid();
+}
+
+bool validateBatchEditPayload(const QVector<Note> &notesToAdd,
+                              const QVector<Note> &notesToRemove,
+                              const QList<QPair<Note, Note>> &notesToMove,
+                              QString *reason)
+{
+    auto fail = [reason](const QString &msg) -> bool
+    {
+        if (reason)
+            *reason = msg;
+        return false;
+    };
+
+    if (notesToAdd.isEmpty() && notesToRemove.isEmpty() && notesToMove.isEmpty())
+        return fail("Batch edit is empty.");
+
+    constexpr int kMaxBatchOperations = 20000;
+    const int totalOps = notesToAdd.size() + notesToRemove.size() + notesToMove.size();
+    if (totalOps > kMaxBatchOperations)
+    {
+        return fail(QString("Batch edit too large (%1 ops > %2 limit).")
+                        .arg(totalOps)
+                        .arg(kMaxBatchOperations));
+    }
+
+    QSet<QString> removeKeys;
+    for (const Note &note : notesToRemove)
+    {
+        if (!isReferenceNoteValid(note))
+            return fail("Invalid remove note detected.");
+        removeKeys.insert(noteSignature(note));
+    }
+
+    QSet<QString> moveFromKeys;
+    for (const auto &mv : notesToMove)
+    {
+        const Note &from = mv.first;
+        const Note &to = mv.second;
+        if (!isReferenceNoteValid(from))
+            return fail("Invalid move source note detected.");
+        if (!isTargetNoteValid(to))
+            return fail("Invalid move target note detected.");
+
+        const QString fromKey = noteSignature(from);
+        if (moveFromKeys.contains(fromKey))
+            return fail("Duplicated move source note detected.");
+        moveFromKeys.insert(fromKey);
+
+        if (removeKeys.contains(fromKey))
+            return fail("Conflicting remove + move source detected.");
+    }
+
+    for (const Note &note : notesToAdd)
+    {
+        if (!isTargetNoteValid(note))
+            return fail("Invalid add note detected.");
+    }
+
     return true;
 }
 } // namespace
@@ -587,8 +678,12 @@ bool ChartController::applyBatchEdit(const QString &actionName,
                                      const QVector<Note> &notesToRemove,
                                      const QList<QPair<Note, Note>> &notesToMove)
 {
-    if (notesToAdd.isEmpty() && notesToRemove.isEmpty() && notesToMove.isEmpty())
+    QString invalidReason;
+    if (!validateBatchEditPayload(notesToAdd, notesToRemove, notesToMove, &invalidReason))
+    {
+        Logger::warn(QString("applyBatchEdit rejected: %1").arg(invalidReason));
         return false;
+    }
 
     Chart mutated = m_chart;
     for (const Note &note : notesToRemove)
