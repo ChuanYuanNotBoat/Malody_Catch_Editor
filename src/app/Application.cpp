@@ -72,6 +72,9 @@ bool Application::initialize()
         Settings::instance();
         Logger::info("Settings loaded.");
 
+        MobileResourcePaths::ensureBundledResourcesReady();
+        Logger::info("Mobile bundled resources prepared.");
+
         loadLanguage();
         Logger::info("Language loaded.");
 

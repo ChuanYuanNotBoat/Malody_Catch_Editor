@@ -72,6 +72,18 @@ qt_add_executable(${PROJECT_NAME}
     ${SOURCES}
 )
 
+if(ANDROID)
+    file(GLOB_RECURSE MOBILE_BUNDLED_ASSETS
+        RELATIVE ${CMAKE_SOURCE_DIR}
+        resources/default_skin/*
+        resources/note_sounds/*
+    )
+    qt_add_resources(${PROJECT_NAME} mobile_bundled_assets
+        PREFIX "/mobile_assets"
+        FILES ${MOBILE_BUNDLED_ASSETS}
+    )
+endif()
+
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Qt6::Core
