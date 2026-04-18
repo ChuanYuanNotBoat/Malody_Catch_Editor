@@ -1491,6 +1491,28 @@ void MainWindow::applySidebarTheme()
                                       .arg(panelBg.name(), panelButtonBg.name(), panelInputBg.name());
         d->verticalScrollBar->setStyleSheet(scrollCss);
     }
+
+    // Global dialog/message box theming. This keeps popups readable on dark backgrounds.
+    const QString dialogCss = QString(
+                                  "QDialog, QMessageBox, QInputDialog { background-color: %1; color: %2; }"
+                                  "QDialog QLabel, QMessageBox QLabel, QInputDialog QLabel, QDialog QGroupBox { color: %2; }"
+                                  "QDialog QLabel[hintText=\"true\"] { color: %6; }"
+                                  "QDialog QLineEdit, QDialog QTextEdit, QDialog QPlainTextEdit, QDialog QComboBox,"
+                                  "QDialog QAbstractSpinBox, QDialog QListWidget, QDialog QTreeWidget, QDialog QTableWidget,"
+                                  "QMessageBox QLineEdit, QInputDialog QLineEdit {"
+                                  "  background-color: %3; color: %2; border: 1px solid %4; }"
+                                  "QDialog QAbstractItemView, QMessageBox QAbstractItemView, QInputDialog QAbstractItemView {"
+                                  "  background-color: %3; color: %2; border: 1px solid %4;"
+                                  "  selection-background-color: %5; selection-color: %6; }"
+                                  "QDialog QPushButton, QMessageBox QPushButton, QInputDialog QPushButton {"
+                                  "  background-color: %5; color: %2; border: 1px solid %4; padding: 3px 8px; }"
+                                  "QDialog QPushButton:disabled, QMessageBox QPushButton:disabled, QInputDialog QPushButton:disabled {"
+                                  "  color: %6; }"
+                                  "QDialog QMenuBar, QDialog QMenu { background-color: %1; color: %2; }"
+                                  "QDialog QTabWidget::pane { border: 1px solid %4; }")
+                                  .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
+                                       panelDisabledText.name());
+    qApp->setStyleSheet(dialogCss);
 }
 
 

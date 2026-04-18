@@ -530,7 +530,7 @@ void MainWindow::adjustNoteSize()
 
     QLabel *remarkLabel = new QLabel(tr("Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration."));
     remarkLabel->setWordWrap(true);
-    remarkLabel->setStyleSheet("color: #666;");
+    remarkLabel->setProperty("hintText", true);
     layout->addWidget(remarkLabel);
 
     QLabel *previewLabel = new QLabel;
