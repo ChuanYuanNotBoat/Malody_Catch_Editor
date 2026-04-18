@@ -143,6 +143,8 @@ if(BUILD_TESTING)
         src/model/Chart.cpp
         src/utils/MathUtils.cpp
         src/utils/Logger.cpp
+        src/utils/PerformanceTimer.cpp
+        src/utils/DiagnosticCollector.cpp
         src/controller/ChartController.cpp
         src/file/ChartIO.cpp
         src/file/ProjectIO.cpp
