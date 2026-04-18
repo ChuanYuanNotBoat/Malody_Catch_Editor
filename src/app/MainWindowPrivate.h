@@ -27,6 +27,7 @@ class QMenu;
 class ChartCanvas;
 class QToolBar;
 class QDialog;
+class QDockWidget;
 
 class MainWindow::Private
 {
@@ -63,6 +64,9 @@ public:
     QAction *bpmPanelAction = nullptr;
     QAction *metaPanelAction = nullptr;
     QToolBar *mainToolBar = nullptr;
+    QDockWidget *leftDock = nullptr;
+    QDockWidget *rightDock = nullptr;
+    bool compactUiMode = false;
     QMenu *languageMenu = nullptr;
     QActionGroup *languageActionGroup = nullptr;
     QList<QAction *> pluginToolbarActions;

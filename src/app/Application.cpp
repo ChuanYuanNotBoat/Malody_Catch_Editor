@@ -6,11 +6,37 @@
 #include "plugin/PluginManager.h"
 #include "model/Skin.h"
 #include "file/SkinIO.h"
+#include "MobileResourcePaths.h"
 #include "utils/Settings.h"
 #include "utils/Translator.h"
 #include "utils/Logger.h"
 #include <QDir>
 #include <QDebug>
+
+namespace
+{
+QStringList availableSkinBaseDirs()
+{
+    const QString appDir = QCoreApplication::applicationDirPath();
+    QStringList candidates;
+    candidates << (appDir + "/skins")
+               << (appDir + "/resources/default_skin")
+               << MobileResourcePaths::additionalSkinBaseDirs();
+
+    QStringList result;
+    for (const QString &dir : candidates)
+    {
+        if (dir.isEmpty() || result.contains(dir))
+            continue;
+        if (!QDir(dir).exists())
+            continue;
+        if (SkinIO::getSkinList(dir).isEmpty())
+            continue;
+        result.append(dir);
+    }
+    return result;
+}
+} // namespace
 
 Application::Application(int &argc, char **argv)
     : QApplication(argc, argv),
@@ -57,15 +83,10 @@ bool Application::initialize()
         m_skin = new Skin();
         QString skinName = Settings::instance().currentSkin();
 
-        QString skinsBaseDir = QCoreApplication::applicationDirPath() + "/skins";
-        if (!QDir(skinsBaseDir).exists())
-        {
-            skinsBaseDir = QCoreApplication::applicationDirPath() + "/resources/default_skin";
-        }
-        Logger::info(QString("Looking for skins in: %1").arg(skinsBaseDir));
+        const QStringList baseDirs = availableSkinBaseDirs();
+        Logger::info(QString("Skin base directory candidates: %1").arg(baseDirs.join(", ")));
 
-        QStringList skinDirs = SkinIO::getSkinList(skinsBaseDir);
-        if (skinDirs.isEmpty())
+        if (baseDirs.isEmpty())
         {
             Logger::warn("No skin directories found, using fallback colors.");
             m_skin = nullptr; // Fall back to built-in note colors.
@@ -73,37 +94,48 @@ bool Application::initialize()
         else
         {
             bool loaded = false;
-            if (!skinName.isEmpty() && skinDirs.contains(skinName))
+            if (!skinName.isEmpty())
             {
-                QString skinPath = skinsBaseDir + "/" + skinName;
-                Logger::info(QString("Trying to load skin '%1' from %2").arg(skinName).arg(skinPath));
-                if (SkinIO::loadSkin(skinPath, *m_skin))
+                for (const QString &baseDir : baseDirs)
                 {
-                    loaded = true;
-                    Logger::info(QString("Skin '%1' loaded successfully").arg(skinName));
-                }
-                else
-                {
-                    Logger::error(QString("Failed to load skin '%1', will try first available").arg(skinName));
+                    const QString candidatePath = baseDir + "/" + skinName;
+                    if (!QDir(candidatePath).exists())
+                        continue;
+                    Logger::info(QString("Trying to load skin '%1' from %2").arg(skinName).arg(candidatePath));
+                    if (SkinIO::loadSkin(candidatePath, *m_skin))
+                    {
+                        loaded = true;
+                        Logger::info(QString("Skin '%1' loaded successfully").arg(skinName));
+                        break;
+                    }
                 }
             }
             if (!loaded)
             {
-                QString firstSkin = skinDirs.first();
-                QString skinPath = skinsBaseDir + "/" + firstSkin;
-                Logger::info(QString("Loading first skin: %1 from %2").arg(firstSkin).arg(skinPath));
-                if (SkinIO::loadSkin(skinPath, *m_skin))
+                for (const QString &baseDir : baseDirs)
                 {
+                    const QStringList skinDirs = SkinIO::getSkinList(baseDir);
+                    if (skinDirs.isEmpty())
+                        continue;
+
+                    const QString firstSkin = skinDirs.first();
+                    const QString skinPath = baseDir + "/" + firstSkin;
+                    Logger::info(QString("Loading first skin: %1 from %2").arg(firstSkin).arg(skinPath));
+                    if (!SkinIO::loadSkin(skinPath, *m_skin))
+                        continue;
+
                     loaded = true;
                     Logger::info(QString("Skin '%1' loaded successfully").arg(firstSkin));
                     Settings::instance().setCurrentSkin(firstSkin);
                     Logger::info(QString("Set default skin to %1").arg(firstSkin));
+                    break;
                 }
-                else
-                {
-                    Logger::error("Failed to load any skin, using fallback colors.");
-                    m_skin = nullptr;
-                }
+            }
+
+            if (!loaded)
+            {
+                Logger::error("Failed to load any skin, using fallback colors.");
+                m_skin = nullptr;
             }
         }
 

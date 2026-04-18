@@ -545,6 +545,10 @@ void MainWindow::createMenus()
     populateSkinMenu();
     d->noteSoundMenu = menuBar()->addMenu(tr("Note &Sound"));
     populateNoteSoundMenu();
+    if (useCompactMobileLayout() && menuBar())
+    {
+        menuBar()->setVisible(false);
+    }
     applySidebarTheme();
 
     Logger::debug("Menus created");
@@ -791,7 +795,14 @@ void MainWindow::createCentralArea()
     d->splitter->addWidget(canvasContainer);
     d->splitter->addWidget(d->rightPanelContainer);
     d->splitter->setSizes({150, 800, 300});
-    setCentralWidget(d->splitter);
+    if (useCompactMobileLayout())
+    {
+        setupMobileFloatingPanels(canvasContainer);
+    }
+    else
+    {
+        setCentralWidget(d->splitter);
+    }
 
     d->mainToolBar = addToolBar(tr("Tools"));
     d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
@@ -812,6 +823,7 @@ void MainWindow::createCentralArea()
         d->bpmPanel->setVisible(false);
         d->metaPanel->setVisible(true);
         d->currentRightPanel = d->metaPanel; });
+    populateMobilePrimaryToolbar();
     applySidebarTheme();
 
     Logger::debug("Central area created with LeftPanel.");

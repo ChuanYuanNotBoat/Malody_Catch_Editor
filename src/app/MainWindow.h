@@ -19,6 +19,7 @@ class BPMTimePanel;
 class MetaEditPanel;
 class QToolBar;
 class QAction;
+class QWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -85,6 +86,9 @@ private:
     void registerShortcutAction(QAction *action, const QString &actionId, const QKeySequence &defaultShortcut);
     QString beatmapRootPath() const; // Return beatmap root directory.
     void applySidebarTheme();
+    bool useCompactMobileLayout() const;
+    void setupMobileFloatingPanels(QWidget *canvasContainer);
+    void populateMobilePrimaryToolbar();
 
     class Private;
     Private *d;
