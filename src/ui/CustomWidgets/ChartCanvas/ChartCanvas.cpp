@@ -285,6 +285,9 @@ void ChartCanvas::setChartController(ChartController *controller)
             m_timesDirty = true;
             m_bpmCacheDirty = true;
             m_backgroundCacheDirty = true;
+            m_overlayCache.clear();
+            m_lastOverlayQueryMs = 0;
+            m_overlayQueryBlockedUntilMs = 0;
             update(); });
         m_hyperfruitDetector->setCS(3.2);
         m_noteRenderer->setHyperfruitDetector(m_hyperfruitDetector);
@@ -292,6 +295,9 @@ void ChartCanvas::setChartController(ChartController *controller)
         m_timesDirty = true;
         m_noteDataDirty = true;
         m_bpmCacheDirty = true;
+        m_overlayCache.clear();
+        m_lastOverlayQueryMs = 0;
+        m_overlayQueryBlockedUntilMs = 0;
     }
     update();
 }
