@@ -310,22 +310,47 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
     if (!pm)
         return;
 
-    QVariantMap overlayContext;
-    overlayContext.insert("canvas_width", width());
-    overlayContext.insert("canvas_height", height());
-    overlayContext.insert("scroll_beat", m_scrollBeat);
-    overlayContext.insert("visible_beat_range", effectiveVisibleBeatRange());
-    overlayContext.insert("vertical_flip", m_verticalFlip);
-    overlayContext.insert("time_division", m_timeDivision);
-    overlayContext.insert("grid_division", m_gridDivision);
-    overlayContext.insert("left_margin", lmargin);
-    overlayContext.insert("right_margin", rmargin);
-    const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
-    if (!chartPath.isEmpty())
-        overlayContext.insert("chart_path", chartPath);
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const bool canQuery = nowMs >= m_overlayQueryBlockedUntilMs;
+    const bool dueForQuery =
+        (m_lastOverlayQueryMs == 0) || (nowMs - m_lastOverlayQueryMs >= kOverlayQueryIntervalMs);
 
-    const QList<PluginInterface::CanvasOverlayItem> overlays = pm->canvasOverlays(overlayContext);
-    for (const auto &item : overlays)
+    if (canQuery && dueForQuery)
+    {
+        QVariantMap overlayContext;
+        overlayContext.insert("canvas_width", width());
+        overlayContext.insert("canvas_height", height());
+        overlayContext.insert("scroll_beat", m_scrollBeat);
+        overlayContext.insert("visible_beat_range", effectiveVisibleBeatRange());
+        overlayContext.insert("vertical_flip", m_verticalFlip);
+        overlayContext.insert("time_division", m_timeDivision);
+        overlayContext.insert("grid_division", m_gridDivision);
+        overlayContext.insert("left_margin", lmargin);
+        overlayContext.insert("right_margin", rmargin);
+        const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
+        if (!chartPath.isEmpty())
+            overlayContext.insert("chart_path", chartPath);
+
+        QElapsedTimer requestTimer;
+        requestTimer.start();
+        m_overlayCache = pm->canvasOverlays(overlayContext);
+        m_lastOverlayQueryMs = nowMs;
+
+        const qint64 elapsedMs = requestTimer.elapsed();
+        if (elapsedMs > kOverlaySlowCallThresholdMs)
+        {
+            m_overlayQueryBlockedUntilMs = nowMs + kOverlaySlowCallBackoffMs;
+            Logger::warn(QString("Plugin overlay query is slow (%1 ms); temporarily throttling for %2 ms.")
+                             .arg(elapsedMs)
+                             .arg(kOverlaySlowCallBackoffMs));
+        }
+        else
+        {
+            m_overlayQueryBlockedUntilMs = 0;
+        }
+    }
+
+    for (const auto &item : m_overlayCache)
     {
         QPen pen(item.color, item.width);
         painter.setPen(pen);

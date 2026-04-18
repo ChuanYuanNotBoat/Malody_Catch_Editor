@@ -143,15 +143,19 @@ if(BUILD_TESTING)
         src/model/Chart.cpp
         src/utils/MathUtils.cpp
         src/utils/Logger.cpp
+        src/utils/PerformanceTimer.cpp
+        src/utils/DiagnosticCollector.cpp
+        src/controller/ChartController.cpp
+        src/file/ChartIO.cpp
         src/file/ProjectIO.cpp
     )
 
     target_include_directories(CatchChartEditorTests PRIVATE src)
-    target_link_libraries(CatchChartEditorTests Qt6::Core)
+    target_link_libraries(CatchChartEditorTests Qt6::Core Qt6::Gui)
 
     add_test(NAME core_minimal_tests COMMAND CatchChartEditorTests)
     if(WIN32)
         set_tests_properties(core_minimal_tests PROPERTIES
-            ENVIRONMENT "PATH=$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}")
+            ENVIRONMENT "PATH=$<TARGET_FILE_DIR:Qt6::Core>;$<TARGET_FILE_DIR:Qt6::Gui>;$ENV{PATH}")
     endif()
 endif()

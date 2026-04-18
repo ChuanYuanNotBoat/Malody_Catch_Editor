@@ -74,6 +74,8 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_snapTimerId(0),
       m_isScrolling(false),
       m_playbackTimer(nullptr),
+      m_lastOverlayQueryMs(0),
+      m_overlayQueryBlockedUntilMs(0),
       m_hyperCacheValid(false),
       m_backgroundCacheDirty(true),
       m_noteDataDirty(true),
@@ -135,8 +137,7 @@ const Chart *ChartCanvas::chart() const
 
 Chart *ChartCanvas::chart()
 {
-    // ChartController currently exposes a const chart() accessor.
-    return m_chartController ? const_cast<Chart *>(m_chartController->chart()) : nullptr;
+    return m_chartController ? m_chartController->mutableChart() : nullptr;
 }
 
 QVector<Note> *ChartCanvas::mutableNotes()
@@ -284,6 +285,9 @@ void ChartCanvas::setChartController(ChartController *controller)
             m_timesDirty = true;
             m_bpmCacheDirty = true;
             m_backgroundCacheDirty = true;
+            m_overlayCache.clear();
+            m_lastOverlayQueryMs = 0;
+            m_overlayQueryBlockedUntilMs = 0;
             update(); });
         m_hyperfruitDetector->setCS(3.2);
         m_noteRenderer->setHyperfruitDetector(m_hyperfruitDetector);
@@ -291,6 +295,9 @@ void ChartCanvas::setChartController(ChartController *controller)
         m_timesDirty = true;
         m_noteDataDirty = true;
         m_bpmCacheDirty = true;
+        m_overlayCache.clear();
+        m_lastOverlayQueryMs = 0;
+        m_overlayQueryBlockedUntilMs = 0;
     }
     update();
 }

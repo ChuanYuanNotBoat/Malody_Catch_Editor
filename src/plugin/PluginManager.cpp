@@ -259,6 +259,8 @@ QList<PluginManager::FloatingPanelEntry> PluginManager::floatingPanels() const
     {
         if (!p)
             continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityFloatingPanel))
+            continue;
         const QList<PluginInterface::FloatingPanelDescriptor> panels = p->floatingPanels();
         for (const PluginInterface::FloatingPanelDescriptor &panel : panels)
         {
@@ -281,6 +283,8 @@ bool PluginManager::runToolAction(const QString &pluginId, const QString &action
     {
         if (!p)
             continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityFloatingPanel))
+            continue;
         if (p->pluginId() != pluginId)
             continue;
         try
@@ -294,6 +298,19 @@ bool PluginManager::runToolAction(const QString &pluginId, const QString &action
                              .arg(actionId));
             return false;
         }
+    }
+    return false;
+}
+
+bool PluginManager::supportsHostBatchEdit(const QString &pluginId) const
+{
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        if (p->pluginId() != pluginId)
+            continue;
+        return p->hasCapability(PluginInterface::kCapabilityHostBatchEdit);
     }
     return false;
 }
@@ -364,6 +381,8 @@ QList<PluginInterface::CanvasOverlayItem> PluginManager::canvasOverlays(const QV
     for (PluginInterface *p : m_plugins)
     {
         if (!p)
+            continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityCanvasOverlay))
             continue;
         try
         {

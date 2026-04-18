@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QList>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QVariantMap>
 
@@ -66,6 +67,7 @@ public:
     QList<QAction *> pluginToolbarActions;
     QHash<QString, QVariantMap> pluginActionMeta;
     QHash<QString, QPointer<QDialog>> pluginPanelDialogs;
+    QSet<QString> batchEditDisabledActions;
 
     QString currentChartPath;
     bool isModified = false;
