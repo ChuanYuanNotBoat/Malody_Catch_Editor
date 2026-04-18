@@ -43,7 +43,8 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QColorDialog>
-#include <QKeySequenceEdit>
+#include <QKeyEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QRadioButton>
 #include <QCheckBox>
@@ -80,6 +81,180 @@ QColor sidebarTextColorFor(const QColor &bg)
     const double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     return (luminance >= 0.5) ? QColor(20, 20, 20) : QColor(245, 245, 245);
 }
+
+bool isModifierKey(int key)
+{
+    return key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt || key == Qt::Key_Meta;
+}
+
+int modifierCount(Qt::KeyboardModifiers mods)
+{
+    int count = 0;
+    if (mods.testFlag(Qt::ControlModifier))
+        ++count;
+    if (mods.testFlag(Qt::AltModifier))
+        ++count;
+    if (mods.testFlag(Qt::ShiftModifier))
+        ++count;
+    if (mods.testFlag(Qt::MetaModifier))
+        ++count;
+    return count;
+}
+
+QString modifiersPreviewText(Qt::KeyboardModifiers mods)
+{
+    QStringList parts;
+    if (mods.testFlag(Qt::ControlModifier))
+        parts << "Ctrl";
+    if (mods.testFlag(Qt::AltModifier))
+        parts << "Alt";
+    if (mods.testFlag(Qt::ShiftModifier))
+        parts << "Shift";
+    if (mods.testFlag(Qt::MetaModifier))
+        parts << "Meta";
+
+    if (parts.isEmpty())
+        return QString();
+    return parts.join("+") + "+...";
+}
+
+class ShortcutCaptureEdit final : public QLineEdit
+{
+public:
+    explicit ShortcutCaptureEdit(QWidget *parent = nullptr) : QLineEdit(parent)
+    {
+        // Keep editable so the built-in clear button ('x') remains clickable.
+        // We fully control text via key handlers below.
+        setReadOnly(false);
+        setClearButtonEnabled(true);
+        setContextMenuPolicy(Qt::NoContextMenu);
+        setDragEnabled(false);
+        connect(this, &QLineEdit::textChanged, this, [this](const QString &text) {
+            if (text.isEmpty())
+                m_sequence = QKeySequence();
+        });
+    }
+
+    QKeySequence keySequence() const
+    {
+        return m_sequence;
+    }
+
+    void setKeySequence(const QKeySequence &seq)
+    {
+        int k1 = seq.count() > 0 ? seq[0] : 0;
+        int k2 = seq.count() > 1 ? seq[1] : 0;
+        int k3 = seq.count() > 2 ? seq[2] : 0;
+        int k4 = seq.count() > 3 ? seq[3] : 0;
+        m_sequence = QKeySequence(k1, k2, k3, k4);
+        m_blockedChordAttempt = false;
+        refreshText();
+    }
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (!event || event->isAutoRepeat())
+            return;
+        if (m_blockedChordAttempt)
+            return;
+
+        const int key = event->key();
+        const Qt::KeyboardModifiers mods = event->modifiers();
+
+        if ((key == Qt::Key_Backspace || key == Qt::Key_Delete) && mods == Qt::NoModifier)
+        {
+            setKeySequence(QKeySequence());
+            return;
+        }
+
+        if (isModifierKey(key))
+        {
+            m_hasModifierPreview = true;
+            const QString preview = modifiersPreviewText(mods);
+            if (m_sequence.isEmpty())
+                setText(preview);
+            else
+                setText(m_sequence.toString(QKeySequence::PortableText) + ", " + preview);
+            return;
+        }
+
+        const int comboKeyCount = modifierCount(mods) + 1;
+        if (comboKeyCount > 2)
+        {
+            m_blockedChordAttempt = true;
+            return;
+        }
+
+        appendChord(key | mods);
+        m_hasModifierPreview = false;
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent *event) override
+    {
+        // Do not start inline text editing behavior.
+        QLineEdit::mouseDoubleClickEvent(event);
+        deselect();
+    }
+
+    void keyReleaseEvent(QKeyEvent *event) override
+    {
+        if (!event || event->isAutoRepeat())
+            return;
+
+        if (m_blockedChordAttempt && QApplication::keyboardModifiers() == Qt::NoModifier)
+        {
+            m_blockedChordAttempt = false;
+            refreshText();
+        }
+
+        if (m_hasModifierPreview && QApplication::keyboardModifiers() == Qt::NoModifier)
+        {
+            refreshText();
+            m_hasModifierPreview = false;
+        }
+
+    }
+
+    void focusOutEvent(QFocusEvent *event) override
+    {
+        QLineEdit::focusOutEvent(event);
+        if (m_hasModifierPreview)
+        {
+            refreshText();
+            m_hasModifierPreview = false;
+        }
+    }
+
+private:
+    void appendChord(int chord)
+    {
+        if (chord == 0)
+            return;
+
+        int keys[4] = {0, 0, 0, 0};
+        const int count = qMin(m_sequence.count(), 4);
+        for (int i = 0; i < count; ++i)
+            keys[i] = m_sequence[i];
+
+        if (count < 4)
+            keys[count] = chord;
+        else
+            keys[3] = chord;
+
+        m_sequence = QKeySequence(keys[0], keys[1], keys[2], keys[3]);
+        refreshText();
+    }
+
+    void refreshText()
+    {
+        setText(m_sequence.toString(QKeySequence::PortableText));
+    }
+
+    QKeySequence m_sequence;
+    bool m_hasModifierPreview = false;
+    bool m_blockedChordAttempt = false;
+};
 }
 
 MainWindow::MainWindow(ChartController *chartCtrl,
@@ -403,9 +578,12 @@ void MainWindow::configureShortcuts()
 
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
     layout->addWidget(new QLabel(tr("Rebind shortcuts. Clear a field to disable a shortcut."), &dialog));
+    QLabel *limitHint = new QLabel(tr("Note: currently only 2-key combos using Shift/Ctrl are reliably supported. More complex combos and multi-main-key single-step bindings are not supported yet."), &dialog);
+    limitHint->setWordWrap(true);
+    layout->addWidget(limitHint);
 
     QFormLayout *form = new QFormLayout();
-    QHash<QString, QKeySequenceEdit *> editors;
+    QHash<QString, ShortcutCaptureEdit *> editors;
 
     for (const QString &actionId : d->shortcutActionOrder)
     {
@@ -417,8 +595,8 @@ void MainWindow::configureShortcuts()
         QHBoxLayout *rowLayout = new QHBoxLayout(row);
         rowLayout->setContentsMargins(0, 0, 0, 0);
 
-        QKeySequenceEdit *edit = new QKeySequenceEdit(action->shortcut(), row);
-        edit->setClearButtonEnabled(true);
+        ShortcutCaptureEdit *edit = new ShortcutCaptureEdit(row);
+        edit->setKeySequence(action->shortcut());
 
         QPushButton *resetBtn = new QPushButton(tr("Reset"), row);
         connect(resetBtn, &QPushButton::clicked, this, [this, actionId, edit]() {
@@ -452,7 +630,7 @@ void MainWindow::configureShortcuts()
     QHash<QString, QString> usedByShortcut;
     for (const QString &actionId : d->shortcutActionOrder)
     {
-        QKeySequenceEdit *edit = editors.value(actionId, nullptr);
+        ShortcutCaptureEdit *edit = editors.value(actionId, nullptr);
         if (!edit)
             continue;
 
@@ -473,7 +651,7 @@ void MainWindow::configureShortcuts()
     for (const QString &actionId : d->shortcutActionOrder)
     {
         QAction *action = d->shortcutActions.value(actionId, nullptr);
-        QKeySequenceEdit *edit = editors.value(actionId, nullptr);
+        ShortcutCaptureEdit *edit = editors.value(actionId, nullptr);
         if (!action || !edit)
             continue;
 
