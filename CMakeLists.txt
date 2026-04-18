@@ -9,6 +9,10 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Multimedia LinguistTools)
 
+if(COMMAND qt_standard_project_setup)
+    qt_standard_project_setup()
+endif()
+
 set(SOURCES
     src/main.cpp
     src/app/Application.cpp
@@ -61,13 +65,23 @@ set(SOURCES
     src/ui/dialogs/PluginManagerDialog.cpp
 )
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+qt_add_executable(${PROJECT_NAME}
+    MANUAL_FINALIZATION
+    ${SOURCES}
+)
 
 target_link_libraries(${PROJECT_NAME}
+    PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::Multimedia
 )
+
+# Keep existing desktop packaging flow (windeployqt/copy commands), while
+# enabling Qt's Android packaging targets (apk/aab) when building for Android.
+if(COMMAND qt_finalize_executable)
+    qt_finalize_executable(${PROJECT_NAME})
+endif()
 
 set(_default_enable_windeployqt ON)
 if(DEFINED ENV{CI} AND "$ENV{CI}" STREQUAL "true")
