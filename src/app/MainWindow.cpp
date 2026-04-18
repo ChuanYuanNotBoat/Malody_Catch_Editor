@@ -195,6 +195,8 @@ void MainWindow::createMenus()
     QAction *openAction = fileMenu->addAction(tr("&Open Chart..."), this, &MainWindow::openChart);
     openAction->setShortcut(QKeySequence::Open);
     QAction *openFolderAction = fileMenu->addAction(tr("Open &Folder..."), this, &MainWindow::openFolder);
+    QAction *openImportedAction = fileMenu->addAction(tr("Open &Imported Charts..."), this, &MainWindow::openImportedLibrary);
+    openImportedAction->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
     QAction *saveAction = fileMenu->addAction(tr("&Save"), this, &MainWindow::saveChart);
     saveAction->setShortcut(QKeySequence::Save);
     QAction *saveAsAction = fileMenu->addAction(tr("Save &As..."), this, &MainWindow::saveChartAs);
@@ -616,6 +618,19 @@ void MainWindow::openFolder()
     if (selectedPath.isEmpty())
         return;
 
+    loadChartFile(selectedPath);
+}
+
+void MainWindow::openImportedLibrary()
+{
+    const QString beatmapDir = beatmapRootPath();
+    QDir().mkpath(beatmapDir);
+
+    const QString selectedPath = selectChartFromLibrary(beatmapDir);
+    if (selectedPath.isEmpty())
+        return;
+
+    Settings::instance().setLastProjectPath(beatmapDir);
     loadChartFile(selectedPath);
 }
 

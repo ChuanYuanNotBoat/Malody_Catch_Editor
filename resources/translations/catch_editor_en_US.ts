@@ -5,25 +5,25 @@
     <name>BPMTimePanel</name>
     <message>
         <location filename="../../src/ui/BPMTimePanel.cpp" line="31"/>
-        <location filename="../../src/ui/BPMTimePanel.cpp" line="176"/>
+        <location filename="../../src/ui/BPMTimePanel.cpp" line="190"/>
         <source>Time:</source>
         <translation>Time:</translation>
     </message>
     <message>
         <location filename="../../src/ui/BPMTimePanel.cpp" line="39"/>
-        <location filename="../../src/ui/BPMTimePanel.cpp" line="178"/>
+        <location filename="../../src/ui/BPMTimePanel.cpp" line="192"/>
         <source>BPM:</source>
         <translation>BPM:</translation>
     </message>
     <message>
         <location filename="../../src/ui/BPMTimePanel.cpp" line="49"/>
-        <location filename="../../src/ui/BPMTimePanel.cpp" line="180"/>
+        <location filename="../../src/ui/BPMTimePanel.cpp" line="194"/>
         <source>Add/Update</source>
         <translation>Add/Update</translation>
     </message>
     <message>
         <location filename="../../src/ui/BPMTimePanel.cpp" line="50"/>
-        <location filename="../../src/ui/BPMTimePanel.cpp" line="182"/>
+        <location filename="../../src/ui/BPMTimePanel.cpp" line="196"/>
         <source>Remove</source>
         <translation>Remove</translation>
     </message>
@@ -51,48 +51,48 @@
         <translation>Grid Divisions (4-64):</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="389"/>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="394"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="559"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="564"/>
         <source>Invalid Rain Note</source>
         <translation>Invalid Rain Note</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="389"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="559"/>
         <source>Invalid rain note parameters.</source>
         <translation>Invalid rain note parameters.</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="394"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="564"/>
         <source>End time must be later than start time</source>
         <translation>End time must be later than start time</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="449"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="485"/>
         <source>Play from Reference Time</source>
         <translation>Play from Reference Time</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="450"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="486"/>
         <source>Paste</source>
         <translation>Paste</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="452"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="488"/>
         <source>Edit Color (By Division)</source>
         <translation>Edit Color (By Division)</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="550"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="430"/>
         <source>Color division changed to %1 for %2 note(s).</source>
         <translation>Color division changed to %1 for %2 note(s).</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="557"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="437"/>
         <source>Minimal Irregular (Red)</source>
         <translation>Minimal Irregular (Red)</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="593"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="475"/>
         <source>Applied minimal irregular denominator for %1 note(s).</source>
         <translation>Applied minimal irregular denominator for %1 note(s).</translation>
     </message>
@@ -133,27 +133,27 @@
         <translation>Pasted %1 notes</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasPlayback.cpp" line="273"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasPlayback.cpp" line="262"/>
         <source>Paste cancelled.</source>
         <translation>Paste cancelled.</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="233"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="302"/>
         <source>Confirm</source>
         <translation>Confirm</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="235"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="304"/>
         <source>Cancel</source>
         <translation>Cancel</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="247"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="154"/>
         <source>AutoScroll: ON</source>
         <translation>AutoScroll: ON</translation>
     </message>
     <message>
-        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="247"/>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasRender.cpp" line="154"/>
         <source>AutoScroll: OFF</source>
         <translation>AutoScroll: OFF</translation>
     </message>
@@ -173,6 +173,16 @@
         <location filename="../../src/ui/LeftPanel.cpp" line="174"/>
         <source>Zoom:</source>
         <translation>Zoom:</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/LeftPanel.cpp" line="31"/>
+        <source>-</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/LeftPanel.cpp" line="33"/>
+        <source>+</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../../src/ui/LeftPanel.cpp" line="54"/>
@@ -331,253 +341,280 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="153"/>
-        <location filename="../../src/app/MainWindow.cpp" line="873"/>
+        <location filename="../../src/app/MainWindow.cpp" line="179"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1054"/>
         <source>Catch Chart Editor</source>
         <translation>Catch Chart Editor</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="168"/>
+        <location filename="../../src/app/MainWindow.cpp" line="194"/>
         <source>&amp;File</source>
         <translation>&amp;File</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="169"/>
+        <location filename="../../src/app/MainWindow.cpp" line="195"/>
         <source>&amp;Open Chart...</source>
         <translation>&amp;Open Chart...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="171"/>
+        <location filename="../../src/app/MainWindow.cpp" line="197"/>
         <source>Open &amp;Folder...</source>
         <translation>Open &amp;Folder...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="172"/>
+        <location filename="../../src/app/MainWindow.cpp" line="198"/>
+        <source>Open &amp;Imported Charts...</source>
+        <translation>Open &amp;Imported Charts...</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="199"/>
+        <source>Ctrl+Shift+O</source>
+        <translation>Ctrl+Shift+O</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="200"/>
         <source>&amp;Save</source>
         <translation>&amp;Save</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="174"/>
+        <location filename="../../src/app/MainWindow.cpp" line="202"/>
         <source>Save &amp;As...</source>
         <translation>Save &amp;As...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="176"/>
+        <location filename="../../src/app/MainWindow.cpp" line="204"/>
         <source>&amp;Export .mcz...</source>
         <translation>&amp;Export .mcz...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="178"/>
+        <location filename="../../src/app/MainWindow.cpp" line="206"/>
         <source>Switch &amp;Difficulty...</source>
         <translation>Switch &amp;Difficulty...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="180"/>
+        <location filename="../../src/app/MainWindow.cpp" line="208"/>
         <source>E&amp;xit</source>
         <translation>E&amp;xit</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="183"/>
+        <location filename="../../src/app/MainWindow.cpp" line="211"/>
         <source>&amp;Edit</source>
         <translation>&amp;Edit</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="184"/>
+        <location filename="../../src/app/MainWindow.cpp" line="212"/>
         <source>&amp;Undo</source>
         <translation>&amp;Undo</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="186"/>
+        <location filename="../../src/app/MainWindow.cpp" line="214"/>
         <source>&amp;Redo</source>
         <translation>&amp;Redo</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="189"/>
+        <location filename="../../src/app/MainWindow.cpp" line="217"/>
         <source>&amp;Copy</source>
         <translation>&amp;Copy</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="192"/>
+        <location filename="../../src/app/MainWindow.cpp" line="220"/>
         <source>&amp;Paste</source>
         <translation>&amp;Paste</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="195"/>
+        <location filename="../../src/app/MainWindow.cpp" line="223"/>
         <source>&amp;Delete</source>
         <translation>&amp;Delete</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="219"/>
+        <location filename="../../src/app/MainWindow.cpp" line="247"/>
         <source>Paste with 288 Division</source>
         <translation>Paste with 288 Division</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="224"/>
+        <location filename="../../src/app/MainWindow.cpp" line="252"/>
         <source>&amp;View</source>
         <translation>&amp;View</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="225"/>
+        <location filename="../../src/app/MainWindow.cpp" line="253"/>
         <source>&amp;Color Notes</source>
         <translation>&amp;Color Notes</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="229"/>
+        <location filename="../../src/app/MainWindow.cpp" line="257"/>
         <source>&amp;Hyperfruit Outline</source>
         <translation>&amp;Hyperfruit Outline</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="233"/>
+        <location filename="../../src/app/MainWindow.cpp" line="261"/>
         <source>&amp;Vertical Flip</source>
         <translation>&amp;Vertical Flip</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="239"/>
+        <location filename="../../src/app/MainWindow.cpp" line="267"/>
         <source>Show Background Image</source>
         <translation>Show Background Image</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="247"/>
+        <location filename="../../src/app/MainWindow.cpp" line="275"/>
         <source>Background Color</source>
         <translation>Background Color</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="248"/>
+        <location filename="../../src/app/MainWindow.cpp" line="276"/>
         <source>Black</source>
         <translation>Black</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="252"/>
+        <location filename="../../src/app/MainWindow.cpp" line="282"/>
         <source>White</source>
         <translation>White</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="256"/>
+        <location filename="../../src/app/MainWindow.cpp" line="287"/>
         <source>Gray</source>
         <translation>Gray</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="261"/>
+        <location filename="../../src/app/MainWindow.cpp" line="292"/>
+        <source>Custom...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="295"/>
+        <source>Select Background Color</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="302"/>
         <source>&amp;Settings</source>
         <translation>&amp;Settings</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="262"/>
+        <location filename="../../src/app/MainWindow.cpp" line="303"/>
         <source>Note Size...</source>
         <translation>Note Size...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="264"/>
+        <location filename="../../src/app/MainWindow.cpp" line="305"/>
         <source>Calibrate Skin...</source>
         <translation>Calibrate Skin...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="266"/>
+        <location filename="../../src/app/MainWindow.cpp" line="307"/>
         <source>Outline Settings...</source>
         <translation>Outline Settings...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="268"/>
+        <location filename="../../src/app/MainWindow.cpp" line="309"/>
         <source>Note Sound Volume...</source>
         <translation>Note Sound Volume...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="271"/>
-        <location filename="../../src/app/MainWindow.cpp" line="916"/>
+        <location filename="../../src/app/MainWindow.cpp" line="312"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1104"/>
         <source>Language</source>
         <translation>Language</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="287"/>
+        <location filename="../../src/app/MainWindow.cpp" line="328"/>
         <source>&amp;Playback</source>
         <translation>&amp;Playback</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="288"/>
+        <location filename="../../src/app/MainWindow.cpp" line="329"/>
         <source>&amp;Play/Pause</source>
         <translation>&amp;Play/Pause</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="291"/>
+        <location filename="../../src/app/MainWindow.cpp" line="332"/>
         <source>&amp;Speed</source>
         <translation>&amp;Speed</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="296"/>
+        <location filename="../../src/app/MainWindow.cpp" line="337"/>
         <source>%1x</source>
         <translation>%1x</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="306"/>
+        <location filename="../../src/app/MainWindow.cpp" line="347"/>
         <source>&amp;Tools</source>
         <translation>&amp;Tools</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="307"/>
+        <location filename="../../src/app/MainWindow.cpp" line="348"/>
         <source>&amp;Plugin Manager...</source>
         <translation>&amp;Plugin Manager...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="309"/>
+        <location filename="../../src/app/MainWindow.cpp" line="350"/>
         <source>Plugin &amp;Actions</source>
         <translation>Plugin &amp;Actions</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="312"/>
+        <location filename="../../src/app/MainWindow.cpp" line="352"/>
+        <source>Plugin &amp;Panels</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="355"/>
         <source>&amp;Grid Settings...</source>
         <translation>&amp;Grid Settings...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="314"/>
+        <location filename="../../src/app/MainWindow.cpp" line="357"/>
         <source>&amp;Log Settings...</source>
         <translation>&amp;Log Settings...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="316"/>
+        <location filename="../../src/app/MainWindow.cpp" line="359"/>
         <source>&amp;Export Diagnostics Report...</source>
         <translation>&amp;Export Diagnostics Report...</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="319"/>
+        <location filename="../../src/app/MainWindow.cpp" line="362"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1074"/>
         <source>&amp;Skin</source>
         <translation>&amp;Skin</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="321"/>
+        <location filename="../../src/app/MainWindow.cpp" line="364"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1076"/>
         <source>Note &amp;Sound</source>
         <translation>Note &amp;Sound</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="453"/>
-        <location filename="../../src/app/MainWindow.cpp" line="877"/>
+        <location filename="../../src/app/MainWindow.cpp" line="501"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1057"/>
         <source>Tools</source>
         <translation>Tools</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="454"/>
-        <location filename="../../src/app/MainWindow.cpp" line="880"/>
+        <location filename="../../src/app/MainWindow.cpp" line="502"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1060"/>
         <source>Note</source>
         <translation>Note</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="460"/>
-        <location filename="../../src/app/MainWindow.cpp" line="882"/>
+        <location filename="../../src/app/MainWindow.cpp" line="508"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1062"/>
         <source>BPM</source>
         <translation>BPM</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="466"/>
-        <location filename="../../src/app/MainWindow.cpp" line="884"/>
+        <location filename="../../src/app/MainWindow.cpp" line="514"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1064"/>
         <source>Meta</source>
         <translation>Meta</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="489"/>
+        <location filename="../../src/app/MainWindow.cpp" line="538"/>
         <source>Unsaved Changes</source>
         <translation>Unsaved Changes</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="490"/>
+        <location filename="../../src/app/MainWindow.cpp" line="539"/>
         <source>Current chart has unsaved changes.
 %1
 Do you want to save before continuing?</source>
@@ -586,427 +623,518 @@ Do you want to save before continuing?</source>
 Do you want to save before continuing?</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="506"/>
-        <location filename="../../src/app/MainWindow.cpp" line="730"/>
+        <location filename="../../src/app/MainWindow.cpp" line="555"/>
+        <location filename="../../src/app/MainWindow.cpp" line="911"/>
         <source>Save Chart As</source>
         <translation>Save Chart As</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="508"/>
-        <location filename="../../src/app/MainWindow.cpp" line="731"/>
+        <location filename="../../src/app/MainWindow.cpp" line="557"/>
+        <location filename="../../src/app/MainWindow.cpp" line="912"/>
         <source>Malody Catch Chart (*.mc);;All Files (*.*)</source>
         <translation>Malody Catch Chart (*.mc);;All Files (*.*)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="368"/>
-        <location filename="../../src/app/MainWindow.cpp" line="515"/>
-        <location filename="../../src/app/MainWindow.cpp" line="592"/>
-        <location filename="../../src/app/MainWindow.cpp" line="599"/>
-        <location filename="../../src/app/MainWindow.cpp" line="612"/>
-        <location filename="../../src/app/MainWindow.cpp" line="723"/>
-        <location filename="../../src/app/MainWindow.cpp" line="749"/>
-        <location filename="../../src/app/MainWindow.cpp" line="784"/>
-        <location filename="../../src/app/MainWindow.cpp" line="790"/>
-        <location filename="../../src/app/MainWindow.cpp" line="795"/>
+        <location filename="../../src/app/MainWindow.cpp" line="564"/>
+        <location filename="../../src/app/MainWindow.cpp" line="696"/>
+        <location filename="../../src/app/MainWindow.cpp" line="703"/>
+        <location filename="../../src/app/MainWindow.cpp" line="719"/>
+        <location filename="../../src/app/MainWindow.cpp" line="904"/>
+        <location filename="../../src/app/MainWindow.cpp" line="930"/>
+        <location filename="../../src/app/MainWindow.cpp" line="965"/>
+        <location filename="../../src/app/MainWindow.cpp" line="971"/>
+        <location filename="../../src/app/MainWindow.cpp" line="976"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="511"/>
         <source>Error</source>
         <translation>Error</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="515"/>
-        <location filename="../../src/app/MainWindow.cpp" line="723"/>
-        <location filename="../../src/app/MainWindow.cpp" line="749"/>
+        <location filename="../../src/app/MainWindow.cpp" line="564"/>
+        <location filename="../../src/app/MainWindow.cpp" line="904"/>
+        <location filename="../../src/app/MainWindow.cpp" line="930"/>
         <source>Failed to save chart.</source>
         <translation>Failed to save chart.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="522"/>
-        <location filename="../../src/app/MainWindow.cpp" line="715"/>
-        <location filename="../../src/app/MainWindow.cpp" line="741"/>
+        <location filename="../../src/app/MainWindow.cpp" line="571"/>
+        <location filename="../../src/app/MainWindow.cpp" line="896"/>
+        <location filename="../../src/app/MainWindow.cpp" line="922"/>
         <source>Saved: %1</source>
         <translation>Saved: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="537"/>
+        <location filename="../../src/app/MainWindow.cpp" line="586"/>
         <source>Open Chart</source>
         <translation>Open Chart</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="538"/>
+        <location filename="../../src/app/MainWindow.cpp" line="587"/>
         <source>Malody Catch Chart (*.mc *.mcz);;All Files (*.*)</source>
         <translation>Malody Catch Chart (*.mc *.mcz);;All Files (*.*)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="554"/>
+        <location filename="../../src/app/MainWindow.cpp" line="603"/>
         <source>Open Folder</source>
         <translation>Open Folder</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="564"/>
+        <location filename="../../src/app/MainWindow.cpp" line="613"/>
+        <location filename="../../src/app/MainWindow.cpp" line="822"/>
         <source>No Charts</source>
         <translation>No Charts</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="564"/>
+        <location filename="../../src/app/MainWindow.cpp" line="613"/>
         <source>No .mc files found in the selected folder.</source>
         <translation>No .mc files found in the selected folder.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="568"/>
+        <location filename="../../src/app/MainWindow.cpp" line="617"/>
         <source>Select Chart in Folder</source>
         <translation>Select Chart in Folder</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="592"/>
+        <location filename="../../src/app/MainWindow.cpp" line="659"/>
+        <source>Chart Already Imported</source>
+        <translation>Chart Already Imported</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="660"/>
+        <source>This song appears to be imported already.</source>
+        <translation>This song appears to be imported already.</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="661"/>
+        <source>Open an imported chart from the local library, or import this MCZ again into a new folder?</source>
+        <translation>Open an imported chart from the local library, or import this MCZ again into a new folder?</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="663"/>
+        <source>Open Imported</source>
+        <translation>Open Imported</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="664"/>
+        <source>Import Again</source>
+        <translation>Import Again</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="696"/>
         <source>Failed to extract MCZ file.</source>
         <translation>Failed to extract MCZ file.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="599"/>
+        <location filename="../../src/app/MainWindow.cpp" line="703"/>
         <source>No .mc files found in the extracted content.</source>
         <translation>No .mc files found in the extracted content.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="603"/>
+        <location filename="../../src/app/MainWindow.cpp" line="707"/>
         <source>Select Chart from MCZ</source>
         <translation>Select Chart from MCZ</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="612"/>
+        <location filename="../../src/app/MainWindow.cpp" line="715"/>
+        <source>Plugin panels were closed after chart switch.</source>
+        <translation>Plugin panels were closed after chart switch.</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="719"/>
         <source>Failed to load chart.</source>
         <translation>Failed to load chart.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="637"/>
+        <location filename="../../src/app/MainWindow.cpp" line="744"/>
         <source>Loaded: %1</source>
         <translation>Loaded: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="646"/>
+        <location filename="../../src/app/MainWindow.cpp" line="753"/>
         <source>Select a chart:</source>
         <translation>Select a chart:</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="200"/>
-        <location filename="../../src/app/MainWindow.cpp" line="673"/>
-        <location filename="../../src/app/MainWindow.cpp" line="759"/>
+        <location filename="../../src/app/MainWindow.cpp" line="783"/>
+        <source>Imported Chart Library</source>
+        <translation>Imported Chart Library</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="787"/>
+        <source>Select a chart from imported songs:</source>
+        <translation>Select a chart from imported songs:</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="791"/>
+        <source>Song / Chart</source>
+        <translation>Song / Chart</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="791"/>
+        <source>Difficulty</source>
+        <translation>Difficulty</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="822"/>
+        <source>No imported .mc files were found in the local library.</source>
+        <translation>No imported .mc files were found in the local library.</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="843"/>
+        <source>Select Chart</source>
+        <translation>Select Chart</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="843"/>
+        <source>Please select a chart item, not a song folder.</source>
+        <translation>Please select a chart item, not a song folder.</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="854"/>
+        <location filename="../../src/app/MainWindow.cpp" line="940"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="240"/>
         <source>No Chart</source>
         <translation>No Chart</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="673"/>
+        <location filename="../../src/app/MainWindow.cpp" line="854"/>
         <source>No chart is currently open.</source>
         <translation>No chart is currently open.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="677"/>
+        <location filename="../../src/app/MainWindow.cpp" line="858"/>
         <source>Switching difficulty will replace the current chart in editor.</source>
         <translation>Switching difficulty will replace the current chart in editor.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="684"/>
-        <location filename="../../src/app/MainWindow.cpp" line="696"/>
+        <location filename="../../src/app/MainWindow.cpp" line="865"/>
+        <location filename="../../src/app/MainWindow.cpp" line="877"/>
         <source>No Other Charts</source>
         <translation>No Other Charts</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="684"/>
+        <location filename="../../src/app/MainWindow.cpp" line="865"/>
         <source>No other difficulties found in this directory.</source>
         <translation>No other difficulties found in this directory.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="696"/>
+        <location filename="../../src/app/MainWindow.cpp" line="877"/>
         <source>No other difficulties found.</source>
         <translation>No other difficulties found.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="700"/>
+        <location filename="../../src/app/MainWindow.cpp" line="881"/>
         <source>Switch Difficulty</source>
         <translation>Switch Difficulty</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="759"/>
+        <location filename="../../src/app/MainWindow.cpp" line="940"/>
         <source>Please open a chart first before exporting.</source>
         <translation>Please open a chart first before exporting.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="763"/>
+        <location filename="../../src/app/MainWindow.cpp" line="944"/>
         <source>Export .mcz</source>
         <translation>Export .mcz</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="764"/>
+        <location filename="../../src/app/MainWindow.cpp" line="945"/>
         <source>Malody Catch Pack (*.mcz);;All Files (*.*)</source>
         <translation>Malody Catch Pack (*.mcz);;All Files (*.*)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="777"/>
+        <location filename="../../src/app/MainWindow.cpp" line="958"/>
         <source>Exported: %1</source>
         <translation>Exported: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="779"/>
+        <location filename="../../src/app/MainWindow.cpp" line="960"/>
         <source>Success</source>
         <translation>Success</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="779"/>
+        <location filename="../../src/app/MainWindow.cpp" line="960"/>
         <source>Chart exported successfully to:
 %1</source>
         <translation>Chart exported successfully to:
 %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="784"/>
+        <location filename="../../src/app/MainWindow.cpp" line="965"/>
         <source>Failed to export chart to MCZ format.</source>
         <translation>Failed to export chart to MCZ format.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="790"/>
+        <location filename="../../src/app/MainWindow.cpp" line="971"/>
         <source>Exception during export: %1</source>
         <translation>Exception during export: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="795"/>
+        <location filename="../../src/app/MainWindow.cpp" line="976"/>
         <source>Unknown exception during export.</source>
         <translation>Unknown exception during export.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="916"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1104"/>
         <source>Failed to load language pack: %1</source>
         <translation>Failed to load language pack: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindow.cpp" line="928"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1118"/>
         <source>Language changed to %1</source>
         <translation>Language changed to %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="56"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="57"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="106"/>
         <source>(Plugin manager unavailable)</source>
         <translation>(Plugin manager unavailable)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="64"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="65"/>
         <source>(No plugin actions)</source>
         <translation>(No plugin actions)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="91"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="92"/>
         <source>(No menu actions)</source>
         <translation>(No menu actions)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="185"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="225"/>
         <source>Confirm Plugin Action</source>
         <translation>Confirm Plugin Action</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="200"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="240"/>
         <source>Please open a chart first.</source>
         <translation>Please open a chart first.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="220"/>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="227"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="269"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="288"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="295"/>
         <source>Plugin Action</source>
         <translation>Plugin Action</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="220"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="288"/>
         <source>Plugin action failed: %1</source>
         <translation>Plugin action failed: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="227"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="295"/>
         <source>Plugin action finished, but failed to reload chart.</source>
         <translation>Plugin action finished, but failed to reload chart.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="232"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="263"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="300"/>
         <source>Plugin Action: %1</source>
         <translation>Plugin Action: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="236"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="114"/>
+        <source>(No plugin panels)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="269"/>
+        <source>Plugin batch edit is empty or invalid: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="272"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="304"/>
         <source>Plugin action completed: %1</source>
         <translation>Plugin action completed: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="245"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="363"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="371"/>
+        <source>Plugin Panel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="371"/>
+        <source>Failed to create plugin panel.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="388"/>
         <source>Plugin Manager</source>
         <translation>Plugin Manager</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="245"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="388"/>
         <source>Plugin manager is not available.</source>
         <translation>Plugin manager is not available.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="257"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="400"/>
         <source>Log Settings</source>
         <translation>Log Settings</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="261"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="404"/>
         <source>Enable JSON Logging</source>
         <translation>Enable JSON Logging</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="265"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="408"/>
         <source>Enable Verbose Logging</source>
         <translation>Enable Verbose Logging</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="270"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="413"/>
         <source>Log File:</source>
         <translation>Log File:</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="274"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="417"/>
         <source>Open Log Folder</source>
         <translation>Open Log Folder</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="286"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="429"/>
         <source>JSON Log File:</source>
         <translation>JSON Log File:</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="314"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="457"/>
         <source>Export Diagnostics Report</source>
         <translation>Export Diagnostics Report</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="316"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="459"/>
         <source>Text Files (*.txt);;JSON Files (*.json);;All Files (*.*)</source>
         <translation>Text Files (*.txt);;JSON Files (*.json);;All Files (*.*)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="337"/>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="355"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="480"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="498"/>
         <source>Export Successful</source>
         <translation>Export Successful</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="338"/>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="356"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="481"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="499"/>
         <source>Diagnostics report exported to:
 %1</source>
         <translation>Diagnostics report exported to:
 %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="343"/>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="361"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="486"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="504"/>
         <source>Export Failed</source>
         <translation>Export Failed</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="343"/>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="361"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="486"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="504"/>
         <source>Failed to open file for writing.</source>
         <translation>Failed to open file for writing.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="368"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="511"/>
         <source>Exception during export:
 %1</source>
         <translation>Exception during export:
 %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="375"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="518"/>
         <source>Note Size</source>
         <translation>Note Size</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="380"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="523"/>
         <source>Size (pixels):</source>
         <translation>Size (pixels):</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="386"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="531"/>
         <source>Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration.</source>
         <translation>Note: This setting affects fallback circle notes. When a skin is loaded, note size is controlled by skin calibration.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="443"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="595"/>
         <source>No Skin</source>
         <translation>No Skin</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="443"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="595"/>
         <source>No skin loaded, cannot calibrate.</source>
         <translation>No skin loaded, cannot calibrate.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="448"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="600"/>
         <source>Calibrate Skin: %1</source>
         <translation>Calibrate Skin: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="460"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="612"/>
         <source>Scale Factor:</source>
         <translation>Scale Factor:</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="530"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="682"/>
         <source>Outline Settings</source>
         <translation>Outline Settings</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="536"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="688"/>
         <source>Outline Width (px):</source>
         <translation>Outline Width (px):</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="548"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="700"/>
         <source>Outline Color:</source>
         <translation>Outline Color:</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="567"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="719"/>
         <source>Note Sound Volume</source>
         <translation>Note Sound Volume</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="72"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="130"/>
         <source>Note sound disabled.</source>
         <translation>Note sound disabled.</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="74"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="132"/>
         <source>Note sound set: %1</source>
         <translation>Note sound set: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="89"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="147"/>
         <source>None (No Note Sound)</source>
         <translation>None (No Note Sound)</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="118"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="176"/>
         <source>No sound files found</source>
         <translation>No sound files found</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="166"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="211"/>
         <source>No skins found</source>
         <translation>No skins found</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="196"/>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="216"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="240"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="260"/>
         <source>Skin Error</source>
         <translation>Skin Error</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="196"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="240"/>
         <source>Failed to locate skin: %1</source>
         <translation>Failed to locate skin: %1</translation>
     </message>
     <message>
-        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="216"/>
+        <location filename="../../src/app/MainWindowSkinAudio.cpp" line="260"/>
         <source>Failed to load skin: %1</source>
         <translation>Failed to load skin: %1</translation>
     </message>
@@ -1015,57 +1143,57 @@ Do you want to save before continuing?</translation>
     <name>MetaEditPanel</name>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="27"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="162"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="171"/>
         <source>Title:</source>
         <translation>Title:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="30"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="164"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="173"/>
         <source>Original Title:</source>
         <translation>Original Title:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="33"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="166"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="175"/>
         <source>Artist:</source>
         <translation>Artist:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="36"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="168"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="177"/>
         <source>Original Artist:</source>
         <translation>Original Artist:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="39"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="170"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="179"/>
         <source>Difficulty:</source>
         <translation>Difficulty:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="42"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="172"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="181"/>
         <source>Chart Author:</source>
         <translation>Chart Author:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="45"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="174"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="183"/>
         <source>Audio File:</source>
         <translation>Audio File:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="47"/>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="59"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="188"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="190"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="197"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="199"/>
         <source>Browse...</source>
         <translation>Browse...</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="51"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="176"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="185"/>
         <source>Audio (ogg):</source>
         <translation>Audio (ogg):</translation>
     </message>
@@ -1081,7 +1209,7 @@ Do you want to save before continuing?</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="63"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="178"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="187"/>
         <source>Background (jpg):</source>
         <translation>Background (jpg):</translation>
     </message>
@@ -1097,31 +1225,31 @@ Do you want to save before continuing?</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="73"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="180"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="189"/>
         <source>Preview Time:</source>
         <translation>Preview Time:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="79"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="182"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="191"/>
         <source>First BPM:</source>
         <translation>First BPM:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="85"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="184"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="193"/>
         <source>Offset:</source>
         <translation>Offset:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="90"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="186"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="195"/>
         <source>Fall Speed:</source>
         <translation>Fall Speed:</translation>
     </message>
     <message>
         <location filename="../../src/ui/MetaEditPanel.cpp" line="95"/>
-        <location filename="../../src/ui/MetaEditPanel.cpp" line="192"/>
+        <location filename="../../src/ui/MetaEditPanel.cpp" line="201"/>
         <source>Save</source>
         <translation>Save</translation>
     </message>
@@ -1381,7 +1509,7 @@ Do you want to save before continuing?</translation>
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../../src/app/MainWindowDialogs.cpp" line="592"/>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="744"/>
         <source>Volume: %1%</source>
         <translation>Volume: %1%</translation>
     </message>

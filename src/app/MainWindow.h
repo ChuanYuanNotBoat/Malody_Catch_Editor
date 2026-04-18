@@ -38,6 +38,7 @@ protected:
 private slots:
     void openChart();
     void openFolder();
+    void openImportedLibrary();
     void saveChart();
     void saveChartAs();
     void exportMcz();
