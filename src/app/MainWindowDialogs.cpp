@@ -43,6 +43,7 @@
 #include <QAction>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QDialog>
 
 void MainWindow::populatePluginToolsMenu()
 {
@@ -90,6 +91,44 @@ void MainWindow::populatePluginToolsMenu()
     {
         QAction *none = d->pluginToolsMenu->addAction(tr("(No menu actions)"));
         none->setEnabled(false);
+    }
+}
+
+void MainWindow::populatePluginPanelsMenu()
+{
+    if (!d->pluginPanelsMenu)
+        return;
+
+    d->pluginPanelsMenu->clear();
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginManager())
+    {
+        QAction *none = d->pluginPanelsMenu->addAction(tr("(Plugin manager unavailable)"));
+        none->setEnabled(false);
+        return;
+    }
+
+    const QList<PluginManager::FloatingPanelEntry> entries = app->pluginManager()->floatingPanels();
+    if (entries.isEmpty())
+    {
+        QAction *none = d->pluginPanelsMenu->addAction(tr("(No plugin panels)"));
+        none->setEnabled(false);
+        return;
+    }
+
+    for (const PluginManager::FloatingPanelEntry &entry : entries)
+    {
+        const QString text = QString("%1  [%2]").arg(entry.panel.title, entry.pluginDisplayName);
+        QAction *act = d->pluginPanelsMenu->addAction(text);
+        if (!entry.panel.description.isEmpty())
+            act->setToolTip(entry.panel.description);
+
+        QVariantMap payload;
+        payload.insert("plugin_id", entry.pluginId);
+        payload.insert("panel_id", entry.panel.panelId);
+        payload.insert("title", entry.panel.title);
+        act->setData(payload);
+        connect(act, &QAction::triggered, this, &MainWindow::triggerPluginPanelAction);
     }
 }
 
@@ -211,6 +250,23 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
                      .arg(actionId)
                      .arg(chartPath));
 
+    PluginInterface::BatchEdit batchEdit;
+    if (app->pluginManager()->buildToolActionBatchEdit(pluginId, actionId, context, &batchEdit))
+    {
+        const bool ok = d->chartController->applyBatchEdit(
+            tr("Plugin Action: %1").arg(actionTitle),
+            batchEdit.notesToAdd,
+            batchEdit.notesToRemove,
+            batchEdit.notesToMove);
+        if (!ok)
+        {
+            QMessageBox::warning(this, tr("Plugin Action"), tr("Plugin batch edit is empty or invalid: %1").arg(actionTitle));
+            return false;
+        }
+        statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
+        return true;
+    }
+
     if (!app->pluginManager()->runToolAction(pluginId, actionId, context))
     {
         Logger::warn(QString("Plugin action returned false: plugin=%1 action=%2 path=%3")
@@ -235,6 +291,64 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
 
     statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
     return true;
+}
+
+void MainWindow::triggerPluginPanelAction()
+{
+    QAction *action = qobject_cast<QAction *>(sender());
+    if (!action)
+        return;
+
+    const QVariantMap meta = action->data().toMap();
+    const QString pluginId = meta.value("plugin_id").toString();
+    const QString panelId = meta.value("panel_id").toString();
+    const QString title = meta.value("title").toString();
+    if (pluginId.isEmpty() || panelId.isEmpty())
+        return;
+
+    const QString key = pluginId + "::" + panelId;
+    if (d->pluginPanelDialogs.contains(key) && d->pluginPanelDialogs[key])
+    {
+        QDialog *existing = d->pluginPanelDialogs[key];
+        existing->show();
+        existing->raise();
+        existing->activateWindow();
+        return;
+    }
+
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginManager())
+        return;
+
+    QVariantMap context;
+    const QString chartPath = d->chartController ? d->chartController->chartFilePath() : QString();
+    if (!chartPath.isEmpty())
+    {
+        context.insert("chart_path", chartPath);
+        context.insert("chart_path_native", QDir::toNativeSeparators(chartPath));
+        context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
+    }
+
+    QDialog *dialog = new QDialog(this, Qt::Tool);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowTitle(title.isEmpty() ? tr("Plugin Panel") : title);
+    QVBoxLayout *layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(0, 0, 0, 0);
+
+    QWidget *panel = app->pluginManager()->createFloatingPanel(pluginId, panelId, dialog, context);
+    if (!panel)
+    {
+        delete dialog;
+        QMessageBox::warning(this, tr("Plugin Panel"), tr("Failed to create plugin panel."));
+        return;
+    }
+
+    layout->addWidget(panel);
+    dialog->resize(520, 420);
+    d->pluginPanelDialogs.insert(key, dialog);
+    connect(dialog, &QDialog::destroyed, this, [this, key]()
+            { d->pluginPanelDialogs.remove(key); });
+    dialog->show();
 }
 
 void MainWindow::openPluginManager()

@@ -108,6 +108,59 @@
 - `top_toolbar`
 - `left_sidebar`
 
+### 4.4 Optional Request: Host Batch Edit
+
+Host may ask plugin to return a batched edit payload:
+
+```json
+{"type":"request","id":"1713512345682","method":"buildBatchEdit","payload":{"action_id":"your_action","context":{"chart_path":"D:/beatmap/test.mc"}}}
+```
+
+Plugin response `result` object schema:
+
+```json
+{
+  "add": [ { "beat":[0,1,4], "x":256, "type":0, "id":"optional-id" } ],
+  "remove": [ { "beat":[1,0,1], "x":128, "type":0, "id":"existing-id" } ],
+  "move": [
+    {
+      "from": { "beat":[2,0,1], "x":200, "type":0, "id":"n1" },
+      "to":   { "beat":[2,1,1], "x":260, "type":0, "id":"n1" }
+    }
+  ]
+}
+```
+
+When host applies this result, it is committed as ONE undo step.
+
+### 4.5 Optional Request: Canvas Overlay
+
+Host may request per-frame overlay draw items:
+
+```json
+{"type":"request","id":"1713512345683","method":"listCanvasOverlays","payload":{"canvas_width":1200,"canvas_height":800}}
+```
+
+Plugin response `result` is an array. Item schema:
+
+```json
+{
+  "kind":"line|rect|text",
+  "x1":10,"y1":20,"x2":300,"y2":400,
+  "x":20,"y":30,"w":200,"h":80,
+  "text":"Overlay",
+  "color":"#FF0000",
+  "fill_color":"#44FF0000",
+  "width":2.0,
+  "font_px":12
+}
+```
+
+### 4.6 Optional Request: Floating Panel (process plugin)
+
+Process plugins cannot return embedded QWidget directly.  
+Recommended pattern: expose a normal tool action and open your own external floating window.
+
 ## 5. i18n Metadata Fallback
 
 宿主读取本地化字段时按顺序匹配：

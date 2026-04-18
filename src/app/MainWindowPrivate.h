@@ -3,6 +3,7 @@
 #include "MainWindow.h"
 #include <QHash>
 #include <QList>
+#include <QPointer>
 #include <QString>
 #include <QVariantMap>
 
@@ -23,6 +24,7 @@ class QActionGroup;
 class QMenu;
 class ChartCanvas;
 class QToolBar;
+class QDialog;
 
 class MainWindow::Private
 {
@@ -50,6 +52,7 @@ public:
     QMenu *skinMenu = nullptr;
     QMenu *noteSoundMenu = nullptr;
     QMenu *pluginToolsMenu = nullptr;
+    QMenu *pluginPanelsMenu = nullptr;
     QAction *noteSizeAction = nullptr;
     QAction *noteSoundVolumeAction = nullptr;
     QAction *calibrateSkinAction = nullptr;
@@ -62,6 +65,7 @@ public:
     QActionGroup *languageActionGroup = nullptr;
     QList<QAction *> pluginToolbarActions;
     QHash<QString, QVariantMap> pluginActionMeta;
+    QHash<QString, QPointer<QDialog>> pluginPanelDialogs;
 
     QString currentChartPath;
     bool isModified = false;

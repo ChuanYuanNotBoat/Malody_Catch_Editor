@@ -111,6 +111,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->skinMenu = nullptr;
     d->noteSoundMenu = nullptr;
     d->pluginToolsMenu = nullptr;
+    d->pluginPanelsMenu = nullptr;
     d->mainToolBar = nullptr;
     d->languageMenu = nullptr;
     d->languageActionGroup = nullptr;
@@ -344,6 +345,8 @@ void MainWindow::createMenus()
     connect(pluginManagerAction, &QAction::triggered, this, &MainWindow::openPluginManager);
     d->pluginToolsMenu = toolsMenu->addMenu(tr("Plugin &Actions"));
     connect(d->pluginToolsMenu, &QMenu::aboutToShow, this, &MainWindow::populatePluginToolsMenu);
+    d->pluginPanelsMenu = toolsMenu->addMenu(tr("Plugin &Panels"));
+    connect(d->pluginPanelsMenu, &QMenu::aboutToShow, this, &MainWindow::populatePluginPanelsMenu);
     toolsMenu->addSeparator();
     QAction *gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
     toolsMenu->addSeparator();

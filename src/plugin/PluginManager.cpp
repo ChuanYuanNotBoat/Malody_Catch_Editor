@@ -251,6 +251,29 @@ QList<PluginManager::ToolActionEntry> PluginManager::toolActions() const
     return entries;
 }
 
+QList<PluginManager::FloatingPanelEntry> PluginManager::floatingPanels() const
+{
+    QList<FloatingPanelEntry> entries;
+    const QString locale = currentLocale();
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        const QList<PluginInterface::FloatingPanelDescriptor> panels = p->floatingPanels();
+        for (const PluginInterface::FloatingPanelDescriptor &panel : panels)
+        {
+            if (panel.panelId.isEmpty() || panel.title.isEmpty())
+                continue;
+            FloatingPanelEntry e;
+            e.pluginId = p->pluginId();
+            e.pluginDisplayName = p->localizedDisplayName(locale);
+            e.panel = panel;
+            entries.append(e);
+        }
+    }
+    return entries;
+}
+
 bool PluginManager::runToolAction(const QString &pluginId, const QString &actionId, const QVariantMap &context)
 {
     const QVariantMap enrichedContext = enrichContextWithLocale(context);
@@ -273,6 +296,87 @@ bool PluginManager::runToolAction(const QString &pluginId, const QString &action
         }
     }
     return false;
+}
+
+bool PluginManager::buildToolActionBatchEdit(const QString &pluginId,
+                                             const QString &actionId,
+                                             const QVariantMap &context,
+                                             PluginInterface::BatchEdit *outEdit)
+{
+    if (outEdit)
+        *outEdit = PluginInterface::BatchEdit{};
+    if (!outEdit)
+        return false;
+
+    const QVariantMap enrichedContext = enrichContextWithLocale(context);
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        if (p->pluginId() != pluginId)
+            continue;
+        try
+        {
+            return p->buildToolActionBatchEdit(actionId, enrichedContext, outEdit);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' buildToolActionBatchEdit(%2)")
+                             .arg(localizedNameForLog(p))
+                             .arg(actionId));
+            return false;
+        }
+    }
+    return false;
+}
+
+QWidget *PluginManager::createFloatingPanel(const QString &pluginId,
+                                            const QString &panelId,
+                                            QWidget *parent,
+                                            const QVariantMap &context)
+{
+    const QVariantMap enrichedContext = enrichContextWithLocale(context);
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        if (p->pluginId() != pluginId)
+            continue;
+        try
+        {
+            return p->createFloatingPanel(panelId, parent, enrichedContext);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' createFloatingPanel(%2)")
+                             .arg(localizedNameForLog(p))
+                             .arg(panelId));
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+QList<PluginInterface::CanvasOverlayItem> PluginManager::canvasOverlays(const QVariantMap &context) const
+{
+    QList<PluginInterface::CanvasOverlayItem> items;
+    const QVariantMap enrichedContext = enrichContextWithLocale(context);
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        try
+        {
+            const auto overlay = p->canvasOverlays(enrichedContext);
+            for (const auto &item : overlay)
+                items.append(item);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' canvasOverlays").arg(localizedNameForLog(p)));
+        }
+    }
+    return items;
 }
 
 void PluginManager::notifyChartChanged()

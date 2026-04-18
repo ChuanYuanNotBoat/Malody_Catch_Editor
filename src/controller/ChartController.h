@@ -47,6 +47,10 @@ public:
     bool loadChart(const QString &path);
     bool saveChart(const QString &path);
     bool applyExternalChartMutation(const QString &actionName, const Chart &mutatedChart);
+    bool applyBatchEdit(const QString &actionName,
+                        const QVector<Note> &notesToAdd,
+                        const QVector<Note> &notesToRemove,
+                        const QList<QPair<Note, Note>> &notesToMove);
 
 signals:
     void chartChanged(); // 任何数据变化

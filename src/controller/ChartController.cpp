@@ -581,3 +581,31 @@ bool ChartController::applyExternalChartMutation(const QString &actionName, cons
     m_undoStack->push(new ExternalMutationCommand(this, actionName, m_chart, mutatedChart, m_currentChartPath));
     return true;
 }
+
+bool ChartController::applyBatchEdit(const QString &actionName,
+                                     const QVector<Note> &notesToAdd,
+                                     const QVector<Note> &notesToRemove,
+                                     const QList<QPair<Note, Note>> &notesToMove)
+{
+    if (notesToAdd.isEmpty() && notesToRemove.isEmpty() && notesToMove.isEmpty())
+        return false;
+
+    Chart mutated = m_chart;
+    for (const Note &note : notesToRemove)
+        mutated.removeNote(note);
+    for (const auto &mv : notesToMove)
+    {
+        mutated.removeNote(mv.first);
+        mutated.addNote(mv.second);
+    }
+    for (const Note &note : notesToAdd)
+        mutated.addNote(note);
+
+    m_undoStack->push(new ExternalMutationCommand(
+        this,
+        actionName.isEmpty() ? "Plugin Batch Edit" : actionName,
+        m_chart,
+        mutated,
+        m_currentChartPath));
+    return true;
+}

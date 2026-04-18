@@ -30,6 +30,12 @@ public:
         QString pluginDisplayName;
         PluginInterface::ToolAction action;
     };
+    struct FloatingPanelEntry
+    {
+        QString pluginId;
+        QString pluginDisplayName;
+        PluginInterface::FloatingPanelDescriptor panel;
+    };
 
     explicit PluginManager(QObject *parent = nullptr);
     ~PluginManager();
@@ -45,7 +51,17 @@ public:
     void setPluginEnabled(const QString &pluginId, bool enabled);
     QStringList disabledPluginIds() const;
     QList<ToolActionEntry> toolActions() const;
+    QList<FloatingPanelEntry> floatingPanels() const;
     bool runToolAction(const QString &pluginId, const QString &actionId, const QVariantMap &context);
+    bool buildToolActionBatchEdit(const QString &pluginId,
+                                  const QString &actionId,
+                                  const QVariantMap &context,
+                                  PluginInterface::BatchEdit *outEdit);
+    QWidget *createFloatingPanel(const QString &pluginId,
+                                 const QString &panelId,
+                                 QWidget *parent,
+                                 const QVariantMap &context);
+    QList<PluginInterface::CanvasOverlayItem> canvasOverlays(const QVariantMap &context) const;
 
     void notifyChartChanged();
     void notifyChartLoaded(const QString &chartPath);

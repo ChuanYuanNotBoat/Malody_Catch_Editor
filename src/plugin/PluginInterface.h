@@ -5,7 +5,11 @@
 #include <QList>
 #include <QVariantMap>
 #include <QWidget>
+#include <QColor>
+#include <QPointF>
+#include <QRectF>
 #include <QtGlobal>
+#include "model/Note.h"
 
 class PluginInterface
 {
@@ -19,6 +23,36 @@ public:
         QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar
         bool requiresUndoSnapshot = true;
     };
+    struct FloatingPanelDescriptor
+    {
+        QString panelId;
+        QString title;
+        QString description;
+    };
+    struct CanvasOverlayItem
+    {
+        enum Kind
+        {
+            Line,
+            Rect,
+            Text
+        };
+        Kind kind = Line;
+        QPointF from;
+        QPointF to;
+        QRectF rect;
+        QString text;
+        QColor color = QColor(255, 0, 0, 220);
+        QColor fillColor = QColor(255, 0, 0, 40);
+        double width = 1.5;
+        int fontPx = 12;
+    };
+    struct BatchEdit
+    {
+        QVector<Note> notesToAdd;
+        QVector<Note> notesToRemove;
+        QList<QPair<Note, Note>> notesToMove;
+    };
 
     // Host ABI/API version for runtime compatibility checks.
     static constexpr int kHostApiVersion = 2;
@@ -27,6 +61,9 @@ public:
     static constexpr const char *kCapabilityChartObserver = "chart_observer";
     static constexpr const char *kCapabilityAdvancedColorEditor = "advanced_color_editor";
     static constexpr const char *kCapabilityToolActions = "tool_actions";
+    static constexpr const char *kCapabilityFloatingPanel = "floating_panel";
+    static constexpr const char *kCapabilityCanvasOverlay = "canvas_overlay";
+    static constexpr const char *kCapabilityHostBatchEdit = "host_batch_edit";
     static constexpr const char *kPlacementToolsMenu = "tools_menu";
     static constexpr const char *kPlacementTopToolbar = "top_toolbar";
     static constexpr const char *kPlacementLeftSidebar = "left_sidebar";
@@ -88,6 +125,34 @@ public:
         (void)actionId;
         (void)context;
         return false;
+    }
+    // Optional host-side batch edit path.
+    // If true is returned, host applies all edits as ONE undo step.
+    virtual bool buildToolActionBatchEdit(const QString &actionId, const QVariantMap &context, BatchEdit *outEdit)
+    {
+        (void)actionId;
+        (void)context;
+        if (outEdit)
+            *outEdit = BatchEdit{};
+        return false;
+    }
+    // Optional floating panel extension points (native plugin embedding).
+    virtual QList<FloatingPanelDescriptor> floatingPanels() const
+    {
+        return {};
+    }
+    virtual QWidget *createFloatingPanel(const QString &panelId, QWidget *parent, const QVariantMap &context)
+    {
+        (void)panelId;
+        (void)parent;
+        (void)context;
+        return nullptr;
+    }
+    // Optional canvas overlay rendering extension point.
+    virtual QList<CanvasOverlayItem> canvasOverlays(const QVariantMap &context) const
+    {
+        (void)context;
+        return {};
     }
 
     bool hasCapability(const QString &capability) const

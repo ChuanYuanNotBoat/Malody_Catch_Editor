@@ -5,6 +5,8 @@
 #include "render/GridRenderer.h"
 #include "render/BackgroundRenderer.h"
 #include "render/HyperfruitDetector.h"
+#include "app/Application.h"
+#include "plugin/PluginManager.h"
 #include "utils/MathUtils.h"
 #include "utils/Settings.h"
 #include "utils/DiagnosticCollector.h"
@@ -15,6 +17,16 @@
 #include <QFileInfo>
 #include <algorithm>
 #include <chrono>
+#include <QCoreApplication>
+
+namespace
+{
+PluginManager *activePluginManager()
+{
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    return app ? app->pluginManager() : nullptr;
+}
+}
 
 void ChartCanvas::paintEvent(QPaintEvent *event)
 {
@@ -254,6 +266,46 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.setPen(Qt::red);
         painter.setBrush(QColor(255, 255, 0, 80));
         painter.drawRect(rect);
+    }
+
+    if (PluginManager *pm = activePluginManager())
+    {
+        QVariantMap overlayContext;
+        overlayContext.insert("canvas_width", width());
+        overlayContext.insert("canvas_height", height());
+        overlayContext.insert("scroll_beat", m_scrollBeat);
+        overlayContext.insert("visible_beat_range", effectiveVisibleBeatRange());
+        overlayContext.insert("vertical_flip", m_verticalFlip);
+        overlayContext.insert("time_division", m_timeDivision);
+        overlayContext.insert("grid_division", m_gridDivision);
+        overlayContext.insert("left_margin", lmargin);
+        overlayContext.insert("right_margin", rmargin);
+        const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
+        if (!chartPath.isEmpty())
+            overlayContext.insert("chart_path", chartPath);
+
+        const QList<PluginInterface::CanvasOverlayItem> overlays = pm->canvasOverlays(overlayContext);
+        for (const auto &item : overlays)
+        {
+            QPen pen(item.color, item.width);
+            painter.setPen(pen);
+            if (item.kind == PluginInterface::CanvasOverlayItem::Rect)
+            {
+                painter.fillRect(item.rect, item.fillColor);
+                painter.drawRect(item.rect);
+            }
+            else if (item.kind == PluginInterface::CanvasOverlayItem::Text)
+            {
+                QFont f = painter.font();
+                f.setPixelSize(qMax(8, item.fontPx));
+                painter.setFont(f);
+                painter.drawText(item.from, item.text);
+            }
+            else
+            {
+                painter.drawLine(item.from, item.to);
+            }
+        }
     }
 
     painter.setPen(Qt::white);

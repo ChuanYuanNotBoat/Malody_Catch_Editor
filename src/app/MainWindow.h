@@ -57,6 +57,7 @@ private slots:
     void openPluginManager();
     void triggerPluginToolAction();
     void triggerPluginQuickAction(const QString &pluginId, const QString &actionId);
+    void triggerPluginPanelAction();
     void exportDiagnosticsReport();
     void togglePaste288Division(bool enabled);
     void changeNoteSound(const QString &soundPath);
@@ -70,6 +71,7 @@ private:
     void populateSkinMenu();
     void populateNoteSoundMenu();
     void populatePluginToolsMenu();
+    void populatePluginPanelsMenu();
     void refreshPluginUiExtensions();
     bool runPluginActionWithMeta(const QVariantMap &meta);
     bool confirmSaveIfModified(const QString &reasonText);

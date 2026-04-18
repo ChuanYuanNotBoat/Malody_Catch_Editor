@@ -48,6 +48,8 @@ public:
     bool openAdvancedColorEditor(const QVariantMap &context) override;
     QList<ToolAction> toolActions() const override;
     bool runToolAction(const QString &actionId, const QVariantMap &context) override;
+    bool buildToolActionBatchEdit(const QString &actionId, const QVariantMap &context, BatchEdit *outEdit) override;
+    QList<CanvasOverlayItem> canvasOverlays(const QVariantMap &context) const override;
 
 private:
     bool sendNotification(const QString &event, const QJsonObject &payload = QJsonObject());
@@ -58,6 +60,7 @@ private:
     QString resolveLocalizedValue(const QJsonObject &table, const QString &locale, const QString &fallback) const;
     QString readSingleLine(int timeoutMs) const;
     bool writeLine(const QByteArray &line);
+    static bool parseNoteJson(const QJsonObject &obj, Note *outNote);
 
 private:
     Manifest m_manifest;
