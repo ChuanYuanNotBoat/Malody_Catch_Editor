@@ -607,6 +607,18 @@ void ChartCanvas::handleLeftMousePress(QMouseEvent *event)
     if (handlePastePreviewLeftClick(event->pos()))
         return;
 
+    if (m_currentMode == Select)
+    {
+        const int hitIndex = hitTestNote(event->pos());
+        if (handleHitNoteLeftClick(hitIndex, Qt::NoModifier, event->pos()))
+            return;
+
+        m_isSelecting = true;
+        m_selectionStart = event->pos();
+        m_selectionEnd = event->pos();
+        return;
+    }
+
     if (event->modifiers() & Qt::ControlModifier)
     {
         m_isSelecting = true;

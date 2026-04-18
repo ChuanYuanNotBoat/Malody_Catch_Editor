@@ -34,16 +34,19 @@ void NoteEditPanel::setupUi()
     m_noteRadio = new QRadioButton(tr("Place Note"), this);
     m_rainRadio = new QRadioButton(tr("Place Rain"), this);
     m_deleteRadio = new QRadioButton(tr("Delete Mode"), this);
+    m_selectRadio = new QRadioButton(tr("Select Mode"), this);
     m_noteRadio->setChecked(true);
     m_modeGroup->addButton(m_noteRadio, 0);
     m_modeGroup->addButton(m_rainRadio, 1);
     m_modeGroup->addButton(m_deleteRadio, 2);
+    m_modeGroup->addButton(m_selectRadio, 3);
     connect(m_modeGroup, &QButtonGroup::buttonClicked, this, [this](QAbstractButton *button)
             { setMode(m_modeGroup->id(button)); });
 
     mainLayout->addWidget(m_noteRadio);
     mainLayout->addWidget(m_rainRadio);
     mainLayout->addWidget(m_deleteRadio);
+    mainLayout->addWidget(m_selectRadio);
 
     // Copy button.
     m_copyButton = new QPushButton(tr("Copy"), this);
@@ -82,6 +85,7 @@ void NoteEditPanel::setMode(int mode)
 void NoteEditPanel::onNoteModeClicked() { setMode(0); }
 void NoteEditPanel::onRainModeClicked() { setMode(1); }
 void NoteEditPanel::onDeleteModeClicked() { setMode(2); }
+void NoteEditPanel::onSelectModeClicked() { setMode(3); }
 
 void NoteEditPanel::onGridSettingsClicked()
 {
@@ -152,6 +156,8 @@ void NoteEditPanel::retranslateUi()
         m_rainRadio->setText(tr("Place Rain"));
     if (m_deleteRadio)
         m_deleteRadio->setText(tr("Delete Mode"));
+    if (m_selectRadio)
+        m_selectRadio->setText(tr("Select Mode"));
     if (m_copyButton)
         m_copyButton->setText(tr("Copy"));
     if (m_timeDivisionLabel)

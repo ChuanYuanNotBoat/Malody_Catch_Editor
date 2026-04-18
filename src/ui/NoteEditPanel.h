@@ -31,6 +31,7 @@ private slots:
     void onNoteModeClicked();
     void onRainModeClicked();
     void onDeleteModeClicked();
+    void onSelectModeClicked();
     void onGridSettingsClicked();
     // void onGridDivisionChanged(int value);
     void onGridSnapToggled(bool on);
@@ -47,6 +48,7 @@ private:
     QRadioButton *m_noteRadio;
     QRadioButton *m_rainRadio;
     QRadioButton *m_deleteRadio;
+    QRadioButton *m_selectRadio;
     QLabel *m_timeDivisionLabel;
     QComboBox *m_timeDivisionCombo;
     QCheckBox *m_gridSnapCheck;
