@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QList>
 #include <QPointer>
+#include <QKeySequence>
 #include <QSet>
 #include <QString>
 #include <QVariantMap>
@@ -68,6 +69,9 @@ public:
     QHash<QString, QVariantMap> pluginActionMeta;
     QHash<QString, QPointer<QDialog>> pluginPanelDialogs;
     QSet<QString> batchEditDisabledActions;
+    QHash<QString, QAction *> shortcutActions;
+    QHash<QString, QKeySequence> shortcutDefaults;
+    QList<QString> shortcutActionOrder;
 
     QString currentChartPath;
     bool isModified = false;

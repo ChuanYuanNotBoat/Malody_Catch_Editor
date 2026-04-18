@@ -43,6 +43,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QColorDialog>
+#include <QKeySequenceEdit>
 #include <QPainter>
 #include <QRadioButton>
 #include <QCheckBox>
@@ -185,6 +186,9 @@ void MainWindow::createMenus()
 {
     Logger::debug("Creating menus...");
     menuBar()->clear();
+    d->shortcutActions.clear();
+    d->shortcutDefaults.clear();
+    d->shortcutActionOrder.clear();
     if (d->languageActionGroup)
     {
         delete d->languageActionGroup;
@@ -193,12 +197,12 @@ void MainWindow::createMenus()
 
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     QAction *openAction = fileMenu->addAction(tr("&Open Chart..."), this, &MainWindow::openChart);
-    openAction->setShortcut(QKeySequence::Open);
+    registerShortcutAction(openAction, "file.open_chart", QKeySequence::Open);
     QAction *openFolderAction = fileMenu->addAction(tr("Open &Folder..."), this, &MainWindow::openFolder);
     QAction *openImportedAction = fileMenu->addAction(tr("Open &Imported Charts..."), this, &MainWindow::openImportedLibrary);
-    openImportedAction->setShortcut(QKeySequence(tr("Ctrl+Shift+O")));
+    registerShortcutAction(openImportedAction, "file.open_imported_charts", QKeySequence(tr("Ctrl+Shift+O")));
     QAction *saveAction = fileMenu->addAction(tr("&Save"), this, &MainWindow::saveChart);
-    saveAction->setShortcut(QKeySequence::Save);
+    registerShortcutAction(saveAction, "file.save", QKeySequence::Save);
     QAction *saveAsAction = fileMenu->addAction(tr("Save &As..."), this, &MainWindow::saveChartAs);
     fileMenu->addSeparator();
     QAction *exportAction = fileMenu->addAction(tr("&Export .mcz..."), this, &MainWindow::exportMcz);
@@ -206,22 +210,22 @@ void MainWindow::createMenus()
     QAction *switchDifficultyAction = fileMenu->addAction(tr("Switch &Difficulty..."), this, &MainWindow::switchDifficulty);
     fileMenu->addSeparator();
     QAction *exitAction = fileMenu->addAction(tr("E&xit"), this, &QWidget::close);
-    exitAction->setShortcut(QKeySequence::Quit);
+    registerShortcutAction(exitAction, "file.exit", QKeySequence::Quit);
 
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
     d->undoAction = editMenu->addAction(tr("&Undo"), this, &MainWindow::undo);
-    d->undoAction->setShortcut(QKeySequence::Undo);
+    registerShortcutAction(d->undoAction, "edit.undo", QKeySequence::Undo);
     d->redoAction = editMenu->addAction(tr("&Redo"), this, &MainWindow::redo);
-    d->redoAction->setShortcut(QKeySequence::Redo);
+    registerShortcutAction(d->redoAction, "edit.redo", QKeySequence::Redo);
     editMenu->addSeparator();
     QAction *copyAction = editMenu->addAction(tr("&Copy"));
     connect(copyAction, &QAction::triggered, d->canvas, &ChartCanvas::handleCopy);
-    copyAction->setShortcut(QKeySequence::Copy);
+    registerShortcutAction(copyAction, "edit.copy", QKeySequence::Copy);
     QAction *pasteAction = editMenu->addAction(tr("&Paste"), d->canvas, &ChartCanvas::paste);
-    pasteAction->setShortcut(QKeySequence::Paste);
+    registerShortcutAction(pasteAction, "edit.paste", QKeySequence::Paste);
     editMenu->addSeparator();
     QAction *deleteAction = editMenu->addAction(tr("&Delete"));
-    deleteAction->setShortcut(QKeySequence::Delete);
+    registerShortcutAction(deleteAction, "edit.delete", QKeySequence::Delete);
     connect(deleteAction, &QAction::triggered, this, [this]()
             {
         if (d->selectionController && !d->selectionController->selectedIndices().isEmpty()) {
@@ -309,6 +313,9 @@ void MainWindow::createMenus()
     d->noteSoundVolumeAction = settingsMenu->addAction(tr("Note Sound Volume..."));
     connect(d->noteSoundVolumeAction, &QAction::triggered, this, &MainWindow::adjustNoteSoundVolume);
     settingsMenu->addSeparator();
+    QAction *shortcutSettingsAction = settingsMenu->addAction(tr("Keyboard Shortcuts..."));
+    connect(shortcutSettingsAction, &QAction::triggered, this, &MainWindow::configureShortcuts);
+    settingsMenu->addSeparator();
     d->languageMenu = settingsMenu->addMenu(tr("Language"));
     d->languageActionGroup = new QActionGroup(this);
     d->languageActionGroup->setExclusive(true);
@@ -327,7 +334,7 @@ void MainWindow::createMenus()
 
     QMenu *playMenu = menuBar()->addMenu(tr("&Playback"));
     d->playAction = playMenu->addAction(tr("&Play/Pause"), this, &MainWindow::togglePlayback);
-    d->playAction->setShortcut(Qt::Key_Space);
+    registerShortcutAction(d->playAction, "playback.play_pause", QKeySequence(Qt::Key_Space));
     playMenu->addSeparator();
     QMenu *speedMenu = playMenu->addMenu(tr("&Speed"));
     d->speedActionGroup = new QActionGroup(this);
@@ -366,6 +373,116 @@ void MainWindow::createMenus()
     applySidebarTheme();
 
     Logger::debug("Menus created");
+}
+
+void MainWindow::registerShortcutAction(QAction *action, const QString &actionId, const QKeySequence &defaultShortcut)
+{
+    if (!action || actionId.isEmpty())
+        return;
+
+    d->shortcutActions.insert(actionId, action);
+    d->shortcutDefaults.insert(actionId, defaultShortcut);
+    if (!d->shortcutActionOrder.contains(actionId))
+        d->shortcutActionOrder.append(actionId);
+
+    const QKeySequence saved = Settings::instance().shortcut(actionId);
+    action->setShortcut(saved.isEmpty() ? defaultShortcut : saved);
+}
+
+void MainWindow::configureShortcuts()
+{
+    if (d->shortcutActionOrder.isEmpty())
+    {
+        QMessageBox::information(this, tr("Keyboard Shortcuts"), tr("No configurable shortcuts are available."));
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Keyboard Shortcuts"));
+    dialog.setMinimumWidth(520);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(tr("Rebind shortcuts. Clear a field to disable a shortcut."), &dialog));
+
+    QFormLayout *form = new QFormLayout();
+    QHash<QString, QKeySequenceEdit *> editors;
+
+    for (const QString &actionId : d->shortcutActionOrder)
+    {
+        QAction *action = d->shortcutActions.value(actionId, nullptr);
+        if (!action)
+            continue;
+
+        QWidget *row = new QWidget(&dialog);
+        QHBoxLayout *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+
+        QKeySequenceEdit *edit = new QKeySequenceEdit(action->shortcut(), row);
+        edit->setClearButtonEnabled(true);
+
+        QPushButton *resetBtn = new QPushButton(tr("Reset"), row);
+        connect(resetBtn, &QPushButton::clicked, this, [this, actionId, edit]() {
+            edit->setKeySequence(d->shortcutDefaults.value(actionId));
+        });
+
+        rowLayout->addWidget(edit, 1);
+        rowLayout->addWidget(resetBtn);
+
+        QString label = action->text();
+        label.remove('&');
+        form->addRow(label, row);
+        editors.insert(actionId, edit);
+    }
+
+    layout->addLayout(form);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QPushButton *resetAllBtn = buttons->addButton(tr("Reset All"), QDialogButtonBox::ResetRole);
+    connect(resetAllBtn, &QPushButton::clicked, this, [this, &editors]() {
+        for (auto it = editors.constBegin(); it != editors.constEnd(); ++it)
+            it.value()->setKeySequence(d->shortcutDefaults.value(it.key()));
+    });
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&dialog]() { dialog.accept(); });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    QHash<QString, QString> usedByShortcut;
+    for (const QString &actionId : d->shortcutActionOrder)
+    {
+        QKeySequenceEdit *edit = editors.value(actionId, nullptr);
+        if (!edit)
+            continue;
+
+        const QString portable = edit->keySequence().toString(QKeySequence::PortableText);
+        if (portable.isEmpty())
+            continue;
+        if (usedByShortcut.contains(portable) && usedByShortcut.value(portable) != actionId)
+        {
+            QMessageBox::warning(
+                this,
+                tr("Keyboard Shortcuts"),
+                tr("Shortcut conflict detected. Please assign unique shortcuts."));
+            return;
+        }
+        usedByShortcut.insert(portable, actionId);
+    }
+
+    for (const QString &actionId : d->shortcutActionOrder)
+    {
+        QAction *action = d->shortcutActions.value(actionId, nullptr);
+        QKeySequenceEdit *edit = editors.value(actionId, nullptr);
+        if (!action || !edit)
+            continue;
+
+        const QKeySequence seq = edit->keySequence();
+        Settings::instance().setShortcut(actionId, seq);
+        action->setShortcut(seq);
+    }
+
+    statusBar()->showMessage(tr("Keyboard shortcuts updated."), 2500);
 }
 
 void MainWindow::createCentralArea()

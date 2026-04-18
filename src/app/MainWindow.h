@@ -12,6 +12,7 @@ class LeftPanel;
 class QSplitter;
 class QMenu;
 class QScrollBar;
+class QKeySequence;
 class ChartCanvas;
 class NoteEditPanel;
 class BPMTimePanel;
@@ -63,6 +64,7 @@ private slots:
     void togglePaste288Division(bool enabled);
     void changeNoteSound(const QString &soundPath);
     void changeLanguage();
+    void configureShortcuts();
 
 private:
     void setupUi();
@@ -80,6 +82,7 @@ private:
     void loadChartFile(const QString &filePath);
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
     QString selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong = QString());
+    void registerShortcutAction(QAction *action, const QString &actionId, const QKeySequence &defaultShortcut);
     QString beatmapRootPath() const; // Return beatmap root directory.
     void applySidebarTheme();
 
