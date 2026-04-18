@@ -133,6 +133,10 @@ private:
     bool handlePastePreviewLeftClick(const QPoint &pos);
     bool handleRainPlacementLeftClick(const QPointF &pos);
     bool handleHitNoteLeftClick(int hitIndex, Qt::KeyboardModifiers modifiers, const QPointF &pos);
+    bool handleSelectionRelease();
+    bool handleMoveSelectionRelease();
+    bool handlePasteDragRelease();
+    bool handleGenericDragRelease();
 
     void snapPlayheadToGrid();
     void startSnapTimer();

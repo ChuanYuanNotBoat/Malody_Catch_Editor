@@ -671,30 +671,55 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent *event)
     }
 }
 
+bool ChartCanvas::handleSelectionRelease()
+{
+    if (!m_isSelecting)
+        return false;
+
+    QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
+    m_selectionController->selectInRect(rect, chart()->notes(),
+                                        [this](const Note &note)
+                                        { return noteToPos(note); });
+    m_isSelecting = false;
+    update();
+    return true;
+}
+
+bool ChartCanvas::handleMoveSelectionRelease()
+{
+    if (!m_isMovingSelection)
+        return false;
+    endMoveSelection();
+    return true;
+}
+
+bool ChartCanvas::handlePasteDragRelease()
+{
+    if (!m_isDraggingPaste)
+        return false;
+    endDragPaste();
+    return true;
+}
+
+bool ChartCanvas::handleGenericDragRelease()
+{
+    if (!m_isDragging)
+        return false;
+    m_isDragging = false;
+    m_draggedNotes.clear();
+    return true;
+}
+
 void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (m_isSelecting)
-    {
-        QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
-        m_selectionController->selectInRect(rect, chart()->notes(),
-                                            [this](const Note &note)
-                                            { return noteToPos(note); });
-        m_isSelecting = false;
-        update();
-    }
-    else if (m_isMovingSelection)
-    {
-        endMoveSelection();
-    }
-    else if (m_isDraggingPaste)
-    {
-        endDragPaste();
-    }
-    else if (m_isDragging)
-    {
-        m_isDragging = false;
-        m_draggedNotes.clear();
-    }
+    Q_UNUSED(event);
+    if (handleSelectionRelease())
+        return;
+    if (handleMoveSelectionRelease())
+        return;
+    if (handlePasteDragRelease())
+        return;
+    handleGenericDragRelease();
 }
 
 void ChartCanvas::wheelEvent(QWheelEvent *event)
