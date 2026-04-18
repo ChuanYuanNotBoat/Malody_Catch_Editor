@@ -235,6 +235,26 @@ bool testChartControllerApplyBatchEditRejectsConflictingMoveAndRemove()
     return notes.size() == 1 && notes.first().id == "seed-a";
 }
 
+bool testChartControllerApplyBatchEditRejectsMissingMoveSource()
+{
+    ChartController controller;
+    const Note existing = makeNormalNote(1, 0, 1, 64, "seed-a");
+    controller.addNote(existing);
+
+    const Note missingSource = makeNormalNote(5, 0, 1, 300, "not-in-chart");
+    const Note movedTarget = makeNormalNote(6, 0, 1, 200, "not-in-chart");
+    const bool ok = controller.applyBatchEdit(
+        "batch edit missing source",
+        QVector<Note>{},
+        QVector<Note>{},
+        QList<QPair<Note, Note>>{qMakePair(missingSource, movedTarget)});
+    if (ok)
+        return false;
+
+    const QVector<Note> &notes = controller.chart()->notes();
+    return notes.size() == 1 && notes.first().id == "seed-a";
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -256,6 +276,7 @@ int main(int argc, char **argv)
         {"ChartController applyBatchEdit valid payload", &testChartControllerApplyBatchEditAcceptsValidPayload},
         {"ChartController applyBatchEdit invalid add", &testChartControllerApplyBatchEditRejectsInvalidAddNote},
         {"ChartController applyBatchEdit conflict remove+move", &testChartControllerApplyBatchEditRejectsConflictingMoveAndRemove},
+        {"ChartController applyBatchEdit missing move source", &testChartControllerApplyBatchEditRejectsMissingMoveSource},
     };
 
     int failed = 0;

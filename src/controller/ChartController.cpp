@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QList>
 #include <QPair>
+#include <QHash>
 #include <QSet>
 #include <algorithm>
 #include <cmath>
@@ -132,9 +133,36 @@ bool isTargetNoteValid(const Note &note)
     return note.isValid() && note.isTimeValid() && note.isXValid();
 }
 
+QHash<QString, int> buildNoteInventory(const QVector<Note> &notes)
+{
+    QHash<QString, int> inventory;
+    for (const Note &note : notes)
+    {
+        const QString key = noteSignature(note);
+        inventory[key] = inventory.value(key, 0) + 1;
+    }
+    return inventory;
+}
+
+bool consumeFromInventory(QHash<QString, int> *inventory, const Note &note)
+{
+    if (!inventory)
+        return false;
+    const QString key = noteSignature(note);
+    const int count = inventory->value(key, 0);
+    if (count <= 0)
+        return false;
+    if (count == 1)
+        inventory->remove(key);
+    else
+        (*inventory)[key] = count - 1;
+    return true;
+}
+
 bool validateBatchEditPayload(const QVector<Note> &notesToAdd,
                               const QVector<Note> &notesToRemove,
                               const QList<QPair<Note, Note>> &notesToMove,
+                              const Chart &currentChart,
                               QString *reason)
 {
     auto fail = [reason](const QString &msg) -> bool
@@ -156,11 +184,15 @@ bool validateBatchEditPayload(const QVector<Note> &notesToAdd,
                         .arg(kMaxBatchOperations));
     }
 
+    QHash<QString, int> sourceInventory = buildNoteInventory(currentChart.notes());
+
     QSet<QString> removeKeys;
     for (const Note &note : notesToRemove)
     {
         if (!isReferenceNoteValid(note))
             return fail("Invalid remove note detected.");
+        if (!consumeFromInventory(&sourceInventory, note))
+            return fail("Remove note does not exist in current chart.");
         removeKeys.insert(noteSignature(note));
     }
 
@@ -181,6 +213,8 @@ bool validateBatchEditPayload(const QVector<Note> &notesToAdd,
 
         if (removeKeys.contains(fromKey))
             return fail("Conflicting remove + move source detected.");
+        if (!consumeFromInventory(&sourceInventory, from))
+            return fail("Move source note does not exist in current chart.");
     }
 
     for (const Note &note : notesToAdd)
@@ -679,7 +713,7 @@ bool ChartController::applyBatchEdit(const QString &actionName,
                                      const QList<QPair<Note, Note>> &notesToMove)
 {
     QString invalidReason;
-    if (!validateBatchEditPayload(notesToAdd, notesToRemove, notesToMove, &invalidReason))
+    if (!validateBatchEditPayload(notesToAdd, notesToRemove, notesToMove, m_chart, &invalidReason))
     {
         Logger::warn(QString("applyBatchEdit rejected: %1").arg(invalidReason));
         return false;
