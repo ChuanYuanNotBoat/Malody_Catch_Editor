@@ -53,6 +53,7 @@ public:
     QList<ToolActionEntry> toolActions() const;
     QList<FloatingPanelEntry> floatingPanels() const;
     bool runToolAction(const QString &pluginId, const QString &actionId, const QVariantMap &context);
+    bool supportsHostBatchEdit(const QString &pluginId) const;
     bool buildToolActionBatchEdit(const QString &pluginId,
                                   const QString &actionId,
                                   const QVariantMap &context,

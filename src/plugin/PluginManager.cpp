@@ -298,6 +298,19 @@ bool PluginManager::runToolAction(const QString &pluginId, const QString &action
     return false;
 }
 
+bool PluginManager::supportsHostBatchEdit(const QString &pluginId) const
+{
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        if (p->pluginId() != pluginId)
+            continue;
+        return p->hasCapability(PluginInterface::kCapabilityHostBatchEdit);
+    }
+    return false;
+}
+
 bool PluginManager::buildToolActionBatchEdit(const QString &pluginId,
                                              const QString &actionId,
                                              const QVariantMap &context,

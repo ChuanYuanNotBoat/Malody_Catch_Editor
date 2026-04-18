@@ -251,7 +251,8 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
                      .arg(chartPath));
 
     PluginInterface::BatchEdit batchEdit;
-    if (app->pluginManager()->buildToolActionBatchEdit(pluginId, actionId, context, &batchEdit))
+    if (app->pluginManager()->supportsHostBatchEdit(pluginId) &&
+        app->pluginManager()->buildToolActionBatchEdit(pluginId, actionId, context, &batchEdit))
     {
         const bool ok = d->chartController->applyBatchEdit(
             tr("Plugin Action: %1").arg(actionTitle),
@@ -291,6 +292,23 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
 
     statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
     return true;
+}
+
+void MainWindow::closePluginPanels(const QString &reasonText)
+{
+    if (d->pluginPanelDialogs.isEmpty())
+        return;
+
+    const auto dialogs = d->pluginPanelDialogs;
+    for (auto it = dialogs.constBegin(); it != dialogs.constEnd(); ++it)
+    {
+        if (it.value())
+            it.value()->close();
+    }
+    d->pluginPanelDialogs.clear();
+
+    if (!reasonText.isEmpty())
+        statusBar()->showMessage(reasonText, 2000);
 }
 
 void MainWindow::triggerPluginPanelAction()

@@ -652,6 +652,8 @@ void MainWindow::loadChartFile(const QString &filePath)
         Settings::instance().setLastProjectPath(beatmapDir);
     }
 
+    closePluginPanels(tr("Plugin panels were closed after chart switch."));
+
     if (!d->chartController->loadChart(actualChartPath))
     {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
