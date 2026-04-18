@@ -2,7 +2,7 @@
 #include "MainWindowPrivate.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "file/SkinIO.h"
-#include "MobileResourcePaths.h"
+#include "app/mobile/MobileResourcePaths.h"
 #include "model/Skin.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"

@@ -6,7 +6,7 @@
 #include "plugin/PluginManager.h"
 #include "model/Skin.h"
 #include "file/SkinIO.h"
-#include "MobileResourcePaths.h"
+#include "app/mobile/MobileResourcePaths.h"
 #include "utils/Settings.h"
 #include "utils/Translator.h"
 #include "utils/Logger.h"

@@ -17,8 +17,8 @@ set(SOURCES
     src/main.cpp
     src/app/Application.cpp
     src/app/MainWindow.cpp
-    src/app/MainWindowMobile.cpp
-    src/app/MobileResourcePaths.cpp
+    src/app/mobile/MainWindowMobile.cpp
+    src/app/mobile/MobileResourcePaths.cpp
     src/app/MainWindowDialogs.cpp
     src/app/MainWindowSkinAudio.cpp
     src/model/Note.cpp

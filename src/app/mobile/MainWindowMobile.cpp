@@ -1,5 +1,5 @@
-#include "MainWindow.h"
-#include "MainWindowPrivate.h"
+#include "app/MainWindow.h"
+#include "app/MainWindowPrivate.h"
 #include "ui/LeftPanel.h"
 #include "utils/Logger.h"
 
