@@ -21,6 +21,7 @@ public:
 
     // 获取当前谱面（只读）
     const Chart *chart() const { return &m_chart; }
+    Chart *mutableChart() { return &m_chart; }
 
     // 获取当前谱面文件路径
     QString chartFilePath() const { return m_currentChartPath; }

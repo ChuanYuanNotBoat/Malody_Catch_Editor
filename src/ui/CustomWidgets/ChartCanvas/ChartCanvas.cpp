@@ -137,8 +137,7 @@ const Chart *ChartCanvas::chart() const
 
 Chart *ChartCanvas::chart()
 {
-    // ChartController currently exposes a const chart() accessor.
-    return m_chartController ? const_cast<Chart *>(m_chartController->chart()) : nullptr;
+    return m_chartController ? m_chartController->mutableChart() : nullptr;
 }
 
 QVector<Note> *ChartCanvas::mutableNotes()
