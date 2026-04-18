@@ -6,6 +6,7 @@
 #include <cstdio>
 
 #include "file/ProjectIO.h"
+#include "controller/ChartController.h"
 #include "model/Chart.h"
 #include "utils/MathUtils.h"
 
@@ -153,6 +154,87 @@ bool testProjectIoReadDifficultyAndScan()
     return foundHard && foundFallback;
 }
 
+Note makeNormalNote(int beatNum, int num, int den, int x, const QString &id = QString())
+{
+    Note note(beatNum, num, den, x);
+    if (!id.isEmpty())
+        note.id = id;
+    return note;
+}
+
+bool testChartControllerApplyBatchEditAcceptsValidPayload()
+{
+    ChartController controller;
+    const Note base = makeNormalNote(1, 0, 1, 64, "seed-a");
+    controller.addNote(base);
+
+    const Note moved = makeNormalNote(2, 0, 1, 128, "seed-a");
+    const Note added = makeNormalNote(3, 0, 1, 256, "seed-b");
+
+    const bool ok = controller.applyBatchEdit(
+        "batch edit valid",
+        QVector<Note>{added},
+        QVector<Note>{},
+        QList<QPair<Note, Note>>{qMakePair(base, moved)});
+    if (!ok)
+        return false;
+
+    const QVector<Note> &notes = controller.chart()->notes();
+    if (notes.size() != 2)
+        return false;
+
+    bool foundMoved = false;
+    bool foundAdded = false;
+    for (const Note &n : notes)
+    {
+        if (n.id == "seed-a" && n.beatNum == 2 && n.x == 128)
+            foundMoved = true;
+        if (n.id == "seed-b" && n.beatNum == 3 && n.x == 256)
+            foundAdded = true;
+    }
+    return foundMoved && foundAdded;
+}
+
+bool testChartControllerApplyBatchEditRejectsInvalidAddNote()
+{
+    ChartController controller;
+    const Note base = makeNormalNote(1, 0, 1, 64, "seed-a");
+    controller.addNote(base);
+
+    Note invalidAdd = makeNormalNote(2, 0, 1, 900, "bad-add");
+    invalidAdd.type = NoteType::NORMAL;
+
+    const bool ok = controller.applyBatchEdit(
+        "batch edit invalid add",
+        QVector<Note>{invalidAdd},
+        QVector<Note>{},
+        QList<QPair<Note, Note>>{});
+    if (ok)
+        return false;
+
+    const QVector<Note> &notes = controller.chart()->notes();
+    return notes.size() == 1 && notes.first().id == "seed-a";
+}
+
+bool testChartControllerApplyBatchEditRejectsConflictingMoveAndRemove()
+{
+    ChartController controller;
+    const Note base = makeNormalNote(1, 0, 1, 64, "seed-a");
+    controller.addNote(base);
+
+    const Note moved = makeNormalNote(2, 0, 1, 128, "seed-a");
+    const bool ok = controller.applyBatchEdit(
+        "batch edit conflict",
+        QVector<Note>{},
+        QVector<Note>{base},
+        QList<QPair<Note, Note>>{qMakePair(base, moved)});
+    if (ok)
+        return false;
+
+    const QVector<Note> &notes = controller.chart()->notes();
+    return notes.size() == 1 && notes.first().id == "seed-a";
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -171,6 +253,9 @@ int main(int argc, char **argv)
         {"Chart removeNote by id", &testChartRemoveById},
         {"Chart BPM sorting", &testChartBpmSort},
         {"ProjectIO scan + difficulty", &testProjectIoReadDifficultyAndScan},
+        {"ChartController applyBatchEdit valid payload", &testChartControllerApplyBatchEditAcceptsValidPayload},
+        {"ChartController applyBatchEdit invalid add", &testChartControllerApplyBatchEditRejectsInvalidAddNote},
+        {"ChartController applyBatchEdit conflict remove+move", &testChartControllerApplyBatchEditRejectsConflictingMoveAndRemove},
     };
 
     int failed = 0;
