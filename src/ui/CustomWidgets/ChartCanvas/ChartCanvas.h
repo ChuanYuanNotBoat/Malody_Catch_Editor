@@ -129,6 +129,10 @@ private:
     void showRightClickMenu(QMouseEvent *event);
     QVector<int> collectColorTargetIndices(const QPoint &pos) const;
     void populateColorMenu(QMenu *colorMenu, const QVector<int> &targetIndices);
+    void handleLeftMousePress(QMouseEvent *event);
+    bool handlePastePreviewLeftClick(const QPoint &pos);
+    bool handleRainPlacementLeftClick(const QPointF &pos);
+    bool handleHitNoteLeftClick(int hitIndex, Qt::KeyboardModifiers modifiers, const QPointF &pos);
 
     void snapPlayheadToGrid();
     void startSnapTimer();

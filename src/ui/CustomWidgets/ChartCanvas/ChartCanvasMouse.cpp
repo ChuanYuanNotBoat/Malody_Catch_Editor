@@ -503,6 +503,138 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
     }
 }
 
+bool ChartCanvas::handlePastePreviewLeftClick(const QPoint &pos)
+{
+    if (!m_isPasting)
+        return false;
+
+    if (pos.x() >= 10 && pos.x() <= 110 && pos.y() >= 10 && pos.y() <= 40)
+    {
+        confirmPaste();
+        return true;
+    }
+    if (pos.x() >= 120 && pos.x() <= 220 && pos.y() >= 10 && pos.y() <= 40)
+    {
+        cancelPaste();
+        return true;
+    }
+
+    beginDragPaste(pos);
+    return true;
+}
+
+bool ChartCanvas::handleRainPlacementLeftClick(const QPointF &pos)
+{
+    if (m_currentMode != PlaceRain)
+        return false;
+
+    if (m_rainFirst)
+    {
+        m_rainStartPos = pos;
+        m_rainFirst = false;
+        return true;
+    }
+
+    const QPointF endPos = pos;
+    m_rainFirst = true;
+    const Note startNote = posToNote(m_rainStartPos);
+    const Note endNote = posToNote(endPos);
+    const double startTime = MathUtils::beatToMs(startNote.beatNum, startNote.numerator, startNote.denominator,
+                                                 chart()->bpmList(),
+                                                 chart()->meta().offset);
+    const double endTime = MathUtils::beatToMs(endNote.beatNum, endNote.numerator, endNote.denominator,
+                                               chart()->bpmList(),
+                                               chart()->meta().offset);
+    if (endTime > startTime)
+    {
+        Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
+                      endNote.beatNum, endNote.numerator, endNote.denominator,
+                      startNote.x);
+        if (rainNote.isValidRain())
+        {
+            m_chartController->addNote(rainNote);
+        }
+        else
+        {
+            QMessageBox::warning(this, tr("Invalid Rain Note"), tr("Invalid rain note parameters."));
+        }
+    }
+    else
+    {
+        QMessageBox::warning(this, tr("Invalid Rain Note"), tr("End time must be later than start time"));
+    }
+    return true;
+}
+
+bool ChartCanvas::handleHitNoteLeftClick(int hitIndex, Qt::KeyboardModifiers modifiers, const QPointF &pos)
+{
+    if (hitIndex == -1)
+        return false;
+
+    if (m_currentMode == Delete)
+    {
+        const auto &notes = chart()->notes();
+        if (hitIndex >= 0 && hitIndex < notes.size())
+        {
+            QVector<Note> noteToDelete;
+            noteToDelete.append(notes[hitIndex]);
+            m_chartController->removeNotes(noteToDelete);
+        }
+        return true;
+    }
+
+    if (modifiers & Qt::ControlModifier)
+    {
+        if (m_selectionController->selectedIndices().contains(hitIndex))
+            m_selectionController->removeFromSelection(hitIndex);
+        else
+            m_selectionController->addToSelection(hitIndex);
+        return true;
+    }
+
+    if (!m_selectionController->selectedIndices().contains(hitIndex))
+    {
+        m_selectionController->clearSelection();
+        m_selectionController->addToSelection(hitIndex);
+    }
+
+    beginMoveSelection(pos, hitIndex);
+    return true;
+}
+
+void ChartCanvas::handleLeftMousePress(QMouseEvent *event)
+{
+    if (handlePastePreviewLeftClick(event->pos()))
+        return;
+
+    if (event->modifiers() & Qt::ControlModifier)
+    {
+        m_isSelecting = true;
+        m_selectionStart = event->pos();
+        m_selectionEnd = event->pos();
+        return;
+    }
+
+    if (handleRainPlacementLeftClick(event->pos()))
+        return;
+
+    const int hitIndex = hitTestNote(event->pos());
+    if (handleHitNoteLeftClick(hitIndex, event->modifiers(), event->pos()))
+        return;
+
+    const bool hadSelection = m_selectionController && !m_selectionController->selectedIndices().isEmpty();
+    if (m_selectionController)
+        m_selectionController->clearSelection();
+    if (hadSelection)
+        return;
+
+    if (m_currentMode == PlaceNote)
+    {
+        Note note = posToNote(event->pos());
+        m_chartController->addNote(note);
+    }
+}
+
 void ChartCanvas::mousePressEvent(QMouseEvent *event)
 {
     if (m_intervalState != IntervalNone)
@@ -514,120 +646,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
 
     if (event->button() == Qt::LeftButton)
     {
-        if (m_isPasting)
-        {
-            if (event->pos().x() >= 10 && event->pos().x() <= 110 && event->pos().y() >= 10 && event->pos().y() <= 40)
-            {
-                confirmPaste();
-                return;
-            }
-            else if (event->pos().x() >= 120 && event->pos().x() <= 220 && event->pos().y() >= 10 && event->pos().y() <= 40)
-            {
-                cancelPaste();
-                return;
-            }
-            else
-            {
-                beginDragPaste(event->pos());
-                return;
-            }
-        }
-
-        if (event->modifiers() & Qt::ControlModifier)
-        {
-            m_isSelecting = true;
-            m_selectionStart = event->pos();
-            m_selectionEnd = event->pos();
-            return;
-        }
-
-        if (m_currentMode == PlaceRain)
-        {
-            if (m_rainFirst)
-            {
-                m_rainStartPos = event->pos();
-                m_rainFirst = false;
-                return;
-            }
-            else
-            {
-                QPointF endPos = event->pos();
-                m_rainFirst = true;
-                Note startNote = posToNote(m_rainStartPos);
-                Note endNote = posToNote(endPos);
-                double startTime = MathUtils::beatToMs(startNote.beatNum, startNote.numerator, startNote.denominator,
-                                                       chart()->bpmList(),
-                                                       chart()->meta().offset);
-                double endTime = MathUtils::beatToMs(endNote.beatNum, endNote.numerator, endNote.denominator,
-                                                     chart()->bpmList(),
-                                                     chart()->meta().offset);
-                if (endTime > startTime)
-                {
-                    Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
-                                  endNote.beatNum, endNote.numerator, endNote.denominator,
-                                  startNote.x);
-                    if (rainNote.isValidRain())
-                    {
-                        m_chartController->addNote(rainNote);
-                    }
-                    else
-                    {
-                        QMessageBox::warning(this, tr("Invalid Rain Note"), tr("Invalid rain note parameters."));
-                    }
-                }
-                else
-                {
-                    QMessageBox::warning(this, tr("Invalid Rain Note"), tr("End time must be later than start time"));
-                }
-                return;
-            }
-        }
-
-        int hitIndex = hitTestNote(event->pos());
-        if (hitIndex != -1)
-        {
-            if (m_currentMode == Delete)
-            {
-                const auto &notes = chart()->notes();
-                if (hitIndex >= 0 && hitIndex < notes.size())
-                {
-                    QVector<Note> noteToDelete;
-                    noteToDelete.append(notes[hitIndex]);
-                    m_chartController->removeNotes(noteToDelete);
-                }
-                return;
-            }
-
-            if (event->modifiers() & Qt::ControlModifier)
-            {
-                if (m_selectionController->selectedIndices().contains(hitIndex))
-                    m_selectionController->removeFromSelection(hitIndex);
-                else
-                    m_selectionController->addToSelection(hitIndex);
-                return;
-            }
-
-            if (!m_selectionController->selectedIndices().contains(hitIndex))
-            {
-                m_selectionController->clearSelection();
-                m_selectionController->addToSelection(hitIndex);
-            }
-
-            beginMoveSelection(event->pos(), hitIndex);
-            return;
-        }
-
-        const bool hadSelection = m_selectionController && !m_selectionController->selectedIndices().isEmpty();
-        if (m_selectionController)
-            m_selectionController->clearSelection();
-        if (hadSelection)
-            return;
-
-        if (m_currentMode == PlaceNote)
-        {
-            Note note = posToNote(event->pos());
-            m_chartController->addNote(note);
-        }
+        handleLeftMousePress(event);
     }
     else if (event->button() == Qt::RightButton)
     {
