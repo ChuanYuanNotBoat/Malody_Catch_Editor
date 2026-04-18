@@ -259,6 +259,8 @@ QList<PluginManager::FloatingPanelEntry> PluginManager::floatingPanels() const
     {
         if (!p)
             continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityFloatingPanel))
+            continue;
         const QList<PluginInterface::FloatingPanelDescriptor> panels = p->floatingPanels();
         for (const PluginInterface::FloatingPanelDescriptor &panel : panels)
         {
@@ -280,6 +282,8 @@ bool PluginManager::runToolAction(const QString &pluginId, const QString &action
     for (PluginInterface *p : m_plugins)
     {
         if (!p)
+            continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityFloatingPanel))
             continue;
         if (p->pluginId() != pluginId)
             continue;
@@ -377,6 +381,8 @@ QList<PluginInterface::CanvasOverlayItem> PluginManager::canvasOverlays(const QV
     for (PluginInterface *p : m_plugins)
     {
         if (!p)
+            continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityCanvasOverlay))
             continue;
         try
         {
