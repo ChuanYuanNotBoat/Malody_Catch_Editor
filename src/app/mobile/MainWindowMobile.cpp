@@ -10,9 +10,12 @@
 #include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QLabel>
+#include <QGuiApplication>
 #include <QMenuBar>
 #include <QMenu>
 #include <QPushButton>
+#include <QScreen>
+#include <QSizePolicy>
 #include <QSplitter>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -52,10 +55,36 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
 
     if (d->splitter)
     {
+        const int windowWidth = width() > 0
+                                    ? width()
+                                    : (QGuiApplication::primaryScreen()
+                                           ? QGuiApplication::primaryScreen()->availableGeometry().width()
+                                           : 1080);
+        const int boundedWidth = qMax(480, windowWidth);
+        const int maxSideWidth = qMax(180, boundedWidth / 3);
+        int sideWidth = qBound(140, boundedWidth / 5, maxSideWidth);
+        int canvasWidth = boundedWidth - sideWidth * 2;
+        if (canvasWidth < 220)
+        {
+            sideWidth = qMax(120, (boundedWidth - 220) / 2);
+            canvasWidth = qMax(220, boundedWidth - sideWidth * 2);
+        }
+
+        if (d->leftPanel)
+        {
+            d->leftPanel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+            d->leftPanel->setMaximumWidth(maxSideWidth);
+        }
+        if (d->rightPanelContainer)
+        {
+            d->rightPanelContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+            d->rightPanelContainer->setMaximumWidth(maxSideWidth);
+        }
+
         d->splitter->setCollapsible(0, true);
         d->splitter->setCollapsible(1, false);
         d->splitter->setCollapsible(2, true);
-        d->splitter->setSizes({150, 800, 300});
+        d->splitter->setSizes({sideWidth, canvasWidth, sideWidth});
         setCentralWidget(d->splitter);
     }
 
