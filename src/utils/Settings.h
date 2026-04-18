@@ -66,6 +66,9 @@ public:
     QStringList disabledPluginIds() const;
     void setDisabledPluginIds(const QStringList &pluginIds);
 
+    bool mobileUiTestMode() const;
+    void setMobileUiTestMode(bool enabled);
+
 private:
     Settings();
     QSettings m_settings;

@@ -67,6 +67,7 @@ private slots:
     void changeNoteSound(const QString &soundPath);
     void changeLanguage();
     void configureShortcuts();
+    void toggleMobileUiTestMode(bool enabled);
 
 private:
     void setupUi();

@@ -52,6 +52,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QSysInfo>
+#include <QProcess>
 #include <QGroupBox>
 #include <QFile>
 #include <QTextStream>
@@ -490,6 +491,13 @@ void MainWindow::createMenus()
     settingsMenu->addSeparator();
     QAction *shortcutSettingsAction = settingsMenu->addAction(tr("Keyboard Shortcuts..."));
     connect(shortcutSettingsAction, &QAction::triggered, this, &MainWindow::configureShortcuts);
+#if !defined(Q_OS_ANDROID)
+    settingsMenu->addSeparator();
+    d->mobileUiTestAction = settingsMenu->addAction(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
+    d->mobileUiTestAction->setCheckable(true);
+    d->mobileUiTestAction->setChecked(Settings::instance().mobileUiTestMode());
+    connect(d->mobileUiTestAction, &QAction::toggled, this, &MainWindow::toggleMobileUiTestMode);
+#endif
     settingsMenu->addSeparator();
     d->languageMenu = settingsMenu->addMenu(tr("Language"));
     d->languageActionGroup = new QActionGroup(this);
@@ -1374,6 +1382,8 @@ void MainWindow::retranslateUi()
         d->skinMenu->setTitle(tr("&Skin"));
     if (d->noteSoundMenu)
         d->noteSoundMenu->setTitle(tr("Note &Sound"));
+    if (d->mobileUiTestAction)
+        d->mobileUiTestAction->setText(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
     populateSkinMenu();
     populateNoteSoundMenu();
     populatePluginToolsMenu();
@@ -1408,6 +1418,52 @@ void MainWindow::togglePaste288Division(bool enabled)
 {
     Settings::instance().setPasteUse288Division(enabled);
     Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+void MainWindow::toggleMobileUiTestMode(bool enabled)
+{
+#if defined(Q_OS_ANDROID)
+    Q_UNUSED(enabled);
+    return;
+#else
+    if (Settings::instance().mobileUiTestMode() == enabled)
+        return;
+
+    Settings::instance().setMobileUiTestMode(enabled);
+    Logger::info(QString("Mobile UI test mode toggled to %1").arg(enabled ? "enabled" : "disabled"));
+
+    QMessageBox prompt(this);
+    prompt.setIcon(QMessageBox::Question);
+    prompt.setWindowTitle(tr("Restart Required"));
+    prompt.setText(tr("Mobile UI test mode was %1.")
+                       .arg(enabled ? tr("enabled") : tr("disabled")));
+    prompt.setInformativeText(tr("This debug option applies after restart. Restart now?"));
+
+    QPushButton *restartNowBtn = prompt.addButton(tr("Restart Now"), QMessageBox::AcceptRole);
+    QPushButton *laterBtn = prompt.addButton(tr("Later"), QMessageBox::RejectRole);
+    Q_UNUSED(laterBtn);
+    prompt.exec();
+
+    if (prompt.clickedButton() != restartNowBtn)
+    {
+        statusBar()->showMessage(tr("Mobile UI test mode will apply after restart."), 3000);
+        return;
+    }
+
+    QStringList args = QCoreApplication::arguments();
+    if (!args.isEmpty())
+        args.removeFirst();
+
+    const QString executable = QCoreApplication::applicationFilePath();
+    const QString workDir = QFileInfo(executable).absolutePath();
+    if (!QProcess::startDetached(executable, args, workDir))
+    {
+        QMessageBox::warning(this, tr("Restart Failed"), tr("Unable to restart automatically. Please relaunch manually."));
+        return;
+    }
+
+    qApp->quit();
+#endif
 }
 
 void MainWindow::changeLanguage()

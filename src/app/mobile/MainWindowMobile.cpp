@@ -1,6 +1,7 @@
 #include "app/MainWindow.h"
 #include "app/MainWindowPrivate.h"
 #include "ui/LeftPanel.h"
+#include "utils/Settings.h"
 #include "utils/Logger.h"
 
 #include <QAction>
@@ -16,7 +17,7 @@ bool MainWindow::useCompactMobileLayout() const
 #if defined(Q_OS_ANDROID)
     return true;
 #else
-    return false;
+    return Settings::instance().mobileUiTestMode();
 #endif
 }
 
