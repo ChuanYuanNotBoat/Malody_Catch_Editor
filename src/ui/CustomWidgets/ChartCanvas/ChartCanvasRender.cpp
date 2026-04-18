@@ -53,7 +53,6 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
 
     const Chart *currentChart = chart();
     const auto &bpmList = currentChart->bpmList();
-    int offset = currentChart->meta().offset;
     const auto &notes = currentChart->notes();
 
     drawBackground(painter);
@@ -139,113 +138,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     }
 
     if (m_isPasting && !m_pasteNotes.isEmpty())
-    {
-        painter.setOpacity(0.5);
-
-        QVector<double> fallbackOriginalTimes;
-        bool usingCachedOriginalTimes =
-            (m_pasteOriginalTimesMs.size() == m_pasteNotes.size()) &&
-            std::isfinite(m_pasteBaseOriginalTimeMs);
-        if (!usingCachedOriginalTimes)
-        {
-            fallbackOriginalTimes.resize(m_pasteNotes.size());
-            for (int i = 0; i < fallbackOriginalTimes.size(); ++i)
-                fallbackOriginalTimes[i] = std::numeric_limits<double>::quiet_NaN();
-
-            for (int i = 0; i < m_pasteNotes.size(); ++i)
-            {
-                const Note &note = m_pasteNotes[i];
-                if (note.type == NoteType::SOUND)
-                    continue;
-                const double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
-                fallbackOriginalTimes[i] = t;
-            }
-        }
-
-        const QVector<double> &sourceOriginalTimes = usingCachedOriginalTimes ? m_pasteOriginalTimesMs : fallbackOriginalTimes;
-        double baseOriginalTime = m_pasteBaseOriginalTimeMs;
-        if (!usingCachedOriginalTimes)
-        {
-            baseOriginalTime = std::numeric_limits<double>::max();
-            for (double t : sourceOriginalTimes)
-            {
-                if (std::isfinite(t) && t < baseOriginalTime)
-                    baseOriginalTime = t;
-            }
-        }
-        if (baseOriginalTime != std::numeric_limits<double>::max())
-        {
-            const QVector<MathUtils::BpmCacheEntry> &previewBpmCache = bpmTimeCache();
-            auto previewBeatFromTimeMs = [&previewBpmCache, &bpmList, offset](double ms) -> double
-            {
-                if (!previewBpmCache.isEmpty())
-                {
-                    int lo = 0;
-                    int hi = previewBpmCache.size() - 1;
-                    while (lo < hi)
-                    {
-                        int mid = (lo + hi + 1) / 2;
-                        if (previewBpmCache[mid].accumulatedMs <= ms)
-                            lo = mid;
-                        else
-                            hi = mid - 1;
-                    }
-                    const auto &seg = previewBpmCache[lo];
-                    if (seg.bpm <= 0.0)
-                        return seg.beatPos;
-                    return seg.beatPos + (ms - seg.accumulatedMs) * (seg.bpm / 60000.0);
-                }
-                int b = 0, n = 0, d = 1;
-                MathUtils::msToBeat(ms, bpmList, offset, b, n, d);
-                return MathUtils::beatToFloat(b, n, d);
-            };
-            const double baseOriginalBeat = previewBeatFromTimeMs(baseOriginalTime);
-            const double referenceBeat = m_pasteAnchorBeat;
-            const double baseBeatShift = referenceBeat - baseOriginalBeat;
-            const double totalBeatShift = snapPasteTimeOffset(baseBeatShift + m_pasteTimeOffset);
-            auto previewAssignBeatWithDen = [](double beatFloat, int targetDen, int &outBeatNum, int &outNum, int &outDen)
-            {
-                if (targetDen <= 0)
-                    targetDen = 1;
-                const qint64 ticks = qRound64(beatFloat * targetDen);
-                outBeatNum = static_cast<int>(ticks / targetDen);
-                outNum = static_cast<int>(ticks % targetDen);
-                if (outNum < 0)
-                {
-                    outNum += targetDen;
-                    outBeatNum -= 1;
-                }
-                outDen = targetDen;
-            };
-            for (int i = 0; i < m_pasteNotes.size(); ++i)
-            {
-                const Note &note = m_pasteNotes[i];
-                if (note.type == NoteType::SOUND)
-                    continue;
-                if (i >= sourceOriginalTimes.size())
-                    continue;
-                const double originalTime = sourceOriginalTimes[i];
-                if (!std::isfinite(originalTime))
-                    continue;
-                int previewBeatNum = 0, previewNum = 0, previewDen = 1;
-                const int targetPreviewDen = Settings::instance().pasteUse288Division() ? 288 : qMax(1, note.denominator);
-                const double originalBeatFloat = previewBeatFromTimeMs(originalTime);
-                const double previewBeatFloat = originalBeatFloat + totalBeatShift;
-                previewAssignBeatWithDen(previewBeatFloat, targetPreviewDen, previewBeatNum, previewNum, previewDen);
-                const double beat = MathUtils::beatToFloat(previewBeatNum, previewNum, previewDen);
-                const double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
-                const int previewShiftedX = qBound(0, note.x + qRound(m_pasteXOffset), kLaneWidth);
-                const double x = lmargin + (previewShiftedX / static_cast<double>(kLaneWidth)) * availableWidth;
-                m_noteRenderer->drawNote(painter, note, QPointF(x, y), false, -1);
-            }
-        }
-
-        painter.setOpacity(1.0);
-        painter.fillRect(QRect(10, 10, 100, 30), QColor(200, 200, 200));
-        painter.drawText(QRect(10, 10, 100, 30), Qt::AlignCenter, tr("Confirm"));
-        painter.fillRect(QRect(120, 10, 100, 30), QColor(200, 200, 200));
-        painter.drawText(QRect(120, 10, 100, 30), Qt::AlignCenter, tr("Cancel"));
-    }
+        drawPastePreview(painter, canvasHeight, lmargin, availableWidth, invVisibleRange, baseY, sign);
 
     double baselineY = canvasHeight * kReferenceLineRatio;
     painter.setPen(QPen(QColor(0, 0, 255), 3));
@@ -268,45 +161,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.drawRect(rect);
     }
 
-    if (PluginManager *pm = activePluginManager())
-    {
-        QVariantMap overlayContext;
-        overlayContext.insert("canvas_width", width());
-        overlayContext.insert("canvas_height", height());
-        overlayContext.insert("scroll_beat", m_scrollBeat);
-        overlayContext.insert("visible_beat_range", effectiveVisibleBeatRange());
-        overlayContext.insert("vertical_flip", m_verticalFlip);
-        overlayContext.insert("time_division", m_timeDivision);
-        overlayContext.insert("grid_division", m_gridDivision);
-        overlayContext.insert("left_margin", lmargin);
-        overlayContext.insert("right_margin", rmargin);
-        const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
-        if (!chartPath.isEmpty())
-            overlayContext.insert("chart_path", chartPath);
-
-        const QList<PluginInterface::CanvasOverlayItem> overlays = pm->canvasOverlays(overlayContext);
-        for (const auto &item : overlays)
-        {
-            QPen pen(item.color, item.width);
-            painter.setPen(pen);
-            if (item.kind == PluginInterface::CanvasOverlayItem::Rect)
-            {
-                painter.fillRect(item.rect, item.fillColor);
-                painter.drawRect(item.rect);
-            }
-            else if (item.kind == PluginInterface::CanvasOverlayItem::Text)
-            {
-                QFont f = painter.font();
-                f.setPixelSize(qMax(8, item.fontPx));
-                painter.setFont(f);
-                painter.drawText(item.from, item.text);
-            }
-            else
-            {
-                painter.drawLine(item.from, item.to);
-            }
-        }
-    }
+    drawPluginOverlays(painter, lmargin, rmargin);
 
     painter.setPen(Qt::white);
     painter.setBrush(QColor(0, 0, 0, 128));
@@ -324,6 +179,171 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         lastRecord = now;
     }
 
+}
+
+void ChartCanvas::drawPastePreview(QPainter &painter,
+                                   int canvasHeight,
+                                   int lmargin,
+                                   int availableWidth,
+                                   double invVisibleRange,
+                                   double baseY,
+                                   double sign)
+{
+    if (!chart())
+        return;
+
+    painter.setOpacity(0.5);
+
+    const auto &bpmList = chart()->bpmList();
+    const int offset = chart()->meta().offset;
+
+    QVector<double> fallbackOriginalTimes;
+    bool usingCachedOriginalTimes =
+        (m_pasteOriginalTimesMs.size() == m_pasteNotes.size()) &&
+        std::isfinite(m_pasteBaseOriginalTimeMs);
+    if (!usingCachedOriginalTimes)
+    {
+        fallbackOriginalTimes.resize(m_pasteNotes.size());
+        for (int i = 0; i < fallbackOriginalTimes.size(); ++i)
+            fallbackOriginalTimes[i] = std::numeric_limits<double>::quiet_NaN();
+
+        for (int i = 0; i < m_pasteNotes.size(); ++i)
+        {
+            const Note &note = m_pasteNotes[i];
+            if (note.type == NoteType::SOUND)
+                continue;
+            const double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
+            fallbackOriginalTimes[i] = t;
+        }
+    }
+
+    const QVector<double> &sourceOriginalTimes = usingCachedOriginalTimes ? m_pasteOriginalTimesMs : fallbackOriginalTimes;
+    double baseOriginalTime = m_pasteBaseOriginalTimeMs;
+    if (!usingCachedOriginalTimes)
+    {
+        baseOriginalTime = std::numeric_limits<double>::max();
+        for (double t : sourceOriginalTimes)
+        {
+            if (std::isfinite(t) && t < baseOriginalTime)
+                baseOriginalTime = t;
+        }
+    }
+    if (baseOriginalTime != std::numeric_limits<double>::max())
+    {
+        const QVector<MathUtils::BpmCacheEntry> &previewBpmCache = bpmTimeCache();
+        auto previewBeatFromTimeMs = [&previewBpmCache, &bpmList, offset](double ms) -> double
+        {
+            if (!previewBpmCache.isEmpty())
+            {
+                int lo = 0;
+                int hi = previewBpmCache.size() - 1;
+                while (lo < hi)
+                {
+                    int mid = (lo + hi + 1) / 2;
+                    if (previewBpmCache[mid].accumulatedMs <= ms)
+                        lo = mid;
+                    else
+                        hi = mid - 1;
+                }
+                const auto &seg = previewBpmCache[lo];
+                if (seg.bpm <= 0.0)
+                    return seg.beatPos;
+                return seg.beatPos + (ms - seg.accumulatedMs) * (seg.bpm / 60000.0);
+            }
+            int b = 0, n = 0, d = 1;
+            MathUtils::msToBeat(ms, bpmList, offset, b, n, d);
+            return MathUtils::beatToFloat(b, n, d);
+        };
+        const double baseOriginalBeat = previewBeatFromTimeMs(baseOriginalTime);
+        const double referenceBeat = m_pasteAnchorBeat;
+        const double baseBeatShift = referenceBeat - baseOriginalBeat;
+        const double totalBeatShift = snapPasteTimeOffset(baseBeatShift + m_pasteTimeOffset);
+        auto previewAssignBeatWithDen = [](double beatFloat, int targetDen, int &outBeatNum, int &outNum, int &outDen)
+        {
+            if (targetDen <= 0)
+                targetDen = 1;
+            const qint64 ticks = qRound64(beatFloat * targetDen);
+            outBeatNum = static_cast<int>(ticks / targetDen);
+            outNum = static_cast<int>(ticks % targetDen);
+            if (outNum < 0)
+            {
+                outNum += targetDen;
+                outBeatNum -= 1;
+            }
+            outDen = targetDen;
+        };
+        for (int i = 0; i < m_pasteNotes.size(); ++i)
+        {
+            const Note &note = m_pasteNotes[i];
+            if (note.type == NoteType::SOUND)
+                continue;
+            if (i >= sourceOriginalTimes.size())
+                continue;
+            const double originalTime = sourceOriginalTimes[i];
+            if (!std::isfinite(originalTime))
+                continue;
+            int previewBeatNum = 0, previewNum = 0, previewDen = 1;
+            const int targetPreviewDen = Settings::instance().pasteUse288Division() ? 288 : qMax(1, note.denominator);
+            const double originalBeatFloat = previewBeatFromTimeMs(originalTime);
+            const double previewBeatFloat = originalBeatFloat + totalBeatShift;
+            previewAssignBeatWithDen(previewBeatFloat, targetPreviewDen, previewBeatNum, previewNum, previewDen);
+            const double beat = MathUtils::beatToFloat(previewBeatNum, previewNum, previewDen);
+            const double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
+            const int previewShiftedX = qBound(0, note.x + qRound(m_pasteXOffset), kLaneWidth);
+            const double x = lmargin + (previewShiftedX / static_cast<double>(kLaneWidth)) * availableWidth;
+            m_noteRenderer->drawNote(painter, note, QPointF(x, y), false, -1);
+        }
+    }
+
+    painter.setOpacity(1.0);
+    painter.fillRect(QRect(10, 10, 100, 30), QColor(200, 200, 200));
+    painter.drawText(QRect(10, 10, 100, 30), Qt::AlignCenter, tr("Confirm"));
+    painter.fillRect(QRect(120, 10, 100, 30), QColor(200, 200, 200));
+    painter.drawText(QRect(120, 10, 100, 30), Qt::AlignCenter, tr("Cancel"));
+}
+
+void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin)
+{
+    PluginManager *pm = activePluginManager();
+    if (!pm)
+        return;
+
+    QVariantMap overlayContext;
+    overlayContext.insert("canvas_width", width());
+    overlayContext.insert("canvas_height", height());
+    overlayContext.insert("scroll_beat", m_scrollBeat);
+    overlayContext.insert("visible_beat_range", effectiveVisibleBeatRange());
+    overlayContext.insert("vertical_flip", m_verticalFlip);
+    overlayContext.insert("time_division", m_timeDivision);
+    overlayContext.insert("grid_division", m_gridDivision);
+    overlayContext.insert("left_margin", lmargin);
+    overlayContext.insert("right_margin", rmargin);
+    const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
+    if (!chartPath.isEmpty())
+        overlayContext.insert("chart_path", chartPath);
+
+    const QList<PluginInterface::CanvasOverlayItem> overlays = pm->canvasOverlays(overlayContext);
+    for (const auto &item : overlays)
+    {
+        QPen pen(item.color, item.width);
+        painter.setPen(pen);
+        if (item.kind == PluginInterface::CanvasOverlayItem::Rect)
+        {
+            painter.fillRect(item.rect, item.fillColor);
+            painter.drawRect(item.rect);
+        }
+        else if (item.kind == PluginInterface::CanvasOverlayItem::Text)
+        {
+            QFont f = painter.font();
+            f.setPixelSize(qMax(8, item.fontPx));
+            painter.setFont(f);
+            painter.drawText(item.from, item.text);
+        }
+        else
+        {
+            painter.drawLine(item.from, item.to);
+        }
+    }
 }
 
 void ChartCanvas::drawBackground(QPainter &painter)

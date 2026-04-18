@@ -102,6 +102,14 @@ private:
 
     void drawBackground(QPainter &painter);
     void drawGrid(QPainter &painter);
+    void drawPastePreview(QPainter &painter,
+                          int canvasHeight,
+                          int lmargin,
+                          int availableWidth,
+                          double invVisibleRange,
+                          double baseY,
+                          double sign);
+    void drawPluginOverlays(QPainter &painter, int lmargin, int rmargin);
     QPointF noteToPos(const Note &note) const;
     Note posToNote(const QPointF &pos) const;
     double yPosFromTime(double timeMs) const;

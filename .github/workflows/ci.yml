@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.10.2"
+          arch: "win64_msvc2022_64"
+          cache: true
+
+      - name: Configure (CMake)
+        run: cmake -S . -B build_ci -DBUILD_TESTING=ON
+
+      - name: Build App
+        run: cmake --build build_ci --config Release --target CatchChartEditor
+
+      - name: Build Tests
+        run: cmake --build build_ci --config Release --target CatchChartEditorTests
+
+      - name: Run Tests
+        run: ctest --test-dir build_ci -C Release --output-on-failure
