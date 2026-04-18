@@ -72,6 +72,7 @@ public:
     QAction *mobileUiTestAction = nullptr;
     QAction *mobileToggleLeftPanelAction = nullptr;
     QAction *mobileToggleRightPanelAction = nullptr;
+    QAction *mobileFunctionsAction = nullptr;
     QToolBar *mainToolBar = nullptr;
     QDockWidget *leftDock = nullptr;
     QDockWidget *rightDock = nullptr;

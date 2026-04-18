@@ -68,6 +68,7 @@ private slots:
     void changeLanguage();
     void configureShortcuts();
     void toggleMobileUiTestMode(bool enabled);
+    void openMobileFunctionHub();
 
 private:
     void setupUi();
