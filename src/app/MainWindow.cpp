@@ -799,17 +799,17 @@ void MainWindow::createCentralArea()
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
 
+    d->splitter = new QSplitter(Qt::Horizontal, this);
+    d->splitter->addWidget(d->leftPanel);
+    d->splitter->addWidget(canvasContainer);
+    d->splitter->addWidget(d->rightPanelContainer);
+    d->splitter->setSizes({150, 800, 300});
     if (useCompactMobileLayout())
     {
         setupMobileCentralArea(canvasContainer);
     }
     else
     {
-        d->splitter = new QSplitter(Qt::Horizontal, this);
-        d->splitter->addWidget(d->leftPanel);
-        d->splitter->addWidget(canvasContainer);
-        d->splitter->addWidget(d->rightPanelContainer);
-        d->splitter->setSizes({150, 800, 300});
         setCentralWidget(d->splitter);
     }
 

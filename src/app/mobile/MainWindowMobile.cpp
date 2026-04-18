@@ -5,10 +5,9 @@
 #include "utils/Logger.h"
 
 #include <QAction>
-#include <QBoxLayout>
 #include <QDockWidget>
 #include <QMenuBar>
-#include <QTabWidget>
+#include <QSplitter>
 #include <QToolBar>
 #include <QToolButton>
 
@@ -27,6 +26,7 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         return;
 
     d->compactUiMode = true;
+    d->mobileTabs = nullptr;
     if (d->leftDock)
     {
         d->leftDock->hide();
@@ -40,24 +40,16 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         d->rightDock = nullptr;
     }
 
-    QWidget *mobileRoot = new QWidget(this);
-    QVBoxLayout *mobileLayout = new QVBoxLayout(mobileRoot);
-    mobileLayout->setContentsMargins(0, 0, 0, 0);
-    mobileLayout->setSpacing(0);
-    mobileLayout->addWidget(canvasContainer, 1);
+    if (d->splitter)
+    {
+        d->splitter->setCollapsible(0, true);
+        d->splitter->setCollapsible(1, false);
+        d->splitter->setCollapsible(2, true);
+        d->splitter->setSizes({150, 800, 300});
+        setCentralWidget(d->splitter);
+    }
 
-    d->mobileTabs = new QTabWidget(mobileRoot);
-    d->mobileTabs->setObjectName("mobileMainTabs");
-    d->mobileTabs->setTabPosition(QTabWidget::South);
-    d->mobileTabs->setDocumentMode(true);
-    d->mobileTabs->setElideMode(Qt::ElideRight);
-    d->mobileTabs->addTab(d->leftPanel, tr("Library"));
-    d->mobileTabs->addTab(d->rightPanelContainer, tr("Editor"));
-    d->mobileTabs->setCurrentWidget(d->rightPanelContainer);
-    mobileLayout->addWidget(d->mobileTabs, 0);
-
-    setCentralWidget(mobileRoot);
-    Logger::info("Compact mobile layout enabled: canvas + bottom tabbed panels.");
+    Logger::info("Compact mobile layout enabled: reuse desktop splitter layout with hideable side panels.");
 }
 
 void MainWindow::populateMobilePrimaryToolbar()
@@ -67,8 +59,8 @@ void MainWindow::populateMobilePrimaryToolbar()
 
     d->mainToolBar->setMovable(false);
     d->mainToolBar->setFloatable(false);
-    d->mainToolBar->setAllowedAreas(Qt::TopToolBarArea | Qt::BottomToolBarArea);
-    addToolBar(Qt::BottomToolBarArea, d->mainToolBar);
+    d->mainToolBar->setAllowedAreas(Qt::TopToolBarArea);
+    addToolBar(Qt::TopToolBarArea, d->mainToolBar);
     d->mainToolBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
 
     QAction *anchor = d->mainToolBar->actions().isEmpty() ? nullptr : d->mainToolBar->actions().first();
@@ -85,17 +77,21 @@ void MainWindow::populateMobilePrimaryToolbar()
     d->mobileOpenAction = insertPrimaryAction(tr("Open"), &MainWindow::openChart);
     d->mobileSaveAction = insertPrimaryAction(tr("Save"), &MainWindow::saveChart);
     d->mobilePlayAction = insertPrimaryAction(tr("Play"), &MainWindow::togglePlayback);
-
-    d->mobileLibraryAction = insertPrimaryAction(tr("Library"), [this]() {
-        if (!d->mobileTabs)
+    d->mobileToggleLeftPanelAction = insertPrimaryAction(tr("Hide Left"), [this]() {
+        if (!d->leftPanel)
             return;
-        d->mobileTabs->setCurrentWidget(d->leftPanel);
+        const bool shouldShow = !d->leftPanel->isVisible();
+        d->leftPanel->setVisible(shouldShow);
+        if (d->mobileToggleLeftPanelAction)
+            d->mobileToggleLeftPanelAction->setText(shouldShow ? tr("Hide Left") : tr("Show Left"));
     });
-
-    d->mobileEditorAction = insertPrimaryAction(tr("Editor"), [this]() {
-        if (!d->mobileTabs)
+    d->mobileToggleRightPanelAction = insertPrimaryAction(tr("Hide Right"), [this]() {
+        if (!d->rightPanelContainer)
             return;
-        d->mobileTabs->setCurrentWidget(d->rightPanelContainer);
+        const bool shouldShow = !d->rightPanelContainer->isVisible();
+        d->rightPanelContainer->setVisible(shouldShow);
+        if (d->mobileToggleRightPanelAction)
+            d->mobileToggleRightPanelAction->setText(shouldShow ? tr("Hide Right") : tr("Show Right"));
     });
 
     if (menuBar())
@@ -113,18 +109,8 @@ void MainWindow::retranslateMobileUi()
         d->mobileSaveAction->setText(tr("Save"));
     if (d->mobilePlayAction)
         d->mobilePlayAction->setText(tr("Play"));
-    if (d->mobileLibraryAction)
-        d->mobileLibraryAction->setText(tr("Library"));
-    if (d->mobileEditorAction)
-        d->mobileEditorAction->setText(tr("Editor"));
-
-    if (d->mobileTabs)
-    {
-        const int libraryIndex = d->mobileTabs->indexOf(d->leftPanel);
-        if (libraryIndex >= 0)
-            d->mobileTabs->setTabText(libraryIndex, tr("Library"));
-        const int editorIndex = d->mobileTabs->indexOf(d->rightPanelContainer);
-        if (editorIndex >= 0)
-            d->mobileTabs->setTabText(editorIndex, tr("Editor"));
-    }
+    if (d->mobileToggleLeftPanelAction)
+        d->mobileToggleLeftPanelAction->setText((d->leftPanel && d->leftPanel->isVisible()) ? tr("Hide Left") : tr("Show Left"));
+    if (d->mobileToggleRightPanelAction)
+        d->mobileToggleRightPanelAction->setText((d->rightPanelContainer && d->rightPanelContainer->isVisible()) ? tr("Hide Right") : tr("Show Right"));
 }
