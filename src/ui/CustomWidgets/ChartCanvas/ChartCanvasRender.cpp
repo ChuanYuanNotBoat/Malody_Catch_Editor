@@ -30,7 +30,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     }
 
     QPainter painter(this);
-    if (!m_chartController || !m_chartController->chart())
+    if (!chart())
     {
         painter.fillRect(rect(), Settings::instance().backgroundColor());
         return;
@@ -39,10 +39,10 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     if (m_timesDirty || m_noteDataDirty)
         rebuildNoteTimesCache();
 
-    const Chart *chart = m_chartController->chart();
-    const auto &bpmList = chart->bpmList();
-    int offset = chart->meta().offset;
-    const auto &notes = chart->notes();
+    const Chart *currentChart = chart();
+    const auto &bpmList = currentChart->bpmList();
+    int offset = currentChart->meta().offset;
+    const auto &notes = currentChart->notes();
 
     drawBackground(painter);
     drawGrid(painter);
@@ -279,13 +279,13 @@ void ChartCanvas::drawBackground(QPainter &painter)
     QSize sz = size();
     if (m_backgroundCacheDirty || m_backgroundCache.size() != sz)
     {
-        if (!m_chartController || !m_chartController->chart())
+        if (!chart())
         {
             m_backgroundCache = m_backgroundRenderer->generateBackground(sz);
         }
         else
         {
-            const MetaData &meta = m_chartController->chart()->meta();
+            const MetaData &meta = chart()->meta();
             QString bgPath = meta.backgroundFile;
             if (!bgPath.isEmpty())
             {
@@ -347,15 +347,15 @@ void ChartCanvas::drawGrid(QPainter &painter)
 double ChartCanvas::getNoteTimeMs(const Note &note) const
 {
     return MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator,
-                               m_chartController->chart()->bpmList(),
-                               m_chartController->chart()->meta().offset);
+                               chart()->bpmList(),
+                               chart()->meta().offset);
 }
 
 double ChartCanvas::yPosFromTime(double timeMs) const
 {
     int beatNum, numerator, denominator;
-    MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
-                        m_chartController->chart()->meta().offset,
+    MathUtils::msToBeat(timeMs, chart()->bpmList(),
+                        chart()->meta().offset,
                         beatNum, numerator, denominator);
     double beat = beatNum + static_cast<double>(numerator) / denominator;
     return beatToY(beat);
@@ -389,8 +389,8 @@ double ChartCanvas::yToTime(double y) const
     int beatNum, num, den;
     MathUtils::floatToBeat(beat, beatNum, num, den);
     return MathUtils::beatToMs(beatNum, num, den,
-                               m_chartController->chart()->bpmList(),
-                               m_chartController->chart()->meta().offset);
+                               chart()->bpmList(),
+                               chart()->meta().offset);
 }
 
 QPointF ChartCanvas::noteToPos(const Note &note) const
@@ -437,11 +437,11 @@ Note ChartCanvas::posToNote(const QPointF &pos) const
 
 QRectF ChartCanvas::getRainNoteRect(const Note &note) const
 {
-    if (!m_chartController || !m_chartController->chart())
+    if (!chart())
         return QRectF();
 
-    const auto &bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
+    const auto &bpmList = chart()->bpmList();
+    int offset = chart()->meta().offset;
 
     double startTime = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator, bpmList, offset);
     double endTime = MathUtils::beatToMs(note.endBeatNum, note.endNumerator, note.endDenominator, bpmList, offset);
@@ -461,10 +461,10 @@ QRectF ChartCanvas::getRainNoteRect(const Note &note) const
 
 int ChartCanvas::hitTestNote(const QPointF &pos) const
 {
-    if (!m_chartController || !m_chartController->chart())
+    if (!chart())
         return -1;
 
-    const auto &notes = m_chartController->chart()->notes();
+    const auto &notes = chart()->notes();
     int noteSize = m_noteRenderer->getNoteSize();
     double minDist = noteSize * 0.6;
     int hit = -1;
@@ -494,5 +494,6 @@ int ChartCanvas::hitTestNote(const QPointF &pos) const
     }
     return hit;
 }
+
 
 

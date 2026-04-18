@@ -140,7 +140,7 @@ void ChartCanvas::keyPressEvent(QKeyEvent *event)
         if (m_selectionController && !m_selectionController->selectedIndices().isEmpty())
         {
             QSet<int> selected = m_selectionController->selectedIndices();
-            const auto &notes = m_chartController->chart()->notes();
+            const auto &notes = chart()->notes();
             QList<int> sorted = selected.values();
             std::sort(sorted.begin(), sorted.end(), std::greater<int>());
 
@@ -176,14 +176,14 @@ int ChartCanvas::rightMargin() const
 
 void ChartCanvas::snapPlayheadToGrid()
 {
-    if (!m_chartController || !m_chartController->chart() || !m_snapToGrid)
+    if (!chart() || !m_snapToGrid)
     {
         return;
     }
 
     double currentTime = m_currentPlayTime;
-    const auto &bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
+    const auto &bpmList = chart()->bpmList();
+    int offset = chart()->meta().offset;
 
     double snappedTime = MathUtils::snapTimeToGrid(currentTime, bpmList, offset, m_timeDivision);
 
@@ -262,6 +262,7 @@ void ChartCanvas::cancelPaste()
         emit statusMessage(tr("Paste cancelled."));
     }
 }
+
 
 
 

@@ -16,7 +16,7 @@ void ChartCanvas::handleCopy()
     QSet<int> selected = m_selectionController->selectedIndices();
     if (!selected.isEmpty())
     {
-        m_selectionController->copySelected(m_chartController->chart()->notes());
+        m_selectionController->copySelected(chart()->notes());
         emit statusMessage(tr("Copied %1 notes").arg(selected.size()));
         if (m_intervalState != IntervalNone)
             cancelIntervalSelection();
@@ -54,9 +54,9 @@ void ChartCanvas::completeIntervalSelection()
     if (startTime > endTime)
         std::swap(startTime, endTime);
 
-    const auto &notes = m_chartController->chart()->notes();
-    const auto &bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
+    const auto &notes = chart()->notes();
+    const auto &bpmList = chart()->bpmList();
+    int offset = chart()->meta().offset;
 
     m_intervalNotes.clear();
     for (const Note &note : notes)
@@ -172,12 +172,12 @@ void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cu
     if (!m_pasteNotes.isEmpty())
     {
         const bool canBuildTimeCache =
-            m_chartController && m_chartController->chart() &&
-            !m_chartController->chart()->bpmList().isEmpty();
+            chart() &&
+            !chart()->bpmList().isEmpty();
         if (canBuildTimeCache)
         {
-            const auto &bpmList = m_chartController->chart()->bpmList();
-            int offset = m_chartController->chart()->meta().offset;
+            const auto &bpmList = chart()->bpmList();
+            int offset = chart()->meta().offset;
             m_pasteOriginalTimesMs.resize(m_pasteNotes.size());
             for (int i = 0; i < m_pasteOriginalTimesMs.size(); ++i)
                 m_pasteOriginalTimesMs[i] = std::numeric_limits<double>::quiet_NaN();
@@ -217,11 +217,11 @@ void ChartCanvas::beginPastePreview(const QVector<Note> &notes, const QPoint &cu
 
 double ChartCanvas::calculatePasteReferenceTime() const
 {
-    if (!m_chartController || !m_chartController->chart())
+    if (!chart())
         return 0.0;
 
-    const auto &bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
+    const auto &bpmList = chart()->bpmList();
+    int offset = chart()->meta().offset;
 
     if (m_useCursorPaste)
     {
@@ -313,8 +313,8 @@ void ChartCanvas::confirmPaste()
         return;
     }
 
-    const auto &bpmList = m_chartController->chart()->bpmList();
-    int offset = m_chartController->chart()->meta().offset;
+    const auto &bpmList = chart()->bpmList();
+    int offset = chart()->meta().offset;
     const QVector<MathUtils::BpmCacheEntry> &bpmCache = bpmTimeCache();
     auto beatFromTimeMs = [&bpmCache, &bpmList, offset](double ms) -> double
     {
@@ -456,6 +456,7 @@ void ChartCanvas::confirmPaste()
     m_pasteAnchorBeat = 0.0;
     update();
 }
+
 
 
 

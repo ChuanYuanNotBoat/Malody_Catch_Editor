@@ -22,6 +22,7 @@ class BackgroundRenderer;
 class Skin;
 class PlaybackController;
 class NoteSoundPlayer;
+class Chart;
 
 class ChartCanvas : public QWidget
 {
@@ -121,6 +122,9 @@ private:
     const QVector<MathUtils::BpmCacheEntry> &bpmTimeCache();
 
     void rebuildNoteTimesCache();
+    const Chart *chart() const;
+    Chart *chart();
+    QVector<Note> *mutableNotes();
 
     double effectiveVisibleBeatRange() const
     {

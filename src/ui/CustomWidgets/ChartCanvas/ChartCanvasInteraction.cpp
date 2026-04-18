@@ -114,7 +114,7 @@ void ChartCanvas::requestNextFrame()
         return;
     }
 
-    if (m_autoScrollEnabled && m_chartController && m_chartController->chart())
+    if (m_autoScrollEnabled && chart())
     {
         if (m_playbackController)
         {
@@ -181,5 +181,6 @@ void ChartCanvas::requestNextFrame()
 
     update();
 }
+
 
 

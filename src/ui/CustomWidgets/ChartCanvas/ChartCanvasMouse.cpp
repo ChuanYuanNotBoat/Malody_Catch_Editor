@@ -135,7 +135,7 @@ int computeSmallIrregularDenominatorForColor(const Note &note)
 void ChartCanvas::prepareMoveChanges()
 {
     m_moveChanges.clear();
-    const auto &notes = m_chartController->chart()->notes();
+    const auto &notes = chart()->notes();
     for (int idx : m_originalSelectedIndices)
     {
         if (idx >= 0 && idx < notes.size())
@@ -197,7 +197,9 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
     }
     const double appliedDeltaX = m_moveDeltaXRaw;
 
-    QVector<Note> &notes = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+    QVector<Note> *notes = mutableNotes();
+    if (!notes)
+        return;
     QList<int> selectedList = m_originalSelectedIndices.values();
 
     for (int idx : selectedList)
@@ -222,7 +224,7 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
             MathUtils::floatToBeat(newEndBeat, newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
         }
 
-        notes[idx] = newNote;
+        (*notes)[idx] = newNote;
     }
 
     m_noteDataDirty = true;
@@ -260,7 +262,9 @@ void ChartCanvas::endMoveSelection()
     }
     const double finalAppliedDeltaX = m_moveDeltaXRaw;
 
-    QVector<Note> &notes = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+    QVector<Note> *notes = mutableNotes();
+    if (!notes)
+        return;
     QList<int> selectedList = m_originalSelectedIndices.values();
     for (int idx : selectedList)
     {
@@ -285,11 +289,11 @@ void ChartCanvas::endMoveSelection()
             MathUtils::floatToBeat(newEndBeat, snappedNote.endBeatNum, snappedNote.endNumerator, snappedNote.endDenominator);
         }
 
-        notes[idx] = snappedNote;
+        (*notes)[idx] = snappedNote;
     }
 
     QList<QPair<Note, Note>> finalChanges;
-    const auto &notesNow = m_chartController->chart()->notes();
+    const auto &notesNow = chart()->notes();
     for (int idx : m_originalSelectedIndices)
     {
         const Note &currentNote = notesNow[idx];
@@ -370,11 +374,11 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
                 Note startNote = posToNote(m_rainStartPos);
                 Note endNote = posToNote(endPos);
                 double startTime = MathUtils::beatToMs(startNote.beatNum, startNote.numerator, startNote.denominator,
-                                                       m_chartController->chart()->bpmList(),
-                                                       m_chartController->chart()->meta().offset);
+                                                       chart()->bpmList(),
+                                                       chart()->meta().offset);
                 double endTime = MathUtils::beatToMs(endNote.beatNum, endNote.numerator, endNote.denominator,
-                                                     m_chartController->chart()->bpmList(),
-                                                     m_chartController->chart()->meta().offset);
+                                                     chart()->bpmList(),
+                                                     chart()->meta().offset);
                 if (endTime > startTime)
                 {
                     Note rainNote(startNote.beatNum, startNote.numerator, startNote.denominator,
@@ -402,7 +406,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
         {
             if (m_currentMode == Delete)
             {
-                const auto &notes = m_chartController->chart()->notes();
+                const auto &notes = chart()->notes();
                 if (hitIndex >= 0 && hitIndex < notes.size())
                 {
                     QVector<Note> noteToDelete;
@@ -452,9 +456,9 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
         QMenu *colorMenu = menu.addMenu(tr("Edit Color (By Division)"));
         colorMenu->setEnabled(false);
 
-        if (m_chartController && m_chartController->chart())
+        if (chart())
         {
-            const QVector<Note> &notes = m_chartController->chart()->notes();
+            const QVector<Note> &notes = chart()->notes();
             QVector<int> targetIndices;
             const int hitIndex = hitTestNote(event->pos());
             const QSet<int> selected = m_selectionController ? m_selectionController->selectedIndices() : QSet<int>();
@@ -516,16 +520,18 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
                         QAction *act = colorMenu->addAction(tr(option.label));
                         connect(act, &QAction::triggered, this, [this, targetIndices, option]()
                                 {
-                            if (!m_chartController || !m_chartController->chart())
+                            if (!chart())
                                 return;
 
-                            QVector<Note> &notesRef = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+                            QVector<Note> *notesRef = mutableNotes();
+                            if (!notesRef)
+                                return;
                             QList<QPair<Note, Note>> changes;
                             for (int idx : targetIndices)
                             {
-                                if (idx < 0 || idx >= notesRef.size())
+                                if (idx < 0 || idx >= notesRef->size())
                                     continue;
-                                const Note &original = notesRef[idx];
+                                const Note &original = (*notesRef)[idx];
                                 if (original.type == NoteType::SOUND)
                                     continue;
 
@@ -557,16 +563,18 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
                 QAction *minimalIrregularAction = colorMenu->addAction(tr("Minimal Irregular (Red)"));
                 connect(minimalIrregularAction, &QAction::triggered, this, [this, targetIndices]()
                         {
-                    if (!m_chartController || !m_chartController->chart())
+                    if (!chart())
                         return;
 
-                    QVector<Note> &notesRef = const_cast<QVector<Note> &>(m_chartController->chart()->notes());
+                    QVector<Note> *notesRef = mutableNotes();
+                    if (!notesRef)
+                        return;
                     QList<QPair<Note, Note>> changes;
                     for (int idx : targetIndices)
                     {
-                        if (idx < 0 || idx >= notesRef.size())
+                        if (idx < 0 || idx >= notesRef->size())
                             continue;
-                        const Note &original = notesRef[idx];
+                        const Note &original = (*notesRef)[idx];
                         if (original.type == NoteType::SOUND)
                             continue;
 
@@ -632,7 +640,7 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
     if (m_isSelecting)
     {
         QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
-        m_selectionController->selectInRect(rect, m_chartController->chart()->notes(),
+        m_selectionController->selectInRect(rect, chart()->notes(),
                                             [this](const Note &note)
                                             { return noteToPos(note); });
         m_isSelecting = false;
@@ -684,10 +692,10 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
         update();
         emit scrollPositionChanged(m_scrollBeat);
 
-        if (m_chartController && m_chartController->chart())
+        if (chart())
         {
-            const auto &bpmList = m_chartController->chart()->bpmList();
-            int offset = m_chartController->chart()->meta().offset;
+            const auto &bpmList = chart()->bpmList();
+            int offset = chart()->meta().offset;
 
             double baselineRatio = 0.8;
             double baselineBeat;
@@ -709,6 +717,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
 
     startSnapTimer();
 }
+
 
 
 

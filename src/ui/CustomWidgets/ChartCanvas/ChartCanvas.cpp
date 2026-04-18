@@ -128,23 +128,39 @@ ChartCanvas::~ChartCanvas()
     delete m_backgroundRenderer;
 }
 
+const Chart *ChartCanvas::chart() const
+{
+    return m_chartController ? chart() : nullptr;
+}
+
+Chart *ChartCanvas::chart()
+{
+    return m_chartController ? chart() : nullptr;
+}
+
+QVector<Note> *ChartCanvas::mutableNotes()
+{
+    Chart *c = chart();
+    return c ? &c->notes() : nullptr;
+}
+
 void ChartCanvas::rebuildBpmTimeCache()
 {
     m_bpmTimeCache.clear();
-    if (!m_chartController || !m_chartController->chart())
+    if (!chart())
     {
         m_bpmCacheDirty = false;
         return;
     }
 
-    const auto &bpmList = m_chartController->chart()->bpmList();
+    const auto &bpmList = chart()->bpmList();
     if (bpmList.isEmpty())
     {
         m_bpmCacheDirty = false;
         return;
     }
 
-    const int offset = m_chartController->chart()->meta().offset;
+    const int offset = chart()->meta().offset;
     m_bpmTimeCache = MathUtils::buildBpmTimeCache(bpmList, offset);
     m_bpmCacheDirty = false;
 }
@@ -158,7 +174,7 @@ const QVector<MathUtils::BpmCacheEntry> &ChartCanvas::bpmTimeCache()
 
 void ChartCanvas::rebuildNoteTimesCache()
 {
-    if (!m_chartController || !m_chartController->chart())
+    if (!chart())
     {
         m_noteBeatPositions.clear();
         m_noteEndBeatPositions.clear();
@@ -171,8 +187,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteDataDirty = false;
         return;
     }
-    const auto &notes = m_chartController->chart()->notes();
-    const auto &bpmList = m_chartController->chart()->bpmList();
+    const auto &notes = chart()->notes();
+    const auto &bpmList = chart()->bpmList();
 
     if (bpmList.isEmpty())
     {
@@ -396,12 +412,12 @@ void ChartCanvas::setGridSnap(bool snap)
 
 void ChartCanvas::setScrollPos(double timeMs)
 {
-    if (!m_chartController || !m_chartController->chart())
+    if (!chart())
         return;
 
     int beatNum, numerator, denominator;
-    MathUtils::msToBeat(timeMs, m_chartController->chart()->bpmList(),
-                        m_chartController->chart()->meta().offset,
+    MathUtils::msToBeat(timeMs, chart()->bpmList(),
+                        chart()->meta().offset,
                         beatNum, numerator, denominator);
     m_scrollBeat = beatNum + static_cast<double>(numerator) / denominator;
     update();
@@ -444,6 +460,7 @@ void ChartCanvas::setNoteSoundVolume(int volumePercent)
         return;
     m_noteSoundPlayer->setVolumePercent(volumePercent);
 }
+
 
 
 
