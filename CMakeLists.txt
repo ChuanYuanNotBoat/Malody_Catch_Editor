@@ -69,7 +69,13 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Multimedia
 )
 
-if(WIN32)
+set(_default_enable_windeployqt ON)
+if(DEFINED ENV{CI} AND "$ENV{CI}" STREQUAL "true")
+    set(_default_enable_windeployqt OFF)
+endif()
+option(CATCHEDITOR_ENABLE_WINDEPLOYQT "Deploy Qt runtime with windeployqt after build (Windows only)." ${_default_enable_windeployqt})
+
+if(WIN32 AND CATCHEDITOR_ENABLE_WINDEPLOYQT)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     if(QT_QMAKE_EXECUTABLE)
         get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
