@@ -321,6 +321,188 @@ void ChartCanvas::endMoveSelection()
     update();
 }
 
+QVector<int> ChartCanvas::collectColorTargetIndices(const QPoint &pos) const
+{
+    QVector<int> targetIndices;
+    if (!chart())
+        return targetIndices;
+
+    const QVector<Note> &notes = chart()->notes();
+    const int hitIndex = hitTestNote(pos);
+    const QSet<int> selected = m_selectionController ? m_selectionController->selectedIndices() : QSet<int>();
+
+    auto appendFiltered = [&notes, &targetIndices](const QSet<int> &indices)
+    {
+        QList<int> sorted = indices.values();
+        std::sort(sorted.begin(), sorted.end());
+        for (int idx : sorted)
+        {
+            if (idx >= 0 && idx < notes.size() && notes[idx].type != NoteType::SOUND)
+                targetIndices.append(idx);
+        }
+    };
+
+    if (hitIndex >= 0 && hitIndex < notes.size())
+    {
+        if (!selected.isEmpty() && selected.contains(hitIndex))
+        {
+            appendFiltered(selected);
+        }
+        else if (notes[hitIndex].type != NoteType::SOUND)
+        {
+            targetIndices.append(hitIndex);
+        }
+    }
+    else if (!selected.isEmpty())
+    {
+        appendFiltered(selected);
+    }
+
+    return targetIndices;
+}
+
+void ChartCanvas::populateColorMenu(QMenu *colorMenu, const QVector<int> &targetIndices)
+{
+    if (!colorMenu || targetIndices.isEmpty() || !chart())
+        return;
+
+    const QVector<Note> &notes = chart()->notes();
+    QVector<int> availableDenominators;
+    for (const ColorDivisionOption &option : kColorDivisionOptions)
+    {
+        bool allConvertible = true;
+        for (int idx : targetIndices)
+        {
+            if (!isNoteConvertibleToDenominator(notes[idx], option.denominator))
+            {
+                allConvertible = false;
+                break;
+            }
+        }
+        if (allConvertible)
+            availableDenominators.append(option.denominator);
+    }
+
+    if (!availableDenominators.isEmpty())
+    {
+        colorMenu->setEnabled(true);
+        for (const ColorDivisionOption &option : kColorDivisionOptions)
+        {
+            if (!availableDenominators.contains(option.denominator))
+                continue;
+
+            QAction *act = colorMenu->addAction(tr(option.label));
+            connect(act, &QAction::triggered, this, [this, targetIndices, option]()
+                    {
+                if (!chart())
+                    return;
+
+                QVector<Note> *notesRef = mutableNotes();
+                if (!notesRef)
+                    return;
+                QList<QPair<Note, Note>> changes;
+                for (int idx : targetIndices)
+                {
+                    if (idx < 0 || idx >= notesRef->size())
+                        continue;
+                    const Note &original = (*notesRef)[idx];
+                    if (original.type == NoteType::SOUND)
+                        continue;
+
+                    Note updated = original;
+                    if (!convertBeatDenExactly(original.beatNum, original.numerator, original.denominator,
+                                                option.denominator, updated.beatNum, updated.numerator, updated.denominator))
+                        continue;
+                    if (original.type == NoteType::RAIN)
+                    {
+                        if (!convertBeatDenExactly(original.endBeatNum, original.endNumerator, original.endDenominator,
+                                                    option.denominator, updated.endBeatNum, updated.endNumerator, updated.endDenominator))
+                            continue;
+                    }
+
+                    if (!(updated == original))
+                        changes.append(qMakePair(original, updated));
+                }
+
+                if (!changes.isEmpty())
+                {
+                    m_chartController->moveNotes(changes);
+                    emit statusMessage(tr("Color division changed to %1 for %2 note(s).")
+                                            .arg(option.denominator)
+                                            .arg(changes.size()));
+                } });
+        }
+    }
+
+    QAction *minimalIrregularAction = colorMenu->addAction(tr("Minimal Irregular (Red)"));
+    connect(minimalIrregularAction, &QAction::triggered, this, [this, targetIndices]()
+            {
+        if (!chart())
+            return;
+
+        QVector<Note> *notesRef = mutableNotes();
+        if (!notesRef)
+            return;
+        QList<QPair<Note, Note>> changes;
+        for (int idx : targetIndices)
+        {
+            if (idx < 0 || idx >= notesRef->size())
+                continue;
+            const Note &original = (*notesRef)[idx];
+            if (original.type == NoteType::SOUND)
+                continue;
+
+            const int targetDen = computeSmallIrregularDenominatorForColor(original);
+
+            Note updated = original;
+            if (!convertBeatDenExactly(original.beatNum, original.numerator, original.denominator,
+                                        targetDen, updated.beatNum, updated.numerator, updated.denominator))
+                continue;
+            if (original.type == NoteType::RAIN)
+            {
+                if (!convertBeatDenExactly(original.endBeatNum, original.endNumerator, original.endDenominator,
+                                            targetDen, updated.endBeatNum, updated.endNumerator, updated.endDenominator))
+                    continue;
+            }
+
+            if (!(updated == original))
+                changes.append(qMakePair(original, updated));
+        }
+
+        if (!changes.isEmpty())
+        {
+            m_chartController->moveNotes(changes);
+            emit statusMessage(tr("Applied minimal irregular denominator for %1 note(s).")
+                                    .arg(changes.size()));
+        } });
+    minimalIrregularAction->setEnabled(true);
+    colorMenu->setEnabled(true);
+}
+
+void ChartCanvas::showRightClickMenu(QMouseEvent *event)
+{
+    QMenu menu(this);
+    QAction *playFromRefAction = menu.addAction(tr("Play from Reference Time"));
+    QAction *pasteAction = menu.addAction(tr("Paste"));
+    pasteAction->setEnabled(m_selectionController && !m_selectionController->getClipboard().isEmpty());
+    QMenu *colorMenu = menu.addMenu(tr("Edit Color (By Division)"));
+    colorMenu->setEnabled(false);
+
+    const QVector<int> targetIndices = collectColorTargetIndices(event->pos());
+    if (!targetIndices.isEmpty())
+        populateColorMenu(colorMenu, targetIndices);
+
+    QAction *selectedAction = menu.exec(event->globalPos());
+    if (selectedAction == playFromRefAction)
+    {
+        playFromReferenceLine();
+    }
+    else if (selectedAction == pasteAction)
+    {
+        pasteAtCursor(event->pos());
+    }
+}
+
 void ChartCanvas::mousePressEvent(QMouseEvent *event)
 {
     if (m_intervalState != IntervalNone)
@@ -449,172 +631,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
     }
     else if (event->button() == Qt::RightButton)
     {
-        QMenu menu(this);
-        QAction *playFromRefAction = menu.addAction(tr("Play from Reference Time"));
-        QAction *pasteAction = menu.addAction(tr("Paste"));
-        pasteAction->setEnabled(m_selectionController && !m_selectionController->getClipboard().isEmpty());
-        QMenu *colorMenu = menu.addMenu(tr("Edit Color (By Division)"));
-        colorMenu->setEnabled(false);
-
-        if (chart())
-        {
-            const QVector<Note> &notes = chart()->notes();
-            QVector<int> targetIndices;
-            const int hitIndex = hitTestNote(event->pos());
-            const QSet<int> selected = m_selectionController ? m_selectionController->selectedIndices() : QSet<int>();
-
-            if (hitIndex >= 0 && hitIndex < notes.size())
-            {
-                if (!selected.isEmpty() && selected.contains(hitIndex))
-                {
-                    QList<int> sorted = selected.values();
-                    std::sort(sorted.begin(), sorted.end());
-                    for (int idx : sorted)
-                    {
-                        if (idx >= 0 && idx < notes.size() && notes[idx].type != NoteType::SOUND)
-                            targetIndices.append(idx);
-                    }
-                }
-                else if (notes[hitIndex].type != NoteType::SOUND)
-                {
-                    targetIndices.append(hitIndex);
-                }
-            }
-            else if (!selected.isEmpty())
-            {
-                QList<int> sorted = selected.values();
-                std::sort(sorted.begin(), sorted.end());
-                for (int idx : sorted)
-                {
-                    if (idx >= 0 && idx < notes.size() && notes[idx].type != NoteType::SOUND)
-                        targetIndices.append(idx);
-                }
-            }
-
-            if (!targetIndices.isEmpty())
-            {
-                QVector<int> availableDenominators;
-                for (const ColorDivisionOption &option : kColorDivisionOptions)
-                {
-                    bool allConvertible = true;
-                    for (int idx : targetIndices)
-                    {
-                        if (!isNoteConvertibleToDenominator(notes[idx], option.denominator))
-                        {
-                            allConvertible = false;
-                            break;
-                        }
-                    }
-                    if (allConvertible)
-                        availableDenominators.append(option.denominator);
-                }
-
-                if (!availableDenominators.isEmpty())
-                {
-                    colorMenu->setEnabled(true);
-                    for (const ColorDivisionOption &option : kColorDivisionOptions)
-                    {
-                        if (!availableDenominators.contains(option.denominator))
-                            continue;
-
-                        QAction *act = colorMenu->addAction(tr(option.label));
-                        connect(act, &QAction::triggered, this, [this, targetIndices, option]()
-                                {
-                            if (!chart())
-                                return;
-
-                            QVector<Note> *notesRef = mutableNotes();
-                            if (!notesRef)
-                                return;
-                            QList<QPair<Note, Note>> changes;
-                            for (int idx : targetIndices)
-                            {
-                                if (idx < 0 || idx >= notesRef->size())
-                                    continue;
-                                const Note &original = (*notesRef)[idx];
-                                if (original.type == NoteType::SOUND)
-                                    continue;
-
-                                Note updated = original;
-                                if (!convertBeatDenExactly(original.beatNum, original.numerator, original.denominator,
-                                                           option.denominator, updated.beatNum, updated.numerator, updated.denominator))
-                                    continue;
-                                if (original.type == NoteType::RAIN)
-                                {
-                                    if (!convertBeatDenExactly(original.endBeatNum, original.endNumerator, original.endDenominator,
-                                                               option.denominator, updated.endBeatNum, updated.endNumerator, updated.endDenominator))
-                                        continue;
-                                }
-
-                                if (!(updated == original))
-                                    changes.append(qMakePair(original, updated));
-                            }
-
-                            if (!changes.isEmpty())
-                            {
-                                m_chartController->moveNotes(changes);
-                                emit statusMessage(tr("Color division changed to %1 for %2 note(s).")
-                                                       .arg(option.denominator)
-                                                       .arg(changes.size()));
-                            } });
-                    }
-                }
-
-                QAction *minimalIrregularAction = colorMenu->addAction(tr("Minimal Irregular (Red)"));
-                connect(minimalIrregularAction, &QAction::triggered, this, [this, targetIndices]()
-                        {
-                    if (!chart())
-                        return;
-
-                    QVector<Note> *notesRef = mutableNotes();
-                    if (!notesRef)
-                        return;
-                    QList<QPair<Note, Note>> changes;
-                    for (int idx : targetIndices)
-                    {
-                        if (idx < 0 || idx >= notesRef->size())
-                            continue;
-                        const Note &original = (*notesRef)[idx];
-                        if (original.type == NoteType::SOUND)
-                            continue;
-
-                        const int targetDen = computeSmallIrregularDenominatorForColor(original);
-
-                        Note updated = original;
-                        if (!convertBeatDenExactly(original.beatNum, original.numerator, original.denominator,
-                                                   targetDen, updated.beatNum, updated.numerator, updated.denominator))
-                            continue;
-                        if (original.type == NoteType::RAIN)
-                        {
-                            if (!convertBeatDenExactly(original.endBeatNum, original.endNumerator, original.endDenominator,
-                                                       targetDen, updated.endBeatNum, updated.endNumerator, updated.endDenominator))
-                                continue;
-                        }
-
-                        if (!(updated == original))
-                            changes.append(qMakePair(original, updated));
-                    }
-
-                    if (!changes.isEmpty())
-                    {
-                        m_chartController->moveNotes(changes);
-                        emit statusMessage(tr("Applied minimal irregular denominator for %1 note(s).")
-                                               .arg(changes.size()));
-                    } });
-                minimalIrregularAction->setEnabled(true);
-                colorMenu->setEnabled(true);
-            }
-        }
-
-        QAction *selectedAction = menu.exec(event->globalPos());
-        if (selectedAction == playFromRefAction)
-        {
-            playFromReferenceLine();
-        }
-        else if (selectedAction == pasteAction)
-        {
-            pasteAtCursor(event->pos());
-        }
+        showRightClickMenu(event);
     }
 }
 

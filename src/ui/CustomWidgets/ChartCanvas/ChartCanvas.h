@@ -23,6 +23,7 @@ class Skin;
 class PlaybackController;
 class NoteSoundPlayer;
 class Chart;
+class QMenu;
 
 class ChartCanvas : public QWidget
 {
@@ -125,6 +126,9 @@ private:
     void updateMoveSelection(const QPointF &currentPos);
     void endMoveSelection();
     void prepareMoveChanges();
+    void showRightClickMenu(QMouseEvent *event);
+    QVector<int> collectColorTargetIndices(const QPoint &pos) const;
+    void populateColorMenu(QMenu *colorMenu, const QVector<int> &targetIndices);
 
     void snapPlayheadToGrid();
     void startSnapTimer();
