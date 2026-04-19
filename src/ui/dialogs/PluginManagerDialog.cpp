@@ -13,6 +13,7 @@
 #include <QTextEdit>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QStandardPaths>
 
 namespace
 {
@@ -91,7 +92,17 @@ void PluginManagerDialog::openPluginsFolder()
     if (m_pluginManager)
         path = m_pluginManager->pluginsDir();
     if (path.isEmpty())
+    {
+#if defined(Q_OS_ANDROID)
+        const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        if (!appData.isEmpty())
+            path = appData + "/plugins";
+        else
+            path = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/plugins";
+#else
         path = QCoreApplication::applicationDirPath() + "/plugins";
+#endif
+    }
 
     if (!QDir(path).exists())
     {

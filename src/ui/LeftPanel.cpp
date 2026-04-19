@@ -138,6 +138,9 @@ void LeftPanel::setChartCanvas(ChartCanvas *canvas)
 
 void LeftPanel::setPluginQuickActions(const QList<PluginQuickAction> &actions)
 {
+    const bool prevUpdates = updatesEnabled();
+    setUpdatesEnabled(false);
+
     while (QLayoutItem *item = m_pluginButtonsLayout->takeAt(0))
     {
         if (item->widget())
@@ -153,6 +156,8 @@ void LeftPanel::setPluginQuickActions(const QList<PluginQuickAction> &actions)
         QPushButton *btn = new QPushButton(a.title, m_pluginSectionContainer);
         if (!a.tooltip.isEmpty())
             btn->setToolTip(a.tooltip);
+        btn->setMinimumWidth(0);
+        btn->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         connect(btn, &QPushButton::clicked, this, [this, a]()
                 { emit pluginQuickActionTriggered(a.pluginId, a.actionId); });
         m_pluginButtonsLayout->addWidget(btn);
@@ -161,6 +166,10 @@ void LeftPanel::setPluginQuickActions(const QList<PluginQuickAction> &actions)
     const bool hasActions = (m_pluginButtonsLayout->count() > 0);
     m_pluginSectionLabel->setVisible(hasActions);
     m_pluginSectionContainer->setVisible(hasActions);
+
+    setUpdatesEnabled(prevUpdates);
+    updateGeometry();
+    update();
 }
 
 void LeftPanel::retranslateUi()

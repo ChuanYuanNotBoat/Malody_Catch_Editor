@@ -27,6 +27,12 @@ class QMenu;
 class ChartCanvas;
 class QToolBar;
 class QDialog;
+class QDockWidget;
+class QTabWidget;
+class QScrollArea;
+class QQuickWidget;
+class QObject;
+class QTimer;
 
 class MainWindow::Private
 {
@@ -62,7 +68,20 @@ public:
     QAction *notePanelAction = nullptr;
     QAction *bpmPanelAction = nullptr;
     QAction *metaPanelAction = nullptr;
+    QAction *mobileUiTestAction = nullptr;
     QToolBar *mainToolBar = nullptr;
+    QWidget *mobileShell = nullptr;
+    QQuickWidget *mobilePrimaryBar = nullptr;
+    QObject *mobilePrimaryBarRoot = nullptr;
+    QDockWidget *leftDock = nullptr;
+    QDockWidget *rightDock = nullptr;
+    QTabWidget *mobileTabs = nullptr;
+    QWidget *mobileCanvasHost = nullptr;
+    QScrollArea *mobileLeftPanelHost = nullptr;
+    QScrollArea *mobileRightPanelHost = nullptr;
+    QTimer *mobileSplitterSettleTimer = nullptr;
+    bool mobileSplitterSuppressCanvasUpdates = false;
+    bool compactUiMode = false;
     QMenu *languageMenu = nullptr;
     QActionGroup *languageActionGroup = nullptr;
     QList<QAction *> pluginToolbarActions;

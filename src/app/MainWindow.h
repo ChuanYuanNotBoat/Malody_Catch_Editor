@@ -19,6 +19,8 @@ class BPMTimePanel;
 class MetaEditPanel;
 class QToolBar;
 class QAction;
+class QWidget;
+class QTabWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -65,6 +67,14 @@ private slots:
     void changeNoteSound(const QString &soundPath);
     void changeLanguage();
     void configureShortcuts();
+    void toggleMobileUiTestMode(bool enabled);
+    void openMobileFunctionHub();
+    void toggleMobileLeftPanel();
+    void toggleMobileRightPanel();
+    void showMobileNotePanel();
+    void showMobileBpmPanel();
+    void showMobileMetaPanel();
+    void showMobileEditor();
 
 private:
     void setupUi();
@@ -85,6 +95,11 @@ private:
     void registerShortcutAction(QAction *action, const QString &actionId, const QKeySequence &defaultShortcut);
     QString beatmapRootPath() const; // Return beatmap root directory.
     void applySidebarTheme();
+    bool useCompactMobileLayout() const;
+    void setupMobileCentralArea(QWidget *canvasContainer);
+    void populateMobilePrimaryToolbar();
+    void showEditorPanel(QWidget *panel);
+    void retranslateMobileUi();
 
     class Private;
     Private *d;

@@ -34,6 +34,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QGuiApplication>
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QDir>
@@ -52,6 +53,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QSysInfo>
+#include <QProcess>
 #include <QGroupBox>
 #include <QFile>
 #include <QTextStream>
@@ -63,6 +65,7 @@
 #include <QScrollBar>
 #include <QSet>
 #include <QTimer>
+#include <QScreen>
 #include <algorithm>
 
 namespace
@@ -353,7 +356,19 @@ MainWindow::~MainWindow()
 void MainWindow::setupUi()
 {
     setWindowTitle(tr("Catch Chart Editor"));
-    resize(1200, 800);
+    if (useCompactMobileLayout())
+    {
+        const QScreen *screen = QGuiApplication::primaryScreen();
+        if (screen)
+            resize(screen->availableGeometry().size());
+        else
+            resize(1080, 1920);
+        setMinimumSize(0, 0);
+    }
+    else
+    {
+        resize(1200, 800);
+    }
     Logger::debug("MainWindow UI setup completed");
 }
 
@@ -490,6 +505,13 @@ void MainWindow::createMenus()
     settingsMenu->addSeparator();
     QAction *shortcutSettingsAction = settingsMenu->addAction(tr("Keyboard Shortcuts..."));
     connect(shortcutSettingsAction, &QAction::triggered, this, &MainWindow::configureShortcuts);
+#if !defined(Q_OS_ANDROID)
+    settingsMenu->addSeparator();
+    d->mobileUiTestAction = settingsMenu->addAction(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
+    d->mobileUiTestAction->setCheckable(true);
+    d->mobileUiTestAction->setChecked(Settings::instance().mobileUiTestMode());
+    connect(d->mobileUiTestAction, &QAction::toggled, this, &MainWindow::toggleMobileUiTestMode);
+#endif
     settingsMenu->addSeparator();
     d->languageMenu = settingsMenu->addMenu(tr("Language"));
     d->languageActionGroup = new QActionGroup(this);
@@ -545,6 +567,10 @@ void MainWindow::createMenus()
     populateSkinMenu();
     d->noteSoundMenu = menuBar()->addMenu(tr("Note &Sound"));
     populateNoteSoundMenu();
+    if (useCompactMobileLayout() && menuBar())
+    {
+        menuBar()->setVisible(false);
+    }
     applySidebarTheme();
 
     Logger::debug("Menus created");
@@ -667,6 +693,7 @@ void MainWindow::createCentralArea()
 {
     Logger::debug("Creating central area...");
 
+    d->mobileTabs = nullptr;
     d->leftPanel = new LeftPanel(this);
     d->leftPanel->setObjectName("leftPanelRoot");
     d->leftPanel->setAttribute(Qt::WA_StyledBackground, true);
@@ -786,32 +813,31 @@ void MainWindow::createCentralArea()
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
 
-    d->splitter = new QSplitter(Qt::Horizontal, this);
-    d->splitter->addWidget(d->leftPanel);
-    d->splitter->addWidget(canvasContainer);
-    d->splitter->addWidget(d->rightPanelContainer);
-    d->splitter->setSizes({150, 800, 300});
-    setCentralWidget(d->splitter);
-
-    d->mainToolBar = addToolBar(tr("Tools"));
-    d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
-                                                   {
-        d->notePanel->setVisible(true);
-        d->bpmPanel->setVisible(false);
-        d->metaPanel->setVisible(false);
-        d->currentRightPanel = d->notePanel; });
-    d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
-                                                  {
-        d->notePanel->setVisible(false);
-        d->bpmPanel->setVisible(true);
-        d->metaPanel->setVisible(false);
-        d->currentRightPanel = d->bpmPanel; });
-    d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
-                                                   {
-        d->notePanel->setVisible(false);
-        d->bpmPanel->setVisible(false);
-        d->metaPanel->setVisible(true);
-        d->currentRightPanel = d->metaPanel; });
+    if (useCompactMobileLayout())
+    {
+        setupMobileCentralArea(canvasContainer);
+        populateMobilePrimaryToolbar();
+    }
+    else
+    {
+        d->splitter = new QSplitter(Qt::Horizontal, this);
+        d->splitter->addWidget(d->leftPanel);
+        d->splitter->addWidget(canvasContainer);
+        d->splitter->addWidget(d->rightPanelContainer);
+        d->splitter->setSizes({150, 800, 300});
+        setCentralWidget(d->splitter);
+        d->mainToolBar = addToolBar(tr("Tools"));
+        d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
+                                                       {
+        showEditorPanel(d->notePanel); });
+        d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
+                                                      {
+        showEditorPanel(d->bpmPanel); });
+        d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
+                                                       {
+        showEditorPanel(d->metaPanel); });
+    }
+    showEditorPanel(d->notePanel);
     applySidebarTheme();
 
     Logger::debug("Central area created with LeftPanel.");
@@ -1384,11 +1410,37 @@ void MainWindow::retranslateUi()
         d->skinMenu->setTitle(tr("&Skin"));
     if (d->noteSoundMenu)
         d->noteSoundMenu->setTitle(tr("Note &Sound"));
+    if (d->mobileUiTestAction)
+        d->mobileUiTestAction->setText(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
     populateSkinMenu();
     populateNoteSoundMenu();
     populatePluginToolsMenu();
+    retranslateMobileUi();
     applySidebarTheme();
     Logger::debug("UI retranslated");
+}
+
+void MainWindow::showEditorPanel(QWidget *panel)
+{
+    if (!panel)
+        return;
+
+    d->notePanel->setVisible(panel == d->notePanel);
+    d->bpmPanel->setVisible(panel == d->bpmPanel);
+    d->metaPanel->setVisible(panel == d->metaPanel);
+    if (panel == d->notePanel)
+        d->currentRightPanel = d->notePanel;
+    else if (panel == d->bpmPanel)
+        d->currentRightPanel = d->bpmPanel;
+    else if (panel == d->metaPanel)
+        d->currentRightPanel = d->metaPanel;
+
+    if (useCompactMobileLayout())
+    {
+        if (d->rightPanelContainer)
+            d->rightPanelContainer->setVisible(true);
+        retranslateMobileUi();
+    }
 }
 
 // ==================== Paste 288 division option slot ====================
@@ -1396,6 +1448,52 @@ void MainWindow::togglePaste288Division(bool enabled)
 {
     Settings::instance().setPasteUse288Division(enabled);
     Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+void MainWindow::toggleMobileUiTestMode(bool enabled)
+{
+#if defined(Q_OS_ANDROID)
+    Q_UNUSED(enabled);
+    return;
+#else
+    if (Settings::instance().mobileUiTestMode() == enabled)
+        return;
+
+    Settings::instance().setMobileUiTestMode(enabled);
+    Logger::info(QString("Mobile UI test mode toggled to %1").arg(enabled ? "enabled" : "disabled"));
+
+    QMessageBox prompt(this);
+    prompt.setIcon(QMessageBox::Question);
+    prompt.setWindowTitle(tr("Restart Required"));
+    prompt.setText(tr("Mobile UI test mode was %1.")
+                       .arg(enabled ? tr("enabled") : tr("disabled")));
+    prompt.setInformativeText(tr("This debug option applies after restart. Restart now?"));
+
+    QPushButton *restartNowBtn = prompt.addButton(tr("Restart Now"), QMessageBox::AcceptRole);
+    QPushButton *laterBtn = prompt.addButton(tr("Later"), QMessageBox::RejectRole);
+    Q_UNUSED(laterBtn);
+    prompt.exec();
+
+    if (prompt.clickedButton() != restartNowBtn)
+    {
+        statusBar()->showMessage(tr("Mobile UI test mode will apply after restart."), 3000);
+        return;
+    }
+
+    QStringList args = QCoreApplication::arguments();
+    if (!args.isEmpty())
+        args.removeFirst();
+
+    const QString executable = QCoreApplication::applicationFilePath();
+    const QString workDir = QFileInfo(executable).absolutePath();
+    if (!QProcess::startDetached(executable, args, workDir))
+    {
+        QMessageBox::warning(this, tr("Restart Failed"), tr("Unable to restart automatically. Please relaunch manually."));
+        return;
+    }
+
+    qApp->quit();
+#endif
 }
 
 void MainWindow::changeLanguage()

@@ -9,6 +9,8 @@
 #include <QJsonArray>
 #include <QDebug>
 #include <QDateTime>
+#include <algorithm>
+#include <cmath>
 
 bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
 {
@@ -65,6 +67,15 @@ bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
             int num = beatArr[1].toInt();
             int den = beatArr[2].toInt();
             double bpm = obj["bpm"].toDouble();
+            if (den <= 0 || !std::isfinite(bpm) || bpm <= 0.0)
+            {
+                Logger::warn(QString("ChartIO::load - Skip invalid BPM entry at beat [%1,%2,%3], bpm=%4")
+                                 .arg(beatNum)
+                                 .arg(num)
+                                 .arg(den)
+                                 .arg(bpm));
+                continue;
+            }
             outChart.addBpm(BpmEntry(beatNum, num, den, bpm));
             bpmCount++;
         }
@@ -112,6 +123,12 @@ bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
             int num = beatArr[1].toInt();
             int den = beatArr[2].toInt();
             int type = obj.value("type").toInt(0);
+            if (den <= 0)
+            {
+                Logger::warn(QString("ChartIO::load - Note %1: Skipped (invalid beat denominator=%2)").arg(i).arg(den));
+                skippedNoteCount++;
+                continue;
+            }
 
             // 音效音符（type=1）：有 sound 字段，无 x 字段
             if (type == 1 && obj.contains("sound"))
@@ -137,6 +154,13 @@ bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
                     int endBeatNum = endBeatArr[0].toInt();
                     int endNum = endBeatArr[1].toInt();
                     int endDen = endBeatArr[2].toInt();
+                    if (endDen <= 0)
+                    {
+                        Logger::warn(QString("ChartIO::load - Note %1: Skipped (type=3, invalid endbeat denominator=%2)").arg(i).arg(endDen));
+                        skippedNoteCount++;
+                        continue;
+                    }
+                    x = std::clamp(x, 0, 512);
                     outChart.addNote(Note(beatNum, num, den, endBeatNum, endNum, endDen, x));
                     rainNoteCount++;
                     if (Logger::isVerbose())
@@ -163,7 +187,7 @@ bool ChartIO::load(const QString &filePath, Chart &outChart, bool verbose)
             // 普通音符（type=0）：必须有 x 字段
             else if (obj.contains("x"))
             {
-                int x = obj["x"].toInt();
+                int x = std::clamp(obj["x"].toInt(), 0, 512);
                 outChart.addNote(Note(beatNum, num, den, x));
                 normalNoteCount++;
                 if (Logger::isVerbose())
