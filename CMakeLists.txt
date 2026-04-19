@@ -91,6 +91,12 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Multimedia
 )
 
+if(ANDROID)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        QT_ANDROID_SCREEN_ORIENTATION "landscape"
+        QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/android")
+endif()
+
 # Keep existing desktop packaging flow (windeployqt/copy commands), while
 # enabling Qt's Android packaging targets (apk/aab) when building for Android.
 if(COMMAND qt_finalize_executable)

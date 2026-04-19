@@ -15,7 +15,6 @@
 #include <QMenuBar>
 #include <QMenu>
 #include <QPushButton>
-#include <QScrollArea>
 #include <QScreen>
 #include <QSizePolicy>
 #include <QSplitter>
@@ -67,41 +66,8 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         if (d->verticalScrollBar)
             d->verticalScrollBar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 
-        const int leftIndex = d->splitter->indexOf(d->leftPanel);
-        const int rightIndex = d->splitter->indexOf(d->rightPanelContainer);
-
-        if (!d->mobileLeftPanelHost)
-        {
-            d->mobileLeftPanelHost = new QScrollArea(this);
-            d->mobileLeftPanelHost->setObjectName("mobileLeftPanelHost");
-            d->mobileLeftPanelHost->setFrameShape(QFrame::NoFrame);
-            d->mobileLeftPanelHost->setWidgetResizable(true);
-            d->mobileLeftPanelHost->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-            d->mobileLeftPanelHost->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-            d->mobileLeftPanelHost->setMinimumSize(0, 0);
-            d->mobileLeftPanelHost->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-        }
-        if (!d->mobileRightPanelHost)
-        {
-            d->mobileRightPanelHost = new QScrollArea(this);
-            d->mobileRightPanelHost->setObjectName("mobileRightPanelHost");
-            d->mobileRightPanelHost->setFrameShape(QFrame::NoFrame);
-            d->mobileRightPanelHost->setWidgetResizable(true);
-            d->mobileRightPanelHost->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-            d->mobileRightPanelHost->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-            d->mobileRightPanelHost->setMinimumSize(0, 0);
-            d->mobileRightPanelHost->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-        }
-
-        if (leftIndex >= 0 && d->splitter->indexOf(d->mobileLeftPanelHost) < 0)
-            d->splitter->replaceWidget(leftIndex, d->mobileLeftPanelHost);
-        if (rightIndex >= 0 && d->splitter->indexOf(d->mobileRightPanelHost) < 0)
-            d->splitter->replaceWidget(rightIndex, d->mobileRightPanelHost);
-
-        if (d->mobileLeftPanelHost->widget() != d->leftPanel)
-            d->mobileLeftPanelHost->setWidget(d->leftPanel);
-        if (d->mobileRightPanelHost->widget() != d->rightPanelContainer)
-            d->mobileRightPanelHost->setWidget(d->rightPanelContainer);
+        d->mobileLeftPanelHost = nullptr;
+        d->mobileRightPanelHost = nullptr;
 
         if (d->leftPanel)
         {
@@ -131,8 +97,8 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
                                                 ? QGuiApplication::primaryScreen()->availableGeometry().width()
                                                 : 1080;
             const int available = qMax(480, d->splitter->width() > 0 ? d->splitter->width() : fallbackScreenWidth);
-            const int maxSideWidth = qBound(140, available / 3, 320);
-            int sideWidth = qBound(100, available / 5, maxSideWidth);
+            const int maxSideWidth = qBound(120, available / 3, 260);
+            int sideWidth = qBound(80, available / 6, maxSideWidth);
             int canvasWidth = available - sideWidth * 2;
             if (canvasWidth < 220)
             {
@@ -140,10 +106,10 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
                 canvasWidth = qMax(220, available - sideWidth * 2);
             }
 
-            if (d->mobileLeftPanelHost)
-                d->mobileLeftPanelHost->setMaximumWidth(maxSideWidth);
-            if (d->mobileRightPanelHost)
-                d->mobileRightPanelHost->setMaximumWidth(maxSideWidth);
+            if (d->leftPanel)
+                d->leftPanel->setMaximumWidth(maxSideWidth);
+            if (d->rightPanelContainer)
+                d->rightPanelContainer->setMaximumWidth(maxSideWidth);
             d->splitter->setSizes({sideWidth, canvasWidth, sideWidth});
         };
         rebalanceSplitter();
@@ -180,20 +146,18 @@ void MainWindow::populateMobilePrimaryToolbar()
     d->mobileSaveAction = insertPrimaryAction(tr("Save"), &MainWindow::saveChart);
     d->mobilePlayAction = insertPrimaryAction(tr("Play"), &MainWindow::togglePlayback);
     d->mobileToggleLeftPanelAction = insertPrimaryAction(tr("Hide Left"), [this]() {
-        QWidget *leftHost = d->mobileLeftPanelHost ? static_cast<QWidget *>(d->mobileLeftPanelHost) : static_cast<QWidget *>(d->leftPanel);
-        if (!leftHost)
+        if (!d->leftPanel)
             return;
-        const bool shouldShow = !leftHost->isVisible();
-        leftHost->setVisible(shouldShow);
+        const bool shouldShow = !d->leftPanel->isVisible();
+        d->leftPanel->setVisible(shouldShow);
         if (d->mobileToggleLeftPanelAction)
             d->mobileToggleLeftPanelAction->setText(shouldShow ? tr("Hide Left") : tr("Show Left"));
     });
     d->mobileToggleRightPanelAction = insertPrimaryAction(tr("Hide Right"), [this]() {
-        QWidget *rightHost = d->mobileRightPanelHost ? static_cast<QWidget *>(d->mobileRightPanelHost) : static_cast<QWidget *>(d->rightPanelContainer);
-        if (!rightHost)
+        if (!d->rightPanelContainer)
             return;
-        const bool shouldShow = !rightHost->isVisible();
-        rightHost->setVisible(shouldShow);
+        const bool shouldShow = !d->rightPanelContainer->isVisible();
+        d->rightPanelContainer->setVisible(shouldShow);
         if (d->mobileToggleRightPanelAction)
             d->mobileToggleRightPanelAction->setText(shouldShow ? tr("Hide Right") : tr("Show Right"));
     });
@@ -215,9 +179,9 @@ void MainWindow::retranslateMobileUi()
     if (d->mobilePlayAction)
         d->mobilePlayAction->setText(tr("Play"));
     if (d->mobileToggleLeftPanelAction)
-        d->mobileToggleLeftPanelAction->setText((d->mobileLeftPanelHost && d->mobileLeftPanelHost->isVisible()) ? tr("Hide Left") : tr("Show Left"));
+        d->mobileToggleLeftPanelAction->setText((d->leftPanel && d->leftPanel->isVisible()) ? tr("Hide Left") : tr("Show Left"));
     if (d->mobileToggleRightPanelAction)
-        d->mobileToggleRightPanelAction->setText((d->mobileRightPanelHost && d->mobileRightPanelHost->isVisible()) ? tr("Hide Right") : tr("Show Right"));
+        d->mobileToggleRightPanelAction->setText((d->rightPanelContainer && d->rightPanelContainer->isVisible()) ? tr("Hide Right") : tr("Show Right"));
     if (d->mobileFunctionsAction)
         d->mobileFunctionsAction->setText(tr("Functions"));
 }
