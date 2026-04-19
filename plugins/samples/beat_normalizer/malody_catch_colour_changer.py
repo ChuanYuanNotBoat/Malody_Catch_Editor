@@ -1,4 +1,4 @@
-import json
+﻿import json
 import locale
 import math
 import os
@@ -33,7 +33,6 @@ TRANSLATIONS = {
         "en": "This will format note colors in the current chart. Continue?",
     },
 }
-
 
 def normalize_lang(value, default="zh"):
     if not isinstance(value, str) or not value.strip():
@@ -347,3 +346,4 @@ if __name__ == "__main__":
     if "--plugin" in sys.argv:
         sys.exit(run_process_plugin())
     sys.exit(run_standalone())
+

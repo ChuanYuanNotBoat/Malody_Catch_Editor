@@ -1,9 +1,9 @@
 #include "PluginManager.h"
 #include "file/PluginLoader.h"
-#include "plugin/BuiltinBeatNormalizerPlugin.h"
 #include "utils/Logger.h"
 #include "utils/Settings.h"
 #include <QLocale>
+#include <QSet>
 #include <exception>
 
 namespace
@@ -53,25 +53,11 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
     try
     {
         QVector<PluginInterface *> loaded = PluginLoader::loadPlugins(pluginsDir);
-#if defined(Q_OS_ANDROID)
-        bool hasBuiltinEquivalent = false;
-        for (PluginInterface *plugin : loaded)
-        {
-            if (!plugin)
-                continue;
-            if (plugin->pluginId() == QStringLiteral("tool.beat_normalizer.py"))
-            {
-                hasBuiltinEquivalent = true;
-                break;
-            }
-        }
-        if (!hasBuiltinEquivalent)
-            loaded.append(new BuiltinBeatNormalizerPlugin());
-#endif
         Logger::info(QString("Discovered %1 plugin candidates.").arg(loaded.size()));
 
         QVector<PluginInterface *> rejected;
         const QString locale = currentLocale();
+        QSet<QString> seenPluginIdsLower;
 
         for (int i = 0; i < loaded.size(); ++i)
         {
@@ -91,6 +77,20 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
             info.capabilities = p->capabilities();
             info.sourcePath = PluginLoader::pluginSourcePath(p);
             info.enabled = isPluginEnabled(info.pluginId);
+            const QString pluginIdKey = info.pluginId.trimmed().toLower();
+
+            if (!pluginIdKey.isEmpty() && seenPluginIdsLower.contains(pluginIdKey))
+            {
+                info.active = false;
+                info.loadError = QString("Duplicate plugin id: %1").arg(info.pluginId);
+                rejected.append(p);
+                m_pluginInfos.append(info);
+                Logger::warn(QString("Plugin '%1' skipped: duplicate plugin id.")
+                                 .arg(info.displayName.isEmpty() ? info.pluginId : info.displayName));
+                continue;
+            }
+            if (!pluginIdKey.isEmpty())
+                seenPluginIdsLower.insert(pluginIdKey);
 
             if (p->pluginApiVersion() != PluginInterface::kHostApiVersion)
             {

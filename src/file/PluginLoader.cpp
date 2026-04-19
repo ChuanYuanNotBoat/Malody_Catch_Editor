@@ -10,7 +10,6 @@
 #include <QJsonObject>
 #include <QLibrary>
 #include <QFile>
-#include <QStandardPaths>
 #include <exception>
 #include <utility>
 
@@ -220,29 +219,6 @@ QVector<PluginInterface *> PluginLoader::loadPlugins(const QString &pluginsDir)
         ExternalProcessPlugin::Manifest manifest = parseProcessManifest(manifestPath, &manifestOk);
         if (!manifestOk)
             continue;
-
-#if defined(Q_OS_ANDROID)
-        {
-            QString executable = manifest.executable.trimmed();
-            QFileInfo execInfo(executable);
-            const bool looksLikePath = executable.contains('/') || executable.contains('\\') || executable.startsWith('.');
-            if (looksLikePath && execInfo.isRelative())
-                executable = QFileInfo(manifestPath).dir().filePath(executable);
-
-            bool executableAvailable = false;
-            if (looksLikePath)
-                executableAvailable = QFileInfo::exists(executable);
-            else
-                executableAvailable = !QStandardPaths::findExecutable(executable).isEmpty();
-
-            if (!executableAvailable)
-            {
-                qWarning() << "Skipping process plugin on Android due to unavailable executable:"
-                           << manifestPath << manifest.executable;
-                continue;
-            }
-        }
-#endif
 
         if (manifest.apiVersion != PluginInterface::kHostApiVersion)
         {
