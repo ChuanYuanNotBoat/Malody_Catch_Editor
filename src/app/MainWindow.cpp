@@ -1210,10 +1210,25 @@ void MainWindow::switchDifficulty()
 void MainWindow::saveChart()
 {
     Logger::info("Save chart requested");
-    QString currentPath = Settings::instance().lastOpenPath() + "/" + d->chartController->chart()->meta().difficulty + ".mc";
+    QString currentPath = d->currentChartPath;
+    if (currentPath.isEmpty())
+    {
+        currentPath = QFileDialog::getSaveFileName(
+            this,
+            tr("Save Chart As"),
+            Settings::instance().lastOpenPath(),
+            tr("Malody Catch Chart (*.mc);;All Files (*.*)"));
+        if (currentPath.isEmpty())
+        {
+            Logger::debug("Save cancelled (empty current path and user cancelled Save As)");
+            return;
+        }
+    }
+
     if (d->chartController->saveChart(currentPath))
     {
         d->currentChartPath = currentPath;
+        Settings::instance().setLastOpenPath(QFileInfo(currentPath).absolutePath());
         d->isModified = false;
         statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
         Logger::info("Chart saved: " + currentPath);
