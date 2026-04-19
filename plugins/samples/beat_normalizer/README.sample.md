@@ -20,8 +20,8 @@ Files:
 - Supports `.mc` and `.mcz`.  
 - 支持 `.mc` 与 `.mcz` 格式。
 
-- Creates backup files with `.bak` suffix.  
-- 处理时会生成以 `.bak` 为后缀的备份文件。
+- Writes changes directly to original files.  
+- 处理时会直接覆盖原文件。
 
 ## Install (manual)  
 ## 安装步骤（手动）

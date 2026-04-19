@@ -2,7 +2,6 @@ import json
 import locale
 import math
 import os
-import shutil
 import sys
 import tempfile
 import zipfile
@@ -10,8 +9,8 @@ import zipfile
 
 TRANSLATIONS = {
     "processed": {
-        "zh": "处理成功: {file} (备份: {backup})",
-        "en": "Processed: {file} (backup: {backup})",
+        "zh": "处理成功: {file}",
+        "en": "Processed: {file}",
     },
     "failed": {
         "zh": "处理失败: {file} | 错误: {error}",
@@ -111,14 +110,11 @@ def process_mc_file(mc_path, lang):
             note["beat"] = new_beat
             changed = True
 
-    backup_path = mc_path + ".bak"
-    shutil.copyfile(mc_path, backup_path)
-
     if changed:
         with open(mc_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    print(tr(lang, "processed", file=os.path.basename(mc_path), backup=os.path.basename(backup_path)))
+    print(tr(lang, "processed", file=os.path.basename(mc_path)))
     return True
 
 
@@ -135,9 +131,6 @@ def simplify_mc_beats(mc_path):
         if new_beat != beat:
             note["beat"] = new_beat
             changed = True
-
-    backup_path = mc_path + ".bak"
-    shutil.copyfile(mc_path, backup_path)
 
     if changed:
         with open(mc_path, "w", encoding="utf-8") as f:
@@ -161,13 +154,9 @@ def process_mcz_file(mcz_path, lang):
         if not found_mc:
             return False
 
-        backup = mcz_path + ".bak"
-        shutil.copyfile(mcz_path, backup)
         with zipfile.ZipFile(mcz_path, "w", zipfile.ZIP_DEFLATED) as zip_write:
             for folder, _, files in os.walk(tmpdir):
                 for file_name in files:
-                    if file_name.lower().endswith(".bak"):
-                        continue
                     full_path = os.path.join(folder, file_name)
                     arcname = os.path.relpath(full_path, tmpdir)
                     zip_write.write(full_path, arcname)
@@ -198,13 +187,9 @@ def simplify_beats_path(path):
                 for file_name in files:
                     if file_name.lower().endswith(".mc"):
                         simplify_mc_beats(os.path.join(root, file_name))
-            backup = path + ".bak"
-            shutil.copyfile(path, backup)
             with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zip_write:
                 for folder, _, files in os.walk(tmpdir):
                     for file_name in files:
-                        if file_name.lower().endswith(".bak"):
-                            continue
                         full_path = os.path.join(folder, file_name)
                         arcname = os.path.relpath(full_path, tmpdir)
                         zip_write.write(full_path, arcname)
