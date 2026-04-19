@@ -30,6 +30,8 @@ class QDialog;
 class QDockWidget;
 class QTabWidget;
 class QScrollArea;
+class QQuickWidget;
+class QObject;
 
 class MainWindow::Private
 {
@@ -65,16 +67,11 @@ public:
     QAction *notePanelAction = nullptr;
     QAction *bpmPanelAction = nullptr;
     QAction *metaPanelAction = nullptr;
-    QAction *mobileOpenAction = nullptr;
-    QAction *mobileSaveAction = nullptr;
-    QAction *mobilePlayAction = nullptr;
-    QAction *mobileLibraryAction = nullptr;
-    QAction *mobileEditorAction = nullptr;
     QAction *mobileUiTestAction = nullptr;
-    QAction *mobileToggleLeftPanelAction = nullptr;
-    QAction *mobileToggleRightPanelAction = nullptr;
-    QAction *mobileFunctionsAction = nullptr;
     QToolBar *mainToolBar = nullptr;
+    QWidget *mobileShell = nullptr;
+    QQuickWidget *mobilePrimaryBar = nullptr;
+    QObject *mobilePrimaryBarRoot = nullptr;
     QDockWidget *leftDock = nullptr;
     QDockWidget *rightDock = nullptr;
     QTabWidget *mobileTabs = nullptr;

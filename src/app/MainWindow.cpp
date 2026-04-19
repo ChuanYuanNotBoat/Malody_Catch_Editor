@@ -821,23 +821,22 @@ void MainWindow::createCentralArea()
     if (useCompactMobileLayout())
     {
         setupMobileCentralArea(canvasContainer);
+        populateMobilePrimaryToolbar();
     }
     else
     {
         setCentralWidget(d->splitter);
-    }
-
-    d->mainToolBar = addToolBar(tr("Tools"));
-    d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
-                                                   {
+        d->mainToolBar = addToolBar(tr("Tools"));
+        d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
+                                                       {
         showEditorPanel(d->notePanel); });
-    d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
-                                                  {
+        d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
+                                                      {
         showEditorPanel(d->bpmPanel); });
-    d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
-                                                   {
+        d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
+                                                       {
         showEditorPanel(d->metaPanel); });
-    populateMobilePrimaryToolbar();
+    }
     showEditorPanel(d->notePanel);
     applySidebarTheme();
 
@@ -1439,6 +1438,11 @@ void MainWindow::showEditorPanel(QWidget *panel)
     if (d->mobileTabs)
     {
         d->mobileTabs->setCurrentWidget(d->rightPanelContainer);
+    }
+
+    if (useCompactMobileLayout())
+    {
+        retranslateMobileUi();
     }
 }
 

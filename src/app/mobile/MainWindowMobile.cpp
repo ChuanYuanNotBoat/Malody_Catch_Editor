@@ -1,11 +1,17 @@
 #include "app/MainWindow.h"
 #include "app/MainWindowPrivate.h"
 #include "ui/LeftPanel.h"
+#include "ui/NoteEditPanel.h"
+#include "ui/BPMTimePanel.h"
+#include "ui/MetaEditPanel.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
 
 #include <QAction>
+#include <QQuickItem>
+#include <QQuickWidget>
+#include <QQmlError>
 #include <QDockWidget>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -22,8 +28,8 @@
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
-#include <QToolBar>
-#include <QToolButton>
+#include <QUrl>
+#include <QVariant>
 #include <QVBoxLayout>
 #include <functional>
 
@@ -88,7 +94,13 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         d->splitter->setStretchFactor(0, 0);
         d->splitter->setStretchFactor(1, 1);
         d->splitter->setStretchFactor(2, 0);
-        setCentralWidget(d->splitter);
+
+        d->mobileShell = new QWidget(this);
+        QVBoxLayout *shellLayout = new QVBoxLayout(d->mobileShell);
+        shellLayout->setContentsMargins(0, 0, 0, 0);
+        shellLayout->setSpacing(0);
+        shellLayout->addWidget(d->splitter, 1);
+        setCentralWidget(d->mobileShell);
 
         auto rebalanceSplitter = [this]() {
             if (!d->splitter)
@@ -122,49 +134,62 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
 
 void MainWindow::populateMobilePrimaryToolbar()
 {
-    if (!useCompactMobileLayout() || !d->mainToolBar)
+    if (!useCompactMobileLayout())
         return;
 
-    d->mainToolBar->setMovable(false);
-    d->mainToolBar->setFloatable(false);
-    d->mainToolBar->setAllowedAreas(Qt::TopToolBarArea);
-    addToolBar(Qt::TopToolBarArea, d->mainToolBar);
-    d->mainToolBar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    if (!d->mobilePrimaryBar)
+    {
+        d->mobilePrimaryBar = new QQuickWidget(this);
+        d->mobilePrimaryBar->setResizeMode(QQuickWidget::SizeRootObjectToView);
+        d->mobilePrimaryBar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        d->mobilePrimaryBar->setMinimumHeight(64);
+        d->mobilePrimaryBar->setMaximumHeight(64);
+        d->mobilePrimaryBar->setAttribute(Qt::WA_TranslucentBackground, false);
+        d->mobilePrimaryBar->setClearColor(QColor(31, 35, 41));
+        d->mobilePrimaryBar->setObjectName("mobilePrimaryBar");
 
-    QAction *anchor = d->mainToolBar->actions().isEmpty() ? nullptr : d->mainToolBar->actions().first();
-    auto insertPrimaryAction = [this, anchor](const QString &text, auto slot) -> QAction * {
-        QAction *action = new QAction(text, d->mainToolBar);
-        connect(action, &QAction::triggered, this, slot);
-        if (anchor)
-            d->mainToolBar->insertAction(anchor, action);
-        else
-            d->mainToolBar->addAction(action);
-        return action;
-    };
+        connect(d->mobilePrimaryBar, &QQuickWidget::statusChanged, this, [this](QQuickWidget::Status status) {
+            if (status == QQuickWidget::Error)
+            {
+                const auto errors = d->mobilePrimaryBar->errors();
+                for (const QQmlError &error : errors)
+                    Logger::error(QString("Mobile QML error: %1").arg(error.toString()));
+            }
+        });
 
-    d->mobileOpenAction = insertPrimaryAction(tr("Open"), &MainWindow::openChart);
-    d->mobileSaveAction = insertPrimaryAction(tr("Save"), &MainWindow::saveChart);
-    d->mobilePlayAction = insertPrimaryAction(tr("Play"), &MainWindow::togglePlayback);
-    d->mobileToggleLeftPanelAction = insertPrimaryAction(tr("Hide Left"), [this]() {
-        if (!d->leftPanel)
+        d->mobilePrimaryBar->setSource(QUrl("qrc:/qml/mobile/MobilePrimaryBar.qml"));
+        d->mobilePrimaryBarRoot = d->mobilePrimaryBar->rootObject();
+        if (!d->mobilePrimaryBarRoot)
+        {
+            Logger::error("Failed to create QML mobile primary bar.");
             return;
-        const bool shouldShow = !d->leftPanel->isVisible();
-        d->leftPanel->setVisible(shouldShow);
-        if (d->mobileToggleLeftPanelAction)
-            d->mobileToggleLeftPanelAction->setText(shouldShow ? tr("Hide Left") : tr("Show Left"));
-    });
-    d->mobileToggleRightPanelAction = insertPrimaryAction(tr("Hide Right"), [this]() {
-        if (!d->rightPanelContainer)
-            return;
-        const bool shouldShow = !d->rightPanelContainer->isVisible();
-        d->rightPanelContainer->setVisible(shouldShow);
-        if (d->mobileToggleRightPanelAction)
-            d->mobileToggleRightPanelAction->setText(shouldShow ? tr("Hide Right") : tr("Show Right"));
-    });
-    d->mobileFunctionsAction = insertPrimaryAction(tr("Functions"), &MainWindow::openMobileFunctionHub);
+        }
+
+        connect(d->mobilePrimaryBarRoot, SIGNAL(openRequested()), this, SLOT(openChart()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(saveRequested()), this, SLOT(saveChart()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(playRequested()), this, SLOT(togglePlayback()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(toggleLeftPanelRequested()), this, SLOT(toggleMobileLeftPanel()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(toggleRightPanelRequested()), this, SLOT(toggleMobileRightPanel()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(functionsRequested()), this, SLOT(openMobileFunctionHub()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(notePanelRequested()), this, SLOT(showMobileNotePanel()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(bpmPanelRequested()), this, SLOT(showMobileBpmPanel()));
+        connect(d->mobilePrimaryBarRoot, SIGNAL(metaPanelRequested()), this, SLOT(showMobileMetaPanel()));
+    }
+
+    if (d->mobileShell && d->mobileShell->layout())
+    {
+        QVBoxLayout *layout = qobject_cast<QVBoxLayout *>(d->mobileShell->layout());
+        if (layout && layout->indexOf(d->mobilePrimaryBar) < 0)
+            layout->insertWidget(0, d->mobilePrimaryBar, 0);
+    }
+
+    d->mobilePrimaryBar->setVisible(true);
+    d->mobilePrimaryBar->update();
 
     if (menuBar())
         menuBar()->setVisible(false);
+
+    retranslateMobileUi();
 }
 
 void MainWindow::retranslateMobileUi()
@@ -172,18 +197,52 @@ void MainWindow::retranslateMobileUi()
     if (!useCompactMobileLayout())
         return;
 
-    if (d->mobileOpenAction)
-        d->mobileOpenAction->setText(tr("Open"));
-    if (d->mobileSaveAction)
-        d->mobileSaveAction->setText(tr("Save"));
-    if (d->mobilePlayAction)
-        d->mobilePlayAction->setText(tr("Play"));
-    if (d->mobileToggleLeftPanelAction)
-        d->mobileToggleLeftPanelAction->setText((d->leftPanel && d->leftPanel->isVisible()) ? tr("Hide Left") : tr("Show Left"));
-    if (d->mobileToggleRightPanelAction)
-        d->mobileToggleRightPanelAction->setText((d->rightPanelContainer && d->rightPanelContainer->isVisible()) ? tr("Hide Right") : tr("Show Right"));
-    if (d->mobileFunctionsAction)
-        d->mobileFunctionsAction->setText(tr("Functions"));
+    if (!d->mobilePrimaryBarRoot)
+        return;
+
+    d->mobilePrimaryBarRoot->setProperty("openText", tr("Open"));
+    d->mobilePrimaryBarRoot->setProperty("saveText", tr("Save"));
+    d->mobilePrimaryBarRoot->setProperty("playText", tr("Play"));
+    d->mobilePrimaryBarRoot->setProperty("leftPanelText", (d->leftPanel && d->leftPanel->isVisible()) ? tr("Hide Left") : tr("Show Left"));
+    d->mobilePrimaryBarRoot->setProperty("rightPanelText", (d->rightPanelContainer && d->rightPanelContainer->isVisible()) ? tr("Hide Right") : tr("Show Right"));
+    d->mobilePrimaryBarRoot->setProperty("functionsText", tr("Functions"));
+    d->mobilePrimaryBarRoot->setProperty("noteText", tr("Note"));
+    d->mobilePrimaryBarRoot->setProperty("bpmText", tr("BPM"));
+    d->mobilePrimaryBarRoot->setProperty("metaText", tr("Meta"));
+    d->mobilePrimaryBarRoot->setProperty("activePanel", d->currentRightPanel == d->bpmPanel   ? "bpm"
+                                                 : d->currentRightPanel == d->metaPanel ? "meta"
+                                                                                        : "note");
+}
+
+void MainWindow::toggleMobileLeftPanel()
+{
+    if (!d->leftPanel)
+        return;
+    d->leftPanel->setVisible(!d->leftPanel->isVisible());
+    retranslateMobileUi();
+}
+
+void MainWindow::toggleMobileRightPanel()
+{
+    if (!d->rightPanelContainer)
+        return;
+    d->rightPanelContainer->setVisible(!d->rightPanelContainer->isVisible());
+    retranslateMobileUi();
+}
+
+void MainWindow::showMobileNotePanel()
+{
+    showEditorPanel(d->notePanel);
+}
+
+void MainWindow::showMobileBpmPanel()
+{
+    showEditorPanel(d->bpmPanel);
+}
+
+void MainWindow::showMobileMetaPanel()
+{
+    showEditorPanel(d->metaPanel);
 }
 
 void MainWindow::openMobileFunctionHub()

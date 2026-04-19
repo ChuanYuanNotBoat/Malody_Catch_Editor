@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Multimedia LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Multimedia Quick QuickWidgets Qml LinguistTools)
 
 if(COMMAND qt_standard_project_setup)
     qt_standard_project_setup()
@@ -84,11 +84,21 @@ if(ANDROID)
     )
 endif()
 
+qt_add_resources(${PROJECT_NAME} mobile_qml_ui
+    PREFIX "/qml/mobile"
+    BASE "resources/qml/mobile"
+    FILES
+        resources/qml/mobile/MobilePrimaryBar.qml
+)
+
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::Multimedia
+    Qt6::Quick
+    Qt6::QuickWidgets
+    Qt6::Qml
 )
 
 if(ANDROID)

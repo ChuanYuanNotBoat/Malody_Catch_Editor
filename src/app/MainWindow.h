@@ -69,6 +69,11 @@ private slots:
     void configureShortcuts();
     void toggleMobileUiTestMode(bool enabled);
     void openMobileFunctionHub();
+    void toggleMobileLeftPanel();
+    void toggleMobileRightPanel();
+    void showMobileNotePanel();
+    void showMobileBpmPanel();
+    void showMobileMetaPanel();
 
 private:
     void setupUi();
