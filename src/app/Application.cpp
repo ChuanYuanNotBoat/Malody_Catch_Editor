@@ -12,6 +12,7 @@
 #include "utils/Logger.h"
 #include <QDir>
 #include <QDebug>
+#include <QStandardPaths>
 
 namespace
 {
@@ -35,6 +36,27 @@ QStringList availableSkinBaseDirs()
         result.append(dir);
     }
     return result;
+}
+
+QString resolvePluginsDir()
+{
+#if defined(Q_OS_ANDROID)
+    const QStringList candidates = {
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/plugins",
+        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/plugins"};
+
+    for (const QString &candidate : candidates)
+    {
+        if (candidate.isEmpty())
+            continue;
+        if (QDir().mkpath(candidate))
+            return QDir(candidate).absolutePath();
+    }
+    return QString();
+#else
+    const QString appDir = QCoreApplication::applicationDirPath();
+    return QDir(appDir).filePath("plugins");
+#endif
 }
 } // namespace
 
@@ -149,17 +171,28 @@ bool Application::initialize()
         Logger::info("Main window created and shown.");
 
         m_pluginManager = new PluginManager(this);
-        const QString appDir = QCoreApplication::applicationDirPath();
-        const QString pluginsDir = QDir(appDir).filePath("plugins");
-        QDir().mkpath(pluginsDir);
-        Logger::info(QString("Plugin directory: %1").arg(QDir(pluginsDir).absolutePath()));
-        m_pluginManager->loadPlugins(pluginsDir, m_mainWindow);
-        m_pluginSystemReady = true;
-        Logger::info("Plugins loaded.");
+        const QString pluginsDir = resolvePluginsDir();
+        if (pluginsDir.isEmpty())
+        {
+            Logger::error("Failed to resolve writable plugins directory.");
+            m_pluginSystemReady = false;
+        }
+        else
+        {
+            if (!QDir().mkpath(pluginsDir))
+                Logger::warn(QString("Failed to create plugins directory: %1").arg(pluginsDir));
+            Logger::info(QString("Plugin directory: %1").arg(QDir(pluginsDir).absolutePath()));
+            m_pluginManager->loadPlugins(pluginsDir, m_mainWindow);
+            m_pluginSystemReady = true;
+            Logger::info("Plugins loaded.");
+        }
 
-        connect(m_chartController, &ChartController::chartChanged, m_pluginManager, &PluginManager::notifyChartChanged);
-        connect(m_chartController, &ChartController::chartLoaded, this, [this]()
-                { m_pluginManager->notifyChartLoaded(m_chartController->chartFilePath()); });
+        if (m_pluginSystemReady)
+        {
+            connect(m_chartController, &ChartController::chartChanged, m_pluginManager, &PluginManager::notifyChartChanged);
+            connect(m_chartController, &ChartController::chartLoaded, this, [this]()
+                    { m_pluginManager->notifyChartLoaded(m_chartController->chartFilePath()); });
+        }
 
         loadLastProject();
 

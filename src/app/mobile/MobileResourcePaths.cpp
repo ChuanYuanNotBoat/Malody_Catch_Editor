@@ -82,6 +82,7 @@ void ensureBundledResourcesReady()
 
     ensureResourceTree(":/mobile_assets/resources/default_skin", appData + "/resources/default_skin");
     ensureResourceTree(":/mobile_assets/resources/note_sounds", appData + "/resources/note_sounds");
+    ensureResourceTree(":/mobile_assets/plugins", appData + "/plugins");
 #endif
 }
 
@@ -117,6 +118,22 @@ QStringList additionalNoteSoundBaseDirs()
                << (appLocal + "/resources/note_sounds")
                << "assets:/note_sounds"
                << "assets:/resources/note_sounds";
+    return dedupeExisting(candidates);
+#else
+    return {};
+#endif
+}
+
+QStringList additionalPluginBaseDirs()
+{
+#if defined(Q_OS_ANDROID)
+    const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const QString appLocal = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+
+    QStringList candidates;
+    candidates << (appData + "/plugins")
+               << (appLocal + "/plugins")
+               << "assets:/plugins";
     return dedupeExisting(candidates);
 #else
     return {};

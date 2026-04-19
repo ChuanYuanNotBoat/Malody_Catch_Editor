@@ -7,4 +7,5 @@ namespace MobileResourcePaths
 void ensureBundledResourcesReady();
 QStringList additionalSkinBaseDirs();
 QStringList additionalNoteSoundBaseDirs();
+QStringList additionalPluginBaseDirs();
 }

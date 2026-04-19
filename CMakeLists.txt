@@ -77,6 +77,7 @@ if(ANDROID)
         RELATIVE ${CMAKE_SOURCE_DIR}
         resources/default_skin/*
         resources/note_sounds/*
+        plugins/*
     )
     qt_add_resources(${PROJECT_NAME} mobile_bundled_assets
         PREFIX "/mobile_assets"

@@ -17,17 +17,15 @@
 #include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QLabel>
-#include <QFrame>
 #include <QGuiApplication>
 #include <QMenuBar>
 #include <QMenu>
 #include <QPushButton>
 #include <QScreen>
 #include <QSizePolicy>
-#include <QScrollArea>
+#include <QSplitter>
 #include <QScrollBar>
-#include <QTabBar>
-#include <QTabWidget>
+#include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QUrl>
@@ -50,6 +48,10 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         return;
 
     d->compactUiMode = true;
+    d->mobileTabs = nullptr;
+    d->mobileCanvasHost = nullptr;
+    d->mobileLeftPanelHost = nullptr;
+    d->mobileRightPanelHost = nullptr;
     if (d->leftDock)
     {
         d->leftDock->hide();
@@ -63,6 +65,14 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         d->rightDock = nullptr;
     }
 
+    if (!d->splitter)
+    {
+        d->splitter = new QSplitter(Qt::Horizontal, this);
+        d->splitter->addWidget(d->leftPanel);
+        d->splitter->addWidget(canvasContainer);
+        d->splitter->addWidget(d->rightPanelContainer);
+    }
+
     if (!d->mobileShell)
     {
         d->mobileShell = new QWidget(this);
@@ -70,6 +80,13 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         shellLayout->setContentsMargins(0, 0, 0, 0);
         shellLayout->setSpacing(0);
         setCentralWidget(d->mobileShell);
+    }
+
+    if (d->mobileShell && d->mobileShell->layout())
+    {
+        QVBoxLayout *layout = qobject_cast<QVBoxLayout *>(d->mobileShell->layout());
+        if (layout && layout->indexOf(d->splitter) < 0)
+            layout->addWidget(d->splitter, 1);
     }
 
     if (d->canvas)
@@ -82,51 +99,55 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
 
     if (d->leftPanel)
     {
-        d->leftPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        d->leftPanel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         d->leftPanel->setMinimumWidth(0);
+        d->leftPanel->setVisible(false);
     }
     if (d->rightPanelContainer)
     {
-        d->rightPanelContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        d->rightPanelContainer->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         d->rightPanelContainer->setMinimumWidth(0);
+        d->rightPanelContainer->setVisible(false);
     }
 
-    if (!d->mobileTabs)
-    {
-        d->mobileTabs = new QTabWidget(d->mobileShell);
-        d->mobileTabs->setDocumentMode(true);
-        d->mobileTabs->tabBar()->setVisible(false);
-        d->mobileTabs->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        qobject_cast<QVBoxLayout *>(d->mobileShell->layout())->addWidget(d->mobileTabs, 1);
-    }
+    d->splitter->setCollapsible(0, true);
+    d->splitter->setCollapsible(1, false);
+    d->splitter->setCollapsible(2, true);
+    d->splitter->setOpaqueResize(false);
+    d->splitter->setHandleWidth(14);
+    d->splitter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    d->splitter->setMinimumSize(0, 0);
+    d->splitter->setStretchFactor(0, 0);
+    d->splitter->setStretchFactor(1, 1);
+    d->splitter->setStretchFactor(2, 0);
 
-    if (!d->mobileCanvasHost)
-    {
-        d->mobileCanvasHost = canvasContainer;
-        d->mobileTabs->addTab(d->mobileCanvasHost, tr("Editor"));
-    }
+    auto rebalanceSplitter = [this]() {
+        if (!d->splitter)
+            return;
 
-    if (!d->mobileLeftPanelHost)
-    {
-        d->mobileLeftPanelHost = new QScrollArea(d->mobileTabs);
-        d->mobileLeftPanelHost->setFrameShape(QFrame::NoFrame);
-        d->mobileLeftPanelHost->setWidgetResizable(true);
-        d->mobileLeftPanelHost->setWidget(d->leftPanel);
-        d->mobileTabs->addTab(d->mobileLeftPanelHost, tr("Left"));
-    }
+        const int fallbackScreenWidth = QGuiApplication::primaryScreen()
+                                            ? QGuiApplication::primaryScreen()->availableGeometry().width()
+                                            : 1080;
+        const int available = qMax(480, d->splitter->width() > 0 ? d->splitter->width() : fallbackScreenWidth);
+        const int maxSideWidth = qBound(140, available / 3, 320);
+        int leftWidth = (d->leftPanel && d->leftPanel->isVisible()) ? qBound(120, available / 5, maxSideWidth) : 0;
+        int rightWidth = (d->rightPanelContainer && d->rightPanelContainer->isVisible()) ? qBound(120, available / 4, maxSideWidth) : 0;
+        int canvasWidth = available - leftWidth - rightWidth;
+        if (canvasWidth < 260)
+        {
+            const int need = 260 - canvasWidth;
+            if (rightWidth > leftWidth)
+                rightWidth = qMax(0, rightWidth - need);
+            else
+                leftWidth = qMax(0, leftWidth - need);
+            canvasWidth = qMax(260, available - leftWidth - rightWidth);
+        }
+        d->splitter->setSizes({leftWidth, canvasWidth, rightWidth});
+    };
+    rebalanceSplitter();
+    QTimer::singleShot(0, this, rebalanceSplitter);
 
-    if (!d->mobileRightPanelHost)
-    {
-        d->mobileRightPanelHost = new QScrollArea(d->mobileTabs);
-        d->mobileRightPanelHost->setFrameShape(QFrame::NoFrame);
-        d->mobileRightPanelHost->setWidgetResizable(true);
-        d->mobileRightPanelHost->setWidget(d->rightPanelContainer);
-        d->mobileTabs->addTab(d->mobileRightPanelHost, tr("Right"));
-    }
-
-    d->mobileTabs->setCurrentWidget(d->mobileCanvasHost);
-
-    Logger::info("Compact mobile layout enabled: QML top bar + mobile tab shell (editor/left/right).");
+    Logger::info("Compact mobile layout enabled: QML top bar + resizable splitter.");
 }
 
 void MainWindow::populateMobilePrimaryToolbar()
@@ -202,8 +223,8 @@ void MainWindow::retranslateMobileUi()
     d->mobilePrimaryBarRoot->setProperty("saveText", tr("Save"));
     d->mobilePrimaryBarRoot->setProperty("playText", tr("Play"));
     d->mobilePrimaryBarRoot->setProperty("editorText", tr("Editor"));
-    d->mobilePrimaryBarRoot->setProperty("leftPanelText", (d->mobileTabs && d->mobileTabs->currentWidget() == d->mobileLeftPanelHost) ? tr("Back") : tr("Left"));
-    d->mobilePrimaryBarRoot->setProperty("rightPanelText", (d->mobileTabs && d->mobileTabs->currentWidget() == d->mobileRightPanelHost) ? tr("Back") : tr("Right"));
+    d->mobilePrimaryBarRoot->setProperty("leftPanelText", (d->leftPanel && d->leftPanel->isVisible()) ? tr("Hide Left") : tr("Show Left"));
+    d->mobilePrimaryBarRoot->setProperty("rightPanelText", (d->rightPanelContainer && d->rightPanelContainer->isVisible()) ? tr("Hide Right") : tr("Show Right"));
     d->mobilePrimaryBarRoot->setProperty("functionsText", tr("Functions"));
     d->mobilePrimaryBarRoot->setProperty("noteText", tr("Note"));
     d->mobilePrimaryBarRoot->setProperty("bpmText", tr("BPM"));
@@ -215,55 +236,72 @@ void MainWindow::retranslateMobileUi()
 
 void MainWindow::toggleMobileLeftPanel()
 {
-    if (!d->mobileTabs || !d->mobileLeftPanelHost)
+    if (!d->leftPanel)
         return;
-    if (d->mobileTabs->currentWidget() == d->mobileLeftPanelHost)
-        d->mobileTabs->setCurrentWidget(d->mobileCanvasHost);
-    else
-        d->mobileTabs->setCurrentWidget(d->mobileLeftPanelHost);
+    d->leftPanel->setVisible(!d->leftPanel->isVisible());
+    if (d->splitter)
+    {
+        QList<int> sizes = d->splitter->sizes();
+        if (sizes.size() == 3 && d->leftPanel->isVisible())
+        {
+            if (sizes[0] <= 8)
+                sizes[0] = 220;
+            sizes[1] = qMax(260, sizes[1] - sizes[0] / 2);
+            d->splitter->setSizes(sizes);
+        }
+    }
     retranslateMobileUi();
 }
 
 void MainWindow::toggleMobileRightPanel()
 {
-    if (!d->mobileTabs || !d->mobileRightPanelHost)
+    if (!d->rightPanelContainer)
         return;
-    if (d->mobileTabs->currentWidget() == d->mobileRightPanelHost)
-        d->mobileTabs->setCurrentWidget(d->mobileCanvasHost);
-    else
-        d->mobileTabs->setCurrentWidget(d->mobileRightPanelHost);
+    d->rightPanelContainer->setVisible(!d->rightPanelContainer->isVisible());
+    if (d->splitter)
+    {
+        QList<int> sizes = d->splitter->sizes();
+        if (sizes.size() == 3 && d->rightPanelContainer->isVisible())
+        {
+            if (sizes[2] <= 8)
+                sizes[2] = 260;
+            sizes[1] = qMax(260, sizes[1] - sizes[2] / 2);
+            d->splitter->setSizes(sizes);
+        }
+    }
     retranslateMobileUi();
 }
 
 void MainWindow::showMobileNotePanel()
 {
     showEditorPanel(d->notePanel);
-    if (d->mobileTabs && d->mobileRightPanelHost)
-        d->mobileTabs->setCurrentWidget(d->mobileRightPanelHost);
+    if (d->rightPanelContainer)
+        d->rightPanelContainer->setVisible(true);
     retranslateMobileUi();
 }
 
 void MainWindow::showMobileBpmPanel()
 {
     showEditorPanel(d->bpmPanel);
-    if (d->mobileTabs && d->mobileRightPanelHost)
-        d->mobileTabs->setCurrentWidget(d->mobileRightPanelHost);
+    if (d->rightPanelContainer)
+        d->rightPanelContainer->setVisible(true);
     retranslateMobileUi();
 }
 
 void MainWindow::showMobileMetaPanel()
 {
     showEditorPanel(d->metaPanel);
-    if (d->mobileTabs && d->mobileRightPanelHost)
-        d->mobileTabs->setCurrentWidget(d->mobileRightPanelHost);
+    if (d->rightPanelContainer)
+        d->rightPanelContainer->setVisible(true);
     retranslateMobileUi();
 }
 
 void MainWindow::showMobileEditor()
 {
-    if (!d->mobileTabs || !d->mobileCanvasHost)
-        return;
-    d->mobileTabs->setCurrentWidget(d->mobileCanvasHost);
+    if (d->leftPanel)
+        d->leftPanel->setVisible(false);
+    if (d->rightPanelContainer)
+        d->rightPanelContainer->setVisible(false);
     retranslateMobileUi();
 }
 

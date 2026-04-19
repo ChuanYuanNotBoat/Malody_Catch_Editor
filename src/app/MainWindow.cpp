@@ -62,7 +62,6 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QTreeWidget>
-#include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
 #include <QTimer>
@@ -1436,14 +1435,10 @@ void MainWindow::showEditorPanel(QWidget *panel)
     else if (panel == d->metaPanel)
         d->currentRightPanel = d->metaPanel;
 
-    if (d->mobileTabs)
-    {
-        if (d->mobileRightPanelHost)
-            d->mobileTabs->setCurrentWidget(d->mobileRightPanelHost);
-    }
-
     if (useCompactMobileLayout())
     {
+        if (d->rightPanelContainer)
+            d->rightPanelContainer->setVisible(true);
         retranslateMobileUi();
     }
 }
