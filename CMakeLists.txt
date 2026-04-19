@@ -47,6 +47,7 @@ set(SOURCES
     src/render/BackgroundRenderer.cpp
     src/render/HyperfruitDetector.cpp
     src/plugin/ExternalProcessPlugin.cpp
+    src/plugin/BuiltinBeatNormalizerPlugin.cpp
     src/plugin/PluginManager.cpp
     src/ui/CustomWidgets/RightPanel.cpp
     src/ui/NoteEditPanel.cpp

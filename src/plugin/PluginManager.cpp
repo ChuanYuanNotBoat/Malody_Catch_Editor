@@ -1,5 +1,6 @@
 #include "PluginManager.h"
 #include "file/PluginLoader.h"
+#include "plugin/BuiltinBeatNormalizerPlugin.h"
 #include "utils/Logger.h"
 #include "utils/Settings.h"
 #include <QLocale>
@@ -52,6 +53,21 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
     try
     {
         QVector<PluginInterface *> loaded = PluginLoader::loadPlugins(pluginsDir);
+#if defined(Q_OS_ANDROID)
+        bool hasBuiltinEquivalent = false;
+        for (PluginInterface *plugin : loaded)
+        {
+            if (!plugin)
+                continue;
+            if (plugin->pluginId() == QStringLiteral("tool.beat_normalizer.py"))
+            {
+                hasBuiltinEquivalent = true;
+                break;
+            }
+        }
+        if (!hasBuiltinEquivalent)
+            loaded.append(new BuiltinBeatNormalizerPlugin());
+#endif
         Logger::info(QString("Discovered %1 plugin candidates.").arg(loaded.size()));
 
         QVector<PluginInterface *> rejected;
