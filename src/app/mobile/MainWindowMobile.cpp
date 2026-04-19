@@ -113,13 +113,35 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
     d->splitter->setCollapsible(0, true);
     d->splitter->setCollapsible(1, false);
     d->splitter->setCollapsible(2, true);
-    d->splitter->setOpaqueResize(false);
+    d->splitter->setOpaqueResize(true);
     d->splitter->setHandleWidth(14);
     d->splitter->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     d->splitter->setMinimumSize(0, 0);
     d->splitter->setStretchFactor(0, 0);
     d->splitter->setStretchFactor(1, 1);
     d->splitter->setStretchFactor(2, 0);
+
+    if (!d->mobileSplitterSettleTimer)
+    {
+        d->mobileSplitterSettleTimer = new QTimer(this);
+        d->mobileSplitterSettleTimer->setSingleShot(true);
+        connect(d->mobileSplitterSettleTimer, &QTimer::timeout, this, [this]() {
+            if (!d->mobileSplitterSuppressCanvasUpdates || !d->canvas)
+                return;
+            d->canvas->setUpdatesEnabled(true);
+            d->canvas->update();
+            d->mobileSplitterSuppressCanvasUpdates = false;
+        });
+    }
+    connect(d->splitter, &QSplitter::splitterMoved, this, [this](int, int) {
+        if (d->canvas && !d->mobileSplitterSuppressCanvasUpdates)
+        {
+            d->canvas->setUpdatesEnabled(false);
+            d->mobileSplitterSuppressCanvasUpdates = true;
+        }
+        if (d->mobileSplitterSettleTimer)
+            d->mobileSplitterSettleTimer->start(90);
+    });
 
     auto rebalanceSplitter = [this]() {
         if (!d->splitter)
@@ -146,6 +168,10 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
     };
     rebalanceSplitter();
     QTimer::singleShot(0, this, rebalanceSplitter);
+
+    if (d->canvas)
+        d->canvas->setUpdatesEnabled(true);
+    d->mobileSplitterSuppressCanvasUpdates = false;
 
     Logger::info("Compact mobile layout enabled: QML top bar + resizable splitter.");
 }

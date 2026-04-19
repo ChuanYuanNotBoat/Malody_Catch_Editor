@@ -32,6 +32,7 @@ class QTabWidget;
 class QScrollArea;
 class QQuickWidget;
 class QObject;
+class QTimer;
 
 class MainWindow::Private
 {
@@ -78,6 +79,8 @@ public:
     QWidget *mobileCanvasHost = nullptr;
     QScrollArea *mobileLeftPanelHost = nullptr;
     QScrollArea *mobileRightPanelHost = nullptr;
+    QTimer *mobileSplitterSettleTimer = nullptr;
+    bool mobileSplitterSuppressCanvasUpdates = false;
     bool compactUiMode = false;
     QMenu *languageMenu = nullptr;
     QActionGroup *languageActionGroup = nullptr;
