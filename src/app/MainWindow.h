@@ -74,6 +74,7 @@ private slots:
     void showMobileNotePanel();
     void showMobileBpmPanel();
     void showMobileMetaPanel();
+    void showMobileEditor();
 
 private:
     void setupUi();

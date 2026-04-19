@@ -8,6 +8,7 @@ Rectangle {
     property string openText: "Open"
     property string saveText: "Save"
     property string playText: "Play"
+    property string editorText: "Editor"
     property string leftPanelText: "Hide Left"
     property string rightPanelText: "Hide Right"
     property string functionsText: "Functions"
@@ -19,6 +20,7 @@ Rectangle {
     signal openRequested()
     signal saveRequested()
     signal playRequested()
+    signal editorRequested()
     signal toggleLeftPanelRequested()
     signal toggleRightPanelRequested()
     signal functionsRequested()
@@ -54,6 +56,7 @@ Rectangle {
                         { "text": root.openText, "kind": "normal", "tap": function(){ root.openRequested(); } },
                         { "text": root.saveText, "kind": "normal", "tap": function(){ root.saveRequested(); } },
                         { "text": root.playText, "kind": "normal", "tap": function(){ root.playRequested(); } },
+                        { "text": root.editorText, "kind": "normal", "tap": function(){ root.editorRequested(); } },
                         { "text": root.leftPanelText, "kind": "normal", "tap": function(){ root.toggleLeftPanelRequested(); } },
                         { "text": root.rightPanelText, "kind": "normal", "tap": function(){ root.toggleRightPanelRequested(); } },
                         { "text": root.functionsText, "kind": "normal", "tap": function(){ root.functionsRequested(); } },

@@ -62,6 +62,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QTreeWidget>
+#include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
 #include <QTimer>
@@ -813,11 +814,6 @@ void MainWindow::createCentralArea()
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
 
-    d->splitter = new QSplitter(Qt::Horizontal, this);
-    d->splitter->addWidget(d->leftPanel);
-    d->splitter->addWidget(canvasContainer);
-    d->splitter->addWidget(d->rightPanelContainer);
-    d->splitter->setSizes({150, 800, 300});
     if (useCompactMobileLayout())
     {
         setupMobileCentralArea(canvasContainer);
@@ -825,6 +821,11 @@ void MainWindow::createCentralArea()
     }
     else
     {
+        d->splitter = new QSplitter(Qt::Horizontal, this);
+        d->splitter->addWidget(d->leftPanel);
+        d->splitter->addWidget(canvasContainer);
+        d->splitter->addWidget(d->rightPanelContainer);
+        d->splitter->setSizes({150, 800, 300});
         setCentralWidget(d->splitter);
         d->mainToolBar = addToolBar(tr("Tools"));
         d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
@@ -1437,7 +1438,8 @@ void MainWindow::showEditorPanel(QWidget *panel)
 
     if (d->mobileTabs)
     {
-        d->mobileTabs->setCurrentWidget(d->rightPanelContainer);
+        if (d->mobileRightPanelHost)
+            d->mobileTabs->setCurrentWidget(d->mobileRightPanelHost);
     }
 
     if (useCompactMobileLayout())

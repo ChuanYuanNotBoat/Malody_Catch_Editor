@@ -75,6 +75,7 @@ public:
     QDockWidget *leftDock = nullptr;
     QDockWidget *rightDock = nullptr;
     QTabWidget *mobileTabs = nullptr;
+    QWidget *mobileCanvasHost = nullptr;
     QScrollArea *mobileLeftPanelHost = nullptr;
     QScrollArea *mobileRightPanelHost = nullptr;
     bool compactUiMode = false;
