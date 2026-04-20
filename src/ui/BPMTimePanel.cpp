@@ -31,7 +31,7 @@ void BPMTimePanel::setupUi()
     m_timeLabel = new QLabel(tr("Time:"));
     timeLayout->addWidget(m_timeLabel);
     m_timeEdit = new QLineEdit(this);
-    m_timeEdit->setPlaceholderText("0:1/1");
+    m_timeEdit->setPlaceholderText(tr("e.g. 0:1/1"));
     timeLayout->addWidget(m_timeEdit);
     mainLayout->addLayout(timeLayout);
 
@@ -194,4 +194,6 @@ void BPMTimePanel::retranslateUi()
         m_addBtn->setText(tr("Add/Update"));
     if (m_removeBtn)
         m_removeBtn->setText(tr("Remove"));
+    if (m_timeEdit)
+        m_timeEdit->setPlaceholderText(tr("e.g. 0:1/1"));
 }

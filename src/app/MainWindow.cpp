@@ -119,13 +119,13 @@ QString modifiersPreviewText(Qt::KeyboardModifiers mods)
 {
     QStringList parts;
     if (mods.testFlag(Qt::ControlModifier))
-        parts << "Ctrl";
+        parts << QObject::tr("Ctrl");
     if (mods.testFlag(Qt::AltModifier))
-        parts << "Alt";
+        parts << QObject::tr("Alt");
     if (mods.testFlag(Qt::ShiftModifier))
-        parts << "Shift";
+        parts << QObject::tr("Shift");
     if (mods.testFlag(Qt::MetaModifier))
-        parts << "Meta";
+        parts << QObject::tr("Meta");
 
     if (parts.isEmpty())
         return QString();
@@ -578,6 +578,11 @@ void MainWindow::createMenus()
         delete d->languageActionGroup;
         d->languageActionGroup = nullptr;
     }
+    if (d->speedActionGroup)
+    {
+        delete d->speedActionGroup;
+        d->speedActionGroup = nullptr;
+    }
 
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
     QAction *openAction = fileMenu->addAction(tr("&Open Chart..."), this, &MainWindow::openChart);
@@ -703,6 +708,11 @@ void MainWindow::createMenus()
     d->noteSoundVolumeAction = settingsMenu->addAction(tr("Note Sound Volume..."));
     connect(d->noteSoundVolumeAction, &QAction::triggered, this, &MainWindow::adjustNoteSoundVolume);
     settingsMenu->addSeparator();
+    d->skinMenu = settingsMenu->addMenu(tr("&Skin"));
+    populateSkinMenu();
+    d->noteSoundMenu = settingsMenu->addMenu(tr("Note &Sound"));
+    populateNoteSoundMenu();
+    settingsMenu->addSeparator();
     QAction *shortcutSettingsAction = settingsMenu->addAction(tr("Keyboard Shortcuts..."));
     connect(shortcutSettingsAction, &QAction::triggered, this, &MainWindow::configureShortcuts);
 #if !defined(Q_OS_ANDROID)
@@ -762,11 +772,6 @@ void MainWindow::createMenus()
     connect(logSettingsAction, &QAction::triggered, this, &MainWindow::openLogSettings);
     QAction *exportDiagAction = toolsMenu->addAction(tr("&Export Diagnostics Report..."));
     connect(exportDiagAction, &QAction::triggered, this, &MainWindow::exportDiagnosticsReport);
-
-    d->skinMenu = menuBar()->addMenu(tr("&Skin"));
-    populateSkinMenu();
-    d->noteSoundMenu = menuBar()->addMenu(tr("Note &Sound"));
-    populateNoteSoundMenu();
     d->helpMenu = menuBar()->addMenu(tr("&Help"));
     d->checkUpdatesAction = d->helpMenu->addAction(tr("Check for Updates..."), this, &MainWindow::checkForUpdates);
     d->helpMenu->addSeparator();
@@ -1761,10 +1766,9 @@ void MainWindow::changeEvent(QEvent *event)
 void MainWindow::retranslateUi()
 {
     setWindowTitle(tr("Catch Chart Editor"));
+    createMenus();
     if (d->mainToolBar)
-    {
         d->mainToolBar->setWindowTitle(tr("Tools"));
-    }
     if (d->notePanelAction)
         d->notePanelAction->setText(tr("Note"));
     if (d->bpmPanelAction)
@@ -1779,37 +1783,8 @@ void MainWindow::retranslateUi()
         d->bpmPanel->retranslateUi();
     if (d->metaPanel)
         d->metaPanel->retranslateUi();
-    if (d->colorAction)
-        d->colorAction->setText(tr("&Color Notes"));
-    if (d->timelineDivisionColorAction)
-        d->timelineDivisionColorAction->setText(tr("Color Timeline Divisions"));
-    if (d->timelineDivisionColorSettingsAction)
-        d->timelineDivisionColorSettingsAction->setText(tr("Timeline Division Color Advanced Settings..."));
-    if (d->hyperfruitAction)
-        d->hyperfruitAction->setText(tr("&Hyperfruit Outline"));
-    if (d->verticalFlipAction)
-        d->verticalFlipAction->setText(tr("&Vertical Flip"));
-    if (d->skinMenu)
-        d->skinMenu->setTitle(tr("&Skin"));
-    if (d->noteSoundMenu)
-        d->noteSoundMenu->setTitle(tr("Note &Sound"));
-    if (d->helpMenu)
-        d->helpMenu->setTitle(tr("&Help"));
-    if (d->checkUpdatesAction)
-        d->checkUpdatesAction->setText(tr("Check for Updates..."));
-    if (d->helpDocAction)
-        d->helpDocAction->setText(tr("Help Documentation..."));
-    if (d->aboutAction)
-        d->aboutAction->setText(tr("About..."));
-    if (d->versionAction)
-        d->versionAction->setText(tr("Version Information..."));
-    if (d->logsAction)
-        d->logsAction->setText(tr("Logs..."));
     if (d->mobileUiTestAction)
         d->mobileUiTestAction->setText(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
-    populateSkinMenu();
-    populateNoteSoundMenu();
-    populatePluginToolsMenu();
     retranslateMobileUi();
     applySidebarTheme();
     Logger::debug("UI retranslated");

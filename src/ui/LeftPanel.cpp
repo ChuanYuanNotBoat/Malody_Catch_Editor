@@ -38,7 +38,7 @@ void LeftPanel::setupUi()
     m_timeScaleSpin->setSingleStep(0.1);
     m_timeScaleSpin->setDecimals(2);
     m_timeScaleSpin->setValue(2.25);
-    m_timeScaleSpin->setSuffix("x");
+    m_timeScaleSpin->setSuffix(tr("x"));
 
     zoomLayout->addWidget(m_zoomLabel);
     zoomLayout->addWidget(m_zoomOutBtn);
@@ -183,4 +183,6 @@ void LeftPanel::retranslateUi()
         m_zoomLabel->setText(tr("Zoom:"));
     if (m_pluginSectionLabel)
         m_pluginSectionLabel->setText(tr("Plugin Shortcuts"));
+    if (m_timeScaleSpin)
+        m_timeScaleSpin->setSuffix(tr("x"));
 }

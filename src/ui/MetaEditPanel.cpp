@@ -69,7 +69,7 @@ void MetaEditPanel::setupUi()
 
     m_previewTimeSpin = new QSpinBox(this);
     m_previewTimeSpin->setRange(0, 999999);
-    m_previewTimeSpin->setSuffix(" ms");
+    m_previewTimeSpin->setSuffix(tr(" ms"));
     m_previewTimeLabel = new QLabel(tr("Preview Time:"), this);
     m_formLayout->addRow(m_previewTimeLabel, m_previewTimeSpin);
 
@@ -81,7 +81,7 @@ void MetaEditPanel::setupUi()
 
     m_offsetSpin = new QSpinBox(this);
     m_offsetSpin->setRange(-9999, 9999);
-    m_offsetSpin->setSuffix(" ms");
+    m_offsetSpin->setSuffix(tr(" ms"));
     m_offsetLabel = new QLabel(tr("Offset:"), this);
     m_formLayout->addRow(m_offsetLabel, m_offsetSpin);
 
@@ -199,4 +199,8 @@ void MetaEditPanel::retranslateUi()
         m_bgBrowseBtn->setText(tr("Browse..."));
     if (m_saveBtn)
         m_saveBtn->setText(tr("Save"));
+    if (m_previewTimeSpin)
+        m_previewTimeSpin->setSuffix(tr(" ms"));
+    if (m_offsetSpin)
+        m_offsetSpin->setSuffix(tr(" ms"));
 }
