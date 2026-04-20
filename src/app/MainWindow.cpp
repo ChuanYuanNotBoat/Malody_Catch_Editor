@@ -58,6 +58,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QInputDialog>
 #include <QListWidget>
 #include <QComboBox>
@@ -67,6 +68,15 @@
 #include <QSet>
 #include <QTimer>
 #include <QScreen>
+#include <QTextBrowser>
+#include <QTabWidget>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QNetworkReply>
+#include <QRegularExpression>
+#include <QStringConverter>
 #include <algorithm>
 
 namespace
@@ -120,6 +130,184 @@ QString modifiersPreviewText(Qt::KeyboardModifiers mods)
     if (parts.isEmpty())
         return QString();
     return parts.join("+") + "+...";
+}
+
+bool extractSemver(const QString &text, int &major, int &minor, int &patch)
+{
+    const QRegularExpression re("(\\d+)\\.(\\d+)\\.(\\d+)");
+    const QRegularExpressionMatch match = re.match(text);
+    if (!match.hasMatch())
+        return false;
+
+    bool ok1 = false;
+    bool ok2 = false;
+    bool ok3 = false;
+    major = match.captured(1).toInt(&ok1);
+    minor = match.captured(2).toInt(&ok2);
+    patch = match.captured(3).toInt(&ok3);
+    return ok1 && ok2 && ok3;
+}
+
+int compareSemver(const QString &current, const QString &latest)
+{
+    int cMaj = 0, cMin = 0, cPat = 0;
+    int lMaj = 0, lMin = 0, lPat = 0;
+    if (!extractSemver(current, cMaj, cMin, cPat) || !extractSemver(latest, lMaj, lMin, lPat))
+        return 0;
+
+    if (cMaj != lMaj)
+        return (cMaj < lMaj) ? -1 : 1;
+    if (cMin != lMin)
+        return (cMin < lMin) ? -1 : 1;
+    if (cPat != lPat)
+        return (cPat < lPat) ? -1 : 1;
+    return 0;
+}
+
+QString loadUtf8TextFile(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString();
+
+    QTextStream in(&file);
+    in.setEncoding(QStringConverter::Utf8);
+    return in.readAll();
+}
+
+QString loadDocText(const QStringList &candidatePaths, QString *resolvedPath = nullptr)
+{
+    for (const QString &path : candidatePaths)
+    {
+        const QString text = loadUtf8TextFile(path);
+        if (!text.trimmed().isEmpty())
+        {
+            if (resolvedPath)
+                *resolvedPath = path;
+            return text;
+        }
+    }
+    if (resolvedPath)
+        resolvedPath->clear();
+    return QString();
+}
+
+struct HistorySection
+{
+    QString title;
+    QStringList lines;
+};
+
+struct HistoryPrefixGroup
+{
+    QString key;
+    QString label;
+    QList<HistorySection> sections;
+};
+
+QList<HistorySection> parseHistorySections(const QString &historyText)
+{
+    QList<HistorySection> sections;
+    HistorySection current;
+    const QStringList rawLines = historyText.split('\n');
+    for (QString line : rawLines)
+    {
+        line = line.trimmed();
+        if (line.isEmpty())
+            continue;
+
+        if (line.startsWith("## "))
+        {
+            if (!current.title.isEmpty() || !current.lines.isEmpty())
+                sections.push_back(current);
+            current = HistorySection{};
+            current.title = line.mid(3).trimmed();
+            continue;
+        }
+
+        if (current.title.isEmpty())
+            current.title = QObject::tr("History");
+        current.lines.push_back(line);
+    }
+
+    if (!current.title.isEmpty() || !current.lines.isEmpty())
+        sections.push_back(current);
+    return sections;
+}
+
+QString historyPrefixFromTitle(const QString &title)
+{
+    const QString text = title.trimmed();
+    if (text.isEmpty())
+        return QString();
+
+    const QRegularExpression re("^\\[?([A-Za-z][A-Za-z0-9_-]*)\\]?");
+    const QRegularExpressionMatch m = re.match(text);
+    if (!m.hasMatch())
+        return QString();
+    return m.captured(1).trimmed();
+}
+
+QString normalizedPrefixLabel(const QString &prefix)
+{
+    if (prefix.isEmpty())
+        return QObject::tr("Other");
+    const QString lower = prefix.toLower();
+    return lower.left(1).toUpper() + lower.mid(1);
+}
+
+QList<HistoryPrefixGroup> groupHistorySectionsByPrefix(const QList<HistorySection> &sections)
+{
+    QList<HistoryPrefixGroup> groups;
+    for (const HistorySection &section : sections)
+    {
+        const QString rawPrefix = historyPrefixFromTitle(section.title);
+        const QString label = normalizedPrefixLabel(rawPrefix);
+        const QString key = rawPrefix.isEmpty() ? QString("__other__") : rawPrefix.toCaseFolded();
+
+        int index = -1;
+        for (int i = 0; i < groups.size(); ++i)
+        {
+            if (groups[i].key == key)
+            {
+                index = i;
+                break;
+            }
+        }
+
+        if (index < 0)
+        {
+            HistoryPrefixGroup group;
+            group.key = key;
+            group.label = label;
+            groups.push_back(group);
+            index = groups.size() - 1;
+        }
+
+        groups[index].sections.push_back(section);
+    }
+    return groups;
+}
+
+void setBrowserContentFromDoc(QTextBrowser *browser,
+                              const QStringList &candidatePaths,
+                              const QString &fallbackMarkdown)
+{
+    if (!browser)
+        return;
+
+    QString resolvedPath;
+    const QString docText = loadDocText(candidatePaths, &resolvedPath);
+    if (!docText.isEmpty())
+    {
+        const QString lower = resolvedPath.toLower();
+        if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".txt"))
+            browser->setMarkdown(docText);
+        else
+            browser->setPlainText(docText);
+        return;
+    }
+    browser->setMarkdown(fallbackMarkdown);
 }
 
 class ShortcutCaptureEdit final : public QLineEdit
@@ -294,6 +482,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->speedActionGroup = nullptr;
     d->skinMenu = nullptr;
     d->noteSoundMenu = nullptr;
+    d->helpMenu = nullptr;
     d->pluginToolsMenu = nullptr;
     d->pluginPanelsMenu = nullptr;
     d->mainToolBar = nullptr;
@@ -303,6 +492,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->notePanelAction = nullptr;
     d->bpmPanelAction = nullptr;
     d->metaPanelAction = nullptr;
+    d->checkUpdatesAction = nullptr;
+    d->aboutAction = nullptr;
     d->currentChartPath.clear();
     d->isModified = false;
 
@@ -576,6 +767,13 @@ void MainWindow::createMenus()
     populateSkinMenu();
     d->noteSoundMenu = menuBar()->addMenu(tr("Note &Sound"));
     populateNoteSoundMenu();
+    d->helpMenu = menuBar()->addMenu(tr("&Help"));
+    d->checkUpdatesAction = d->helpMenu->addAction(tr("Check for Updates..."), this, &MainWindow::checkForUpdates);
+    d->helpMenu->addSeparator();
+    d->helpDocAction = d->helpMenu->addAction(tr("Help Documentation..."), this, &MainWindow::showHelpPage);
+    d->aboutAction = d->helpMenu->addAction(tr("About..."), this, &MainWindow::showAboutPage);
+    d->versionAction = d->helpMenu->addAction(tr("Version Information..."), this, &MainWindow::showVersionPage);
+    d->logsAction = d->helpMenu->addAction(tr("Logs..."), this, &MainWindow::showLogsPage);
     if (useCompactMobileLayout() && menuBar())
     {
         menuBar()->setVisible(false);
@@ -1595,6 +1793,18 @@ void MainWindow::retranslateUi()
         d->skinMenu->setTitle(tr("&Skin"));
     if (d->noteSoundMenu)
         d->noteSoundMenu->setTitle(tr("Note &Sound"));
+    if (d->helpMenu)
+        d->helpMenu->setTitle(tr("&Help"));
+    if (d->checkUpdatesAction)
+        d->checkUpdatesAction->setText(tr("Check for Updates..."));
+    if (d->helpDocAction)
+        d->helpDocAction->setText(tr("Help Documentation..."));
+    if (d->aboutAction)
+        d->aboutAction->setText(tr("About..."));
+    if (d->versionAction)
+        d->versionAction->setText(tr("Version Information..."));
+    if (d->logsAction)
+        d->logsAction->setText(tr("Logs..."));
     if (d->mobileUiTestAction)
         d->mobileUiTestAction->setText(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
     populateSkinMenu();
@@ -1709,6 +1919,314 @@ void MainWindow::changeLanguage()
         } });
 
     statusBar()->showMessage(tr("Language changed to %1").arg(languageName), 2000);
+}
+
+void MainWindow::checkForUpdates()
+{
+    statusBar()->showMessage(tr("Checking for updates..."), 2000);
+
+    auto *manager = new QNetworkAccessManager(this);
+    QNetworkRequest request(QUrl("https://api.github.com/repos/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, "CatchChartEditor Update Checker");
+    request.setRawHeader("Accept", "application/vnd.github+json");
+
+    QNetworkReply *reply = manager->get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, manager]()
+            {
+        const QString currentVersion = QCoreApplication::applicationVersion();
+        if (reply->error() != QNetworkReply::NoError)
+        {
+            QMessageBox::warning(this,
+                                 tr("Check for Updates"),
+                                 tr("Update check failed: %1").arg(reply->errorString()));
+            reply->deleteLater();
+            manager->deleteLater();
+            return;
+        }
+
+        const QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+        const QJsonObject obj = doc.object();
+        const QString latestTag = obj.value("tag_name").toString();
+        const QString latestName = obj.value("name").toString();
+        const QString latestVersion = latestTag.isEmpty() ? latestName : latestTag;
+        const QString releaseUrl = obj.value("html_url").toString("https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest");
+
+        const int cmp = compareSemver(currentVersion, latestVersion);
+        if (cmp < 0)
+        {
+            QMessageBox box(this);
+            box.setIcon(QMessageBox::Information);
+            box.setWindowTitle(tr("Update Available"));
+            box.setText(tr("A newer version is available."));
+            box.setInformativeText(tr("Current: %1\nLatest: %2\n\nOpen release page?")
+                                       .arg(currentVersion, latestVersion));
+            QPushButton *openButton = box.addButton(tr("Open Release Page"), QMessageBox::AcceptRole);
+            box.addButton(QMessageBox::Cancel);
+            box.exec();
+            if (box.clickedButton() == openButton)
+                QDesktopServices::openUrl(QUrl(releaseUrl));
+        }
+        else if (cmp == 0)
+        {
+            QMessageBox::information(this,
+                                     tr("Check for Updates"),
+                                     tr("You are using the latest version.\nCurrent: %1").arg(currentVersion));
+        }
+        else
+        {
+            QMessageBox::information(this,
+                                     tr("Check for Updates"),
+                                     tr("Current version appears newer than latest release.\nCurrent: %1\nLatest: %2")
+                                         .arg(currentVersion, latestVersion));
+        }
+
+        reply->deleteLater();
+        manager->deleteLater(); });
+}
+
+void MainWindow::showHelpPage()
+{
+    showInfoCenter(0);
+}
+
+void MainWindow::showAboutPage()
+{
+    showInfoCenter(1);
+}
+
+void MainWindow::showVersionPage()
+{
+    showInfoCenter(2);
+}
+
+void MainWindow::showLogsPage()
+{
+    showInfoCenter(4);
+}
+
+void MainWindow::showInfoCenter(int initialTab)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Help Center"));
+    dialog.resize(840, 600);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+    QTabWidget *tabs = new QTabWidget(&dialog);
+    layout->addWidget(tabs, 1);
+
+    const QString docsDir = QCoreApplication::applicationDirPath() + "/docs";
+
+    // Help tab: user-facing documentation.
+    QTextBrowser *helpBrowser = new QTextBrowser(&dialog);
+    helpBrowser->setOpenExternalLinks(true);
+    setBrowserContentFromDoc(
+        helpBrowser,
+        QStringList{docsDir + "/help.md"},
+        tr("# Help Documentation\n\n"
+           "Create a `docs/help.md` file to customize this page.\n\n"
+           "Quick start:\n"
+           "1. Open a `.mc` chart.\n"
+           "2. Choose edit mode in the right panel.\n"
+           "3. Edit notes and save/export `.mcz`."));
+    tabs->addTab(helpBrowser, tr("Help"));
+
+    // About tab: keep it flexible for long-form "mixed" content.
+    QTextBrowser *aboutBrowser = new QTextBrowser(&dialog);
+    aboutBrowser->setOpenExternalLinks(true);
+    setBrowserContentFromDoc(
+        aboutBrowser,
+        QStringList{docsDir + "/about.md"},
+        tr("# About\n\n"
+           "Create a `docs/about.md` file to customize this page."));
+    tabs->addTab(aboutBrowser, tr("About"));
+
+    // Version tab: show build/runtime version information.
+    QTextBrowser *versionBrowser = new QTextBrowser(&dialog);
+    versionBrowser->setOpenExternalLinks(true);
+    const QString versionDoc = loadDocText(QStringList{docsDir + "/version.md"});
+    const QString historyDoc = loadDocText(QStringList{
+        docsDir + "/history.md",
+        docsDir + "/changelog.md"});
+    QString versionMarkdown = QString("# %1\n\n"
+                                      "- **%2** %3\n"
+                                      "- **%4** %5\n"
+                                      "- **%6** %7\n"
+                                      "- **%8** %9\n\n")
+                                  .arg(QCoreApplication::applicationName(),
+                                       tr("Application Version:"),
+                                       QCoreApplication::applicationVersion(),
+                                       tr("Qt Runtime:"),
+                                       qVersion(),
+                                       tr("Build ABI:"),
+                                       QSysInfo::buildAbi(),
+                                       tr("Operating System:"),
+                                       QSysInfo::prettyProductName());
+    if (!versionDoc.trimmed().isEmpty())
+    {
+        versionMarkdown += tr("## Version Notes\n\n");
+        versionMarkdown += versionDoc;
+        versionMarkdown += "\n\n";
+    }
+    versionMarkdown += tr("## History Updates\n\n"
+                          "Open the **History** tab for collapsible long update notes.");
+    versionBrowser->setMarkdown(versionMarkdown);
+    tabs->addTab(versionBrowser, tr("Version"));
+
+    // History tab: collapsible long update notes.
+    QWidget *historyTab = new QWidget(&dialog);
+    QVBoxLayout *historyLayout = new QVBoxLayout(historyTab);
+    QLabel *historyHint = new QLabel(tr("Long update notes are grouped by prefix and version and can be collapsed."), historyTab);
+    historyHint->setWordWrap(true);
+    historyLayout->addWidget(historyHint);
+
+    QTreeWidget *historyTree = new QTreeWidget(historyTab);
+    historyTree->setHeaderHidden(true);
+    historyLayout->addWidget(historyTree, 1);
+
+    QHBoxLayout *historyButtons = new QHBoxLayout;
+    QPushButton *expandAllBtn = new QPushButton(tr("Expand All"), historyTab);
+    QPushButton *collapseAllBtn = new QPushButton(tr("Collapse All"), historyTab);
+    historyButtons->addWidget(expandAllBtn);
+    historyButtons->addWidget(collapseAllBtn);
+    historyButtons->addStretch(1);
+    historyLayout->addLayout(historyButtons);
+
+    const QList<HistorySection> sections = parseHistorySections(historyDoc);
+    const QList<HistoryPrefixGroup> groups = groupHistorySectionsByPrefix(sections);
+    if (groups.isEmpty())
+    {
+        auto *emptyItem = new QTreeWidgetItem(historyTree);
+        emptyItem->setText(0, tr("No history document found. Put one in `docs/history.md` or `docs/changelog.md`."));
+    }
+    else
+    {
+        for (int g = 0; g < groups.size(); ++g)
+        {
+            const HistoryPrefixGroup &group = groups[g];
+            auto *groupItem = new QTreeWidgetItem(historyTree);
+            groupItem->setText(0, group.label);
+
+            for (int i = 0; i < group.sections.size(); ++i)
+            {
+                const HistorySection &section = group.sections[i];
+                auto *sectionItem = new QTreeWidgetItem(groupItem);
+                sectionItem->setText(0, section.title);
+                for (const QString &line : section.lines)
+                {
+                    auto *lineItem = new QTreeWidgetItem(sectionItem);
+                    lineItem->setText(0, line);
+                }
+                sectionItem->setExpanded(g == 0 && i == 0);
+            }
+            groupItem->setExpanded(g == 0);
+        }
+    }
+
+    connect(expandAllBtn, &QPushButton::clicked, historyTree, &QTreeWidget::expandAll);
+    connect(collapseAllBtn, &QPushButton::clicked, historyTree, &QTreeWidget::collapseAll);
+    tabs->addTab(historyTab, tr("History"));
+
+    // Logs tab: quick log access and overview.
+    QWidget *logTab = new QWidget(&dialog);
+    QVBoxLayout *logLayout = new QVBoxLayout(logTab);
+    QLabel *logHint = new QLabel(tr("Logs are generated in the application 'logs' directory."), logTab);
+    logHint->setWordWrap(true);
+    logLayout->addWidget(logHint);
+
+    QTableWidget *logTable = new QTableWidget(logTab);
+    logTable->setColumnCount(3);
+    logTable->setHorizontalHeaderLabels({tr("File"), tr("Size (KB)"), tr("Modified")});
+    logTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    logTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    logTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    logTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    logTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    logTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    logLayout->addWidget(logTable, 1);
+
+    QHBoxLayout *logButtons = new QHBoxLayout;
+    QPushButton *refreshBtn = new QPushButton(tr("Refresh"), logTab);
+    QPushButton *openSelectedBtn = new QPushButton(tr("Open Selected Log"), logTab);
+    QPushButton *openCurrentBtn = new QPushButton(tr("Open Current Log"), logTab);
+    QPushButton *openDirBtn = new QPushButton(tr("Open Log Folder"), logTab);
+    logButtons->addWidget(refreshBtn);
+    logButtons->addWidget(openSelectedBtn);
+    logButtons->addWidget(openCurrentBtn);
+    logButtons->addWidget(openDirBtn);
+    logButtons->addStretch(1);
+    logLayout->addLayout(logButtons);
+    tabs->addTab(logTab, tr("Logs"));
+
+    auto logsDirPath = [this]() -> QString {
+        const QString currentLog = Logger::logFilePath();
+        if (!currentLog.isEmpty())
+            return QFileInfo(currentLog).absolutePath();
+        return QCoreApplication::applicationDirPath() + "/logs";
+    };
+
+    auto refreshLogs = [logTable, logsDirPath]() {
+        const QDir dir(logsDirPath());
+        const QFileInfoList files = dir.entryInfoList(
+            QStringList() << "*.log" << "*.jsonl",
+            QDir::Files | QDir::NoSymLinks,
+            QDir::Time);
+
+        logTable->setRowCount(files.size());
+        for (int i = 0; i < files.size(); ++i)
+        {
+            const QFileInfo &fi = files[i];
+            auto *nameItem = new QTableWidgetItem(fi.fileName());
+            nameItem->setData(Qt::UserRole, fi.absoluteFilePath());
+            auto *sizeItem = new QTableWidgetItem(QString::number(fi.size() / 1024.0, 'f', 1));
+            auto *timeItem = new QTableWidgetItem(fi.lastModified().toString("yyyy-MM-dd HH:mm:ss"));
+            logTable->setItem(i, 0, nameItem);
+            logTable->setItem(i, 1, sizeItem);
+            logTable->setItem(i, 2, timeItem);
+        }
+        if (logTable->rowCount() > 0)
+            logTable->selectRow(0);
+    };
+
+    connect(refreshBtn, &QPushButton::clicked, &dialog, refreshLogs);
+    connect(openSelectedBtn, &QPushButton::clicked, &dialog, [this, logTable]() {
+        const int row = logTable->currentRow();
+        if (row < 0 || !logTable->item(row, 0))
+            return;
+        const QString path = logTable->item(row, 0)->data(Qt::UserRole).toString();
+        if (!path.isEmpty())
+            QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        else
+            QMessageBox::information(this, tr("Logs"), tr("No log file selected."));
+    });
+    connect(openCurrentBtn, &QPushButton::clicked, &dialog, [this]() {
+        const QString currentLog = Logger::logFilePath();
+        if (currentLog.isEmpty())
+        {
+            QMessageBox::information(this, tr("Logs"), tr("Current log file is not available yet."));
+            return;
+        }
+        QDesktopServices::openUrl(QUrl::fromLocalFile(currentLog));
+    });
+    connect(openDirBtn, &QPushButton::clicked, &dialog, [this, logsDirPath]() {
+        const QString dir = logsDirPath();
+        if (!QFileInfo::exists(dir))
+        {
+            QMessageBox::information(this, tr("Logs"), tr("Log folder does not exist yet."));
+            return;
+        }
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+
+    refreshLogs();
+    if (initialTab >= 0 && initialTab < tabs->count())
+        tabs->setCurrentIndex(initialTab);
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    layout->addWidget(buttons);
+
+    dialog.exec();
 }
 
 void MainWindow::applySidebarTheme()

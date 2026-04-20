@@ -173,6 +173,14 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/plugins")
     )
 endif()
 
+if(EXISTS "${CMAKE_SOURCE_DIR}/docs")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/docs
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/docs
+    )
+endif()
+
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(DIRECTORY resources/ DESTINATION share/${PROJECT_NAME})
 if(EXISTS "${CMAKE_SOURCE_DIR}/plugins")

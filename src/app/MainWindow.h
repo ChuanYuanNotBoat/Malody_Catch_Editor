@@ -77,6 +77,11 @@ private slots:
     void showMobileBpmPanel();
     void showMobileMetaPanel();
     void showMobileEditor();
+    void checkForUpdates();
+    void showHelpPage();
+    void showAboutPage();
+    void showVersionPage();
+    void showLogsPage();
 
 private:
     void setupUi();
@@ -96,6 +101,7 @@ private:
     QString selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong = QString());
     void registerShortcutAction(QAction *action, const QString &actionId, const QKeySequence &defaultShortcut);
     QString beatmapRootPath() const; // Return beatmap root directory.
+    void showInfoCenter(int initialTab);
     void applySidebarTheme();
     bool useCompactMobileLayout() const;
     void setupMobileCentralArea(QWidget *canvasContainer);

@@ -61,6 +61,7 @@ public:
     QActionGroup *speedActionGroup = nullptr;
     QMenu *skinMenu = nullptr;
     QMenu *noteSoundMenu = nullptr;
+    QMenu *helpMenu = nullptr;
     QMenu *pluginToolsMenu = nullptr;
     QMenu *pluginPanelsMenu = nullptr;
     QAction *noteSizeAction = nullptr;
@@ -71,6 +72,11 @@ public:
     QAction *bpmPanelAction = nullptr;
     QAction *metaPanelAction = nullptr;
     QAction *mobileUiTestAction = nullptr;
+    QAction *checkUpdatesAction = nullptr;
+    QAction *helpDocAction = nullptr;
+    QAction *aboutAction = nullptr;
+    QAction *versionAction = nullptr;
+    QAction *logsAction = nullptr;
     QToolBar *mainToolBar = nullptr;
     QWidget *mobileShell = nullptr;
     QQuickWidget *mobilePrimaryBar = nullptr;
