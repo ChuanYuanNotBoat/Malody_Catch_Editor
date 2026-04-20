@@ -446,13 +446,13 @@
         <location filename="../../src/app/MainWindow.cpp" line="645"/>
         <location filename="../../src/app/MainWindow.cpp" line="1785"/>
         <source>Color Timeline Divisions</source>
-        <translation type="unfinished"></translation>
+        <translation>时间分度着色</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="649"/>
         <location filename="../../src/app/MainWindow.cpp" line="1787"/>
         <source>Timeline Division Color Advanced Settings...</source>
-        <translation type="unfinished"></translation>
+        <translation>时间分度着色高级设置...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="651"/>
@@ -529,7 +529,7 @@
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="706"/>
         <source>Keyboard Shortcuts...</source>
-        <translation type="unfinished"></translation>
+        <translation>快捷键设置...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="710"/>
@@ -581,7 +581,7 @@
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="756"/>
         <source>Plugin &amp;Panels</source>
-        <translation type="unfinished"></translation>
+        <translation>插件面板(&amp;P)</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="759"/>
@@ -626,67 +626,67 @@
         <location filename="../../src/app/MainWindow.cpp" line="773"/>
         <location filename="../../src/app/MainWindow.cpp" line="1801"/>
         <source>Help Documentation...</source>
-        <translation type="unfinished"></translation>
+        <translation>帮助文档...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="774"/>
         <location filename="../../src/app/MainWindow.cpp" line="1803"/>
         <source>About...</source>
-        <translation type="unfinished"></translation>
+        <translation>关于...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="775"/>
         <location filename="../../src/app/MainWindow.cpp" line="1805"/>
         <source>Version Information...</source>
-        <translation type="unfinished"></translation>
+        <translation>版本信息...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="776"/>
         <location filename="../../src/app/MainWindow.cpp" line="1807"/>
         <source>Logs...</source>
-        <translation type="unfinished"></translation>
+        <translation>日志...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="804"/>
         <location filename="../../src/app/MainWindow.cpp" line="809"/>
         <location filename="../../src/app/MainWindow.cpp" line="877"/>
         <source>Keyboard Shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>快捷键</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="804"/>
         <source>No configurable shortcuts are available.</source>
-        <translation type="unfinished"></translation>
+        <translation>当前没有可配置的快捷键。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="813"/>
         <source>Rebind shortcuts. Clear a field to disable a shortcut.</source>
-        <translation type="unfinished"></translation>
+        <translation>重新绑定快捷键。清空某项可禁用对应快捷键。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="814"/>
         <source>Note: currently only 2-key combos using Shift/Ctrl are reliably supported. More complex combos and multi-main-key single-step bindings are not supported yet.</source>
-        <translation type="unfinished"></translation>
+        <translation>提示：当前仅稳定支持使用 Shift/Ctrl 的双键组合。更复杂组合和多主键单步绑定暂不支持。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="834"/>
         <source>Reset</source>
-        <translation type="unfinished"></translation>
+        <translation>重置</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="851"/>
         <source>Reset All</source>
-        <translation type="unfinished"></translation>
+        <translation>全部重置</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="878"/>
         <source>Shortcut conflict detected. Please assign unique shortcuts.</source>
-        <translation type="unfinished"></translation>
+        <translation>检测到快捷键冲突，请为每项设置唯一快捷键。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="896"/>
         <source>Keyboard shortcuts updated.</source>
-        <translation type="unfinished"></translation>
+        <translation>快捷键已更新。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1036"/>
@@ -985,82 +985,82 @@ Do you want to save before continuing?</source>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1560"/>
         <source>Timeline Division Color Advanced Settings</source>
-        <translation type="unfinished"></translation>
+        <translation>时间分度着色高级设置</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1582"/>
         <source>Enable Timeline Division Coloring</source>
-        <translation type="unfinished"></translation>
+        <translation>启用时间分度着色</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1588"/>
         <source>Custom</source>
-        <translation type="unfinished"></translation>
+        <translation>自定义</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1589"/>
         <source>Classic</source>
-        <translation type="unfinished"></translation>
+        <translation>经典</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1590"/>
         <source>All</source>
-        <translation type="unfinished"></translation>
+        <translation>全部</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1594"/>
         <source>Preset:</source>
-        <translation type="unfinished"></translation>
+        <translation>预设:</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1597"/>
         <source>Custom Rules</source>
-        <translation type="unfinished"></translation>
+        <translation>自定义规则</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1600"/>
         <source>Common divisions:</source>
-        <translation type="unfinished"></translation>
+        <translation>常用分度:</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1621"/>
         <source>Extra divisions (manual):</source>
-        <translation type="unfinished"></translation>
+        <translation>额外分度（手动）:</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1634"/>
         <source>Enter denominator, e.g. 48</source>
-        <translation type="unfinished"></translation>
+        <translation>输入分母，例如 48</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1635"/>
         <source>Add</source>
-        <translation type="unfinished"></translation>
+        <translation>添加</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1636"/>
         <source>Remove Selected</source>
-        <translation type="unfinished"></translation>
+        <translation>移除选中</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1660"/>
         <source>Invalid Division</source>
-        <translation type="unfinished"></translation>
+        <translation>无效分度</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1660"/>
         <source>Please enter a positive integer denominator.</source>
-        <translation type="unfinished"></translation>
+        <translation>请输入正整数分母。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1665"/>
         <source>Already In Common List</source>
-        <translation type="unfinished"></translation>
+        <translation>已在常用列表中</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1665"/>
         <source>This division is already in common rules. Please use its checkbox.</source>
-        <translation type="unfinished"></translation>
+        <translation>该分度已在常用规则中，请使用对应复选框。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1862"/>
@@ -1178,7 +1178,7 @@ Latest: %2</source>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="2010"/>
         <source>Help Center</source>
-        <translation type="unfinished"></translation>
+        <translation>帮助中心</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="2026"/>
@@ -1610,32 +1610,32 @@ Open the **History** tab for collapsible long update notes.</source>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="252"/>
         <source>Hide Left</source>
-        <translation type="unfinished"></translation>
+        <translation>隐藏左侧</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="252"/>
         <source>Show Left</source>
-        <translation type="unfinished"></translation>
+        <translation>显示左侧</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="253"/>
         <source>Hide Right</source>
-        <translation type="unfinished"></translation>
+        <translation>隐藏右侧</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="253"/>
         <source>Show Right</source>
-        <translation type="unfinished"></translation>
+        <translation>显示右侧</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="254"/>
         <source>Functions</source>
-        <translation type="unfinished"></translation>
+        <translation>功能</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="346"/>
         <source>Function Hub (Debug)</source>
-        <translation type="unfinished"></translation>
+        <translation>功能中心（调试）</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="350"/>
@@ -1645,7 +1645,7 @@ Open the **History** tab for collapsible long update notes.</source>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="355"/>
         <source>Search functions...</source>
-        <translation type="unfinished"></translation>
+        <translation>搜索功能...</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="392"/>
@@ -1655,7 +1655,7 @@ Open the **History** tab for collapsible long update notes.</source>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="450"/>
         <source>Run</source>
-        <translation type="unfinished"></translation>
+        <translation>运行</translation>
     </message>
 </context>
 <context>
@@ -1803,7 +1803,7 @@ Open the **History** tab for collapsible long update notes.</source>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="37"/>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="160"/>
         <source>Select Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>选择模式</translation>
     </message>
     <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="52"/>

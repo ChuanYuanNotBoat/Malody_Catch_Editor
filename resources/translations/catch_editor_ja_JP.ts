@@ -446,13 +446,13 @@
         <location filename="../../src/app/MainWindow.cpp" line="645"/>
         <location filename="../../src/app/MainWindow.cpp" line="1785"/>
         <source>Color Timeline Divisions</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン分割を色分け</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="649"/>
         <location filename="../../src/app/MainWindow.cpp" line="1787"/>
         <source>Timeline Division Color Advanced Settings...</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン分割色の詳細設定...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="651"/>
@@ -529,7 +529,7 @@
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="706"/>
         <source>Keyboard Shortcuts...</source>
-        <translation type="unfinished"></translation>
+        <translation>キーボードショートカット...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="710"/>
@@ -651,42 +651,42 @@
         <location filename="../../src/app/MainWindow.cpp" line="809"/>
         <location filename="../../src/app/MainWindow.cpp" line="877"/>
         <source>Keyboard Shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>キーボードショートカット</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="804"/>
         <source>No configurable shortcuts are available.</source>
-        <translation type="unfinished"></translation>
+        <translation>設定可能なショートカットはありません。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="813"/>
         <source>Rebind shortcuts. Clear a field to disable a shortcut.</source>
-        <translation type="unfinished"></translation>
+        <translation>ショートカットを再割り当てします。項目を空にするとそのショートカットを無効化できます。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="814"/>
         <source>Note: currently only 2-key combos using Shift/Ctrl are reliably supported. More complex combos and multi-main-key single-step bindings are not supported yet.</source>
-        <translation type="unfinished"></translation>
+        <translation>注意: 現在は Shift/Ctrl を使う2キーの組み合わせのみ安定してサポートされています。より複雑な組み合わせや複数主キーの単発バインドは未対応です。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="834"/>
         <source>Reset</source>
-        <translation type="unfinished"></translation>
+        <translation>リセット</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="851"/>
         <source>Reset All</source>
-        <translation type="unfinished"></translation>
+        <translation>すべてリセット</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="878"/>
         <source>Shortcut conflict detected. Please assign unique shortcuts.</source>
-        <translation type="unfinished"></translation>
+        <translation>ショートカットの競合が検出されました。重複しないように設定してください。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="896"/>
         <source>Keyboard shortcuts updated.</source>
-        <translation type="unfinished"></translation>
+        <translation>キーボードショートカットを更新しました。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1036"/>
@@ -985,82 +985,82 @@ Do you want to save before continuing?</source>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1560"/>
         <source>Timeline Division Color Advanced Settings</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン分割色の詳細設定</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1582"/>
         <source>Enable Timeline Division Coloring</source>
-        <translation type="unfinished"></translation>
+        <translation>タイムライン分割の色分けを有効化</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1588"/>
         <source>Custom</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタム</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1589"/>
         <source>Classic</source>
-        <translation type="unfinished"></translation>
+        <translation>クラシック</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1590"/>
         <source>All</source>
-        <translation type="unfinished"></translation>
+        <translation>すべて</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1594"/>
         <source>Preset:</source>
-        <translation type="unfinished"></translation>
+        <translation>プリセット:</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1597"/>
         <source>Custom Rules</source>
-        <translation type="unfinished"></translation>
+        <translation>カスタムルール</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1600"/>
         <source>Common divisions:</source>
-        <translation type="unfinished"></translation>
+        <translation>よく使う分割:</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1621"/>
         <source>Extra divisions (manual):</source>
-        <translation type="unfinished"></translation>
+        <translation>追加分割 (手動):</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1634"/>
         <source>Enter denominator, e.g. 48</source>
-        <translation type="unfinished"></translation>
+        <translation>分母を入力（例: 48）</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1635"/>
         <source>Add</source>
-        <translation type="unfinished"></translation>
+        <translation>追加</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1636"/>
         <source>Remove Selected</source>
-        <translation type="unfinished"></translation>
+        <translation>選択項目を削除</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1660"/>
         <source>Invalid Division</source>
-        <translation type="unfinished"></translation>
+        <translation>無効な分割</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1660"/>
         <source>Please enter a positive integer denominator.</source>
-        <translation type="unfinished"></translation>
+        <translation>正の整数の分母を入力してください。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1665"/>
         <source>Already In Common List</source>
-        <translation type="unfinished"></translation>
+        <translation>既に共通リストにあります</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1665"/>
         <source>This division is already in common rules. Please use its checkbox.</source>
-        <translation type="unfinished"></translation>
+        <translation>この分割は既に共通ルールに含まれています。対応するチェックボックスを使用してください。</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1862"/>
