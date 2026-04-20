@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="ja_JP" sourcelanguage="en_US">
 <context>
@@ -439,7 +439,99 @@
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="447"/>
         <source>&amp;Color Notes</source>
-        <translation>カラーノート(&amp;C)</translation>
+        <translation>&#12459;&#12521;&#12540;&#12494;&#12540;&#12488;(&amp;C)</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="453"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1581"/>
+        <source>Color Timeline Divisions</source>
+        <translation>&#12479;&#12452;&#12512;&#20998;&#21106;&#12434;&#33394;&#20998;&#12369;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="457"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1583"/>
+        <source>Timeline Division Color Advanced Settings...</source>
+        <translation>&#12479;&#12452;&#12512;&#20998;&#21106;&#33394;&#20998;&#12369;&#12398;&#35443;&#32048;&#35373;&#23450;...</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1361"/>
+        <source>Timeline Division Color Advanced Settings</source>
+        <translation>&#12479;&#12452;&#12512;&#20998;&#21106;&#33394;&#20998;&#12369;&#12398;&#35443;&#32048;&#35373;&#23450;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1364"/>
+        <source>Enable Timeline Division Coloring</source>
+        <translation>&#12479;&#12452;&#12512;&#20998;&#21106;&#12398;&#33394;&#20998;&#12369;&#12434;&#26377;&#21177;&#21270;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1370"/>
+        <source>Custom</source>
+        <translation>&#12459;&#12473;&#12479;&#12512;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1371"/>
+        <source>Classic</source>
+        <translation>&#12463;&#12521;&#12471;&#12483;&#12463;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1372"/>
+        <source>All</source>
+        <translation>&#12377;&#12409;&#12390;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1376"/>
+        <source>Preset:</source>
+        <translation>&#12503;&#12522;&#12475;&#12483;&#12488;:</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1379"/>
+        <source>Custom Rules</source>
+        <translation>&#12459;&#12473;&#12479;&#12512;&#12523;&#12540;&#12523;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1382"/>
+        <source>Common divisions:</source>
+        <translation>&#12424;&#12367;&#20351;&#12358;&#20998;&#21106;:</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1403"/>
+        <source>Extra divisions (manual):</source>
+        <translation>&#36861;&#21152;&#20998;&#21106;&#65288;&#25163;&#21205;&#65289;:</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1416"/>
+        <source>Enter denominator, e.g. 48</source>
+        <translation>&#20998;&#27597;&#12434;&#20837;&#21147;&#65288;&#20363;: 48&#65289;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1417"/>
+        <source>Add</source>
+        <translation>&#36861;&#21152;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1418"/>
+        <source>Remove Selected</source>
+        <translation>&#36984;&#25246;&#38917;&#30446;&#12434;&#21066;&#38500;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1442"/>
+        <source>Invalid Division</source>
+        <translation>&#28961;&#21177;&#12394;&#20998;&#21106;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1442"/>
+        <source>Please enter a positive integer denominator.</source>
+        <translation>&#27491;&#12398;&#25972;&#25968;&#12398;&#20998;&#27597;&#12434;&#20837;&#21147;&#12375;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1447"/>
+        <source>Already In Common List</source>
+        <translation>&#26082;&#12395;&#20849;&#36890;&#12522;&#12473;&#12488;&#12395;&#12354;&#12426;&#12414;&#12377;</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="1447"/>
+        <source>This division is already in common rules. Please use its checkbox.</source>
+        <translation>&#12371;&#12398;&#20998;&#21106;&#12399;&#26082;&#12395;&#20849;&#36890;&#12523;&#12540;&#12523;&#12395;&#12354;&#12426;&#12414;&#12377;&#12290;&#23550;&#24540;&#12377;&#12427;&#12481;&#12455;&#12483;&#12463;&#12508;&#12483;&#12463;&#12473;&#12434;&#20351;&#12387;&#12390;&#12367;&#12384;&#12373;&#12356;&#12290;</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="451"/>
@@ -479,12 +571,12 @@
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="486"/>
         <source>Custom...</source>
-        <translation>????...</translation>
+        <translation>Custom...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="489"/>
         <source>Select Background Color</source>
-        <translation>??????</translation>
+        <translation>Select Background Color</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="496"/>
@@ -520,7 +612,7 @@
         <location filename="../../src/app/MainWindow.cpp" line="510"/>
         <location filename="../../src/app/MainWindow.cpp" line="1414"/>
         <source>[Debug] Mobile UI Test Mode (Restart Required)</source>
-        <translation>[????] ????UI??????????????</translation>
+        <translation>[Debug] Mobile UI Test Mode (Restart Required)</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="516"/>
@@ -566,7 +658,7 @@
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="556"/>
         <source>Plugin &amp;Panels</source>
-        <translation>????????(&amp;P)</translation>
+        <translation>Plugin &amp;Panels</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="559"/>
@@ -934,52 +1026,52 @@ Do you want to save before continuing?</source>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1467"/>
         <source>Restart Required</source>
-        <translation>????????</translation>
+        <translation>Restart Required</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1468"/>
         <source>Mobile UI test mode was %1.</source>
-        <translation>????UI???????%1????</translation>
+        <translation>Mobile UI test mode was %1.</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1469"/>
         <source>enabled</source>
-        <translation>??</translation>
+        <translation>enabled</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1469"/>
         <source>disabled</source>
-        <translation>??</translation>
+        <translation>disabled</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1470"/>
         <source>This debug option applies after restart. Restart now?</source>
-        <translation>???????????????????????????????????</translation>
+        <translation>This debug option applies after restart. Restart now?</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1472"/>
         <source>Restart Now</source>
-        <translation>??????</translation>
+        <translation>Restart Now</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1473"/>
         <source>Later</source>
-        <translation>??</translation>
+        <translation>Later</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1479"/>
         <source>Mobile UI test mode will apply after restart.</source>
-        <translation>????UI???????????????????</translation>
+        <translation>Mobile UI test mode will apply after restart.</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1491"/>
         <source>Restart Failed</source>
-        <translation>??????????</translation>
+        <translation>Restart Failed</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1491"/>
         <source>Unable to restart automatically. Please relaunch manually.</source>
-        <translation>???????????????????????????</translation>
+        <translation>Unable to restart automatically. Please relaunch manually.</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="1512"/>
@@ -1043,12 +1135,12 @@ Do you want to save before continuing?</source>
     <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="114"/>
         <source>(No plugin panels)</source>
-        <translation>????????????</translation>
+        <translation>(No plugin panels)</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="269"/>
         <source>Plugin batch edit is empty or invalid: %1</source>
-        <translation>?????????????????: %1</translation>
+        <translation>Plugin batch edit is empty or invalid: %1</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="272"/>
@@ -1060,12 +1152,12 @@ Do you want to save before continuing?</source>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="363"/>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="371"/>
         <source>Plugin Panel</source>
-        <translation>????????</translation>
+        <translation>Plugin Panel</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="371"/>
         <source>Failed to create plugin panel.</source>
-        <translation>???????????????????</translation>
+        <translation>Failed to create plugin panel.</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="388"/>
@@ -1249,72 +1341,72 @@ Do you want to save before continuing?</source>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="248"/>
         <source>Open</source>
-        <translation>??</translation>
+        <translation>Open</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="249"/>
         <source>Save</source>
-        <translation>??</translation>
+        <translation>Save</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="250"/>
         <source>Play</source>
-        <translation>??</translation>
+        <translation>Play</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="251"/>
         <source>Editor</source>
-        <translation>?????</translation>
+        <translation>Editor</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="252"/>
         <source>Hide Left</source>
-        <translation>?????</translation>
+        <translation>Hide Left</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="252"/>
         <source>Show Left</source>
-        <translation>?????</translation>
+        <translation>Show Left</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="253"/>
         <source>Hide Right</source>
-        <translation>?????</translation>
+        <translation>Hide Right</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="253"/>
         <source>Show Right</source>
-        <translation>?????</translation>
+        <translation>Show Right</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="254"/>
         <source>Functions</source>
-        <translation>??</translation>
+        <translation>Functions</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="346"/>
         <source>Function Hub (Debug)</source>
-        <translation>??????????</translation>
+        <translation>Function Hub (Debug)</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="350"/>
         <source>This is a debug-only function list. Double-click an item to run it.</source>
-        <translation>???????????????????????????????????</translation>
+        <translation>This is a debug-only function list. Double-click an item to run it.</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="355"/>
         <source>Search functions...</source>
-        <translation>?????...</translation>
+        <translation>Search functions...</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="392"/>
         <source>Currently unavailable</source>
-        <translation>?????????</translation>
+        <translation>Currently unavailable</translation>
     </message>
     <message>
         <location filename="../../src/app/mobile/MainWindowMobile.cpp" line="450"/>
         <source>Run</source>
-        <translation>??</translation>
+        <translation>Run</translation>
     </message>
 </context>
 <context>
@@ -1462,7 +1554,7 @@ Do you want to save before continuing?</source>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="37"/>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="160"/>
         <source>Select Mode</source>
-        <translation>?????</translation>
+        <translation>&#36984;&#25246;&#12514;&#12540;&#12489;</translation>
     </message>
     <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="52"/>
@@ -1707,3 +1799,6 @@ Do you want to save before continuing?</source>
     </message>
 </context>
 </TS>
+
+
+

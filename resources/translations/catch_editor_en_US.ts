@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US" sourcelanguage="en_US">
 <context>
@@ -440,6 +440,18 @@
         <location filename="../../src/app/MainWindow.cpp" line="447"/>
         <source>&amp;Color Notes</source>
         <translation>&amp;Color Notes</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="453"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1581"/>
+        <source>Color Timeline Divisions</source>
+        <translation>Color Timeline Divisions</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindow.cpp" line="457"/>
+        <location filename="../../src/app/MainWindow.cpp" line="1583"/>
+        <source>Timeline Division Color Advanced Settings...</source>
+        <translation>Timeline Division Color Advanced Settings...</translation>
     </message>
     <message>
         <location filename="../../src/app/MainWindow.cpp" line="451"/>
@@ -1707,3 +1719,4 @@ Do you want to save before continuing?</translation>
     </message>
 </context>
 </TS>
+

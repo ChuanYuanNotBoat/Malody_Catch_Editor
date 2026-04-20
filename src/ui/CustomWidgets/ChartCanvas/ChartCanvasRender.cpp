@@ -431,7 +431,10 @@ void ChartCanvas::drawGrid(QPainter &painter)
         m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
                                  startTime, endTime,
                                  m_timeDivision, bpmCache,
-                                 m_verticalFlip);
+                                 m_verticalFlip,
+                                 Settings::instance().timelineDivisionColorEnabled(),
+                                 Settings::instance().timelineDivisionColorPreset(),
+                                 Settings::instance().timelineDivisionColorCustomDivisions());
     }
     catch (const std::exception &e)
     {

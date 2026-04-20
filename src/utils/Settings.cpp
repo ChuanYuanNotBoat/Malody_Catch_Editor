@@ -3,6 +3,8 @@
 #include <QCoreApplication>
 #include <QStandardPaths>
 #include <QtGlobal>
+#include <QStringList>
+#include <algorithm>
 
 Settings::Settings() : m_settings("CatchEditor", "CatchChartEditor") {}
 
@@ -47,6 +49,65 @@ bool Settings::colorNoteEnabled() const
 void Settings::setColorNoteEnabled(bool enabled)
 {
     m_settings.setValue("colorNoteEnabled", enabled);
+}
+
+bool Settings::timelineDivisionColorEnabled() const
+{
+    return m_settings.value("view/timelineDivisionColorEnabled", false).toBool();
+}
+void Settings::setTimelineDivisionColorEnabled(bool enabled)
+{
+    m_settings.setValue("view/timelineDivisionColorEnabled", enabled);
+}
+
+QString Settings::timelineDivisionColorPreset() const
+{
+    return m_settings.value("view/timelineDivisionColorPreset", "custom").toString();
+}
+
+void Settings::setTimelineDivisionColorPreset(const QString &preset)
+{
+    m_settings.setValue("view/timelineDivisionColorPreset", preset);
+}
+
+QList<int> Settings::timelineDivisionColorCustomDivisions() const
+{
+    const QStringList raw = m_settings.value(
+                                          "view/timelineDivisionColorCustomDivisions",
+                                          QStringList({"1", "2", "3", "4", "6", "8", "12", "16", "24", "32"}))
+                                .toStringList();
+
+    QList<int> out;
+    out.reserve(raw.size());
+    for (const QString &s : raw)
+    {
+        bool ok = false;
+        const int v = s.toInt(&ok);
+        if (ok && v > 0)
+            out.append(v);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+}
+
+void Settings::setTimelineDivisionColorCustomDivisions(const QList<int> &divisions)
+{
+    QList<int> cleaned;
+    cleaned.reserve(divisions.size());
+    for (int v : divisions)
+    {
+        if (v > 0)
+            cleaned.append(v);
+    }
+    std::sort(cleaned.begin(), cleaned.end());
+    cleaned.erase(std::unique(cleaned.begin(), cleaned.end()), cleaned.end());
+
+    QStringList serialized;
+    serialized.reserve(cleaned.size());
+    for (int v : cleaned)
+        serialized.append(QString::number(v));
+    m_settings.setValue("view/timelineDivisionColorCustomDivisions", serialized);
 }
 
 bool Settings::hyperfruitOutlineEnabled() const

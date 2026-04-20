@@ -48,6 +48,8 @@ private slots:
     void undo();
     void redo();
     void toggleColorMode(bool on);
+    void toggleTimelineDivisionColorMode(bool on);
+    void openTimelineDivisionColorSettings();
     void toggleHyperfruitMode(bool on);
     void toggleVerticalFlip(bool flipped);
     void togglePlayback();

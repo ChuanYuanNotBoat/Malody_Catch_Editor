@@ -53,6 +53,8 @@ public:
     QAction *undoAction = nullptr;
     QAction *redoAction = nullptr;
     QAction *colorAction = nullptr;
+    QAction *timelineDivisionColorAction = nullptr;
+    QAction *timelineDivisionColorSettingsAction = nullptr;
     QAction *hyperfruitAction = nullptr;
     QAction *verticalFlipAction = nullptr;
     QAction *playAction = nullptr;

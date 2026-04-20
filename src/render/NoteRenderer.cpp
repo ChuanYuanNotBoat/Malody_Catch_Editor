@@ -1,5 +1,6 @@
 #include "NoteRenderer.h"
 #include "model/Skin.h"
+#include "render/BeatDivisionColor.h"
 #include "render/HyperfruitDetector.h"
 #include "utils/Settings.h"
 #include <QPainter>
@@ -45,38 +46,6 @@ void NoteRenderer::setNoteSize(int size)
 int NoteRenderer::getNoteSize() const
 {
     return m_noteSize;
-}
-
-static QColor getNoteColor(int denominator, int numerator)
-{
-    Q_UNUSED(numerator);
-    switch (denominator)
-    {
-    case 1:
-        return QColor(255, 0, 0);
-    case 2:
-        return QColor(135, 206, 235);
-    case 3:
-        return QColor(0, 255, 0);
-    case 4:
-        return QColor(128, 0, 128);
-    case 6:
-        return QColor(0, 255, 0);
-    case 8:
-        return QColor(255, 215, 0);
-    case 12:
-        return QColor(0, 255, 0);
-    case 16:
-        return QColor(255, 215, 0);
-    case 24:
-        return QColor(0, 255, 0);
-    case 32:
-        return QColor(255, 215, 0);
-    case 288:
-        return QColor(0, 0, 255);
-    default:
-        return QColor(255, 0, 0);
-    }
 }
 
 void NoteRenderer::drawNote(QPainter &painter, const Note &note, const QPointF &pos, bool selected, int index) const
@@ -127,7 +96,7 @@ void NoteRenderer::drawNote(QPainter &painter, const Note &note, const QPointF &
     }
     else if (m_showColors && !m_skin)
     {
-        painter.setBrush(getNoteColor(note.denominator, note.numerator));
+        painter.setBrush(BeatDivisionColor::noteColorForDivision(note.denominator, note.numerator));
         painter.setPen(Qt::NoPen);
         painter.drawEllipse(rect);
     }

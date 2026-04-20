@@ -60,6 +60,7 @@
 #include <QJsonDocument>
 #include <QInputDialog>
 #include <QListWidget>
+#include <QComboBox>
 #include <QPushButton>
 #include <QTreeWidget>
 #include <QScrollBar>
@@ -285,6 +286,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->undoAction = nullptr;
     d->redoAction = nullptr;
     d->colorAction = nullptr;
+    d->timelineDivisionColorAction = nullptr;
+    d->timelineDivisionColorSettingsAction = nullptr;
     d->hyperfruitAction = nullptr;
     d->verticalFlipAction = nullptr;
     d->playAction = nullptr;
@@ -448,6 +451,12 @@ void MainWindow::createMenus()
     d->colorAction->setCheckable(true);
     d->colorAction->setChecked(Settings::instance().colorNoteEnabled());
     connect(d->colorAction, &QAction::toggled, this, &MainWindow::toggleColorMode);
+    d->timelineDivisionColorAction = viewMenu->addAction(tr("Color Timeline Divisions"));
+    d->timelineDivisionColorAction->setCheckable(true);
+    d->timelineDivisionColorAction->setChecked(Settings::instance().timelineDivisionColorEnabled());
+    connect(d->timelineDivisionColorAction, &QAction::toggled, this, &MainWindow::toggleTimelineDivisionColorMode);
+    d->timelineDivisionColorSettingsAction = viewMenu->addAction(tr("Timeline Division Color Advanced Settings..."));
+    connect(d->timelineDivisionColorSettingsAction, &QAction::triggered, this, &MainWindow::openTimelineDivisionColorSettings);
     d->hyperfruitAction = viewMenu->addAction(tr("&Hyperfruit Outline"));
     d->hyperfruitAction->setCheckable(true);
     d->hyperfruitAction->setChecked(Settings::instance().hyperfruitOutlineEnabled());
@@ -1339,6 +1348,172 @@ void MainWindow::toggleColorMode(bool on)
     d->canvas->setColorMode(on);
 }
 
+void MainWindow::toggleTimelineDivisionColorMode(bool on)
+{
+    Logger::info(QString("Timeline division color mode toggled to %1").arg(on));
+    Settings::instance().setTimelineDivisionColorEnabled(on);
+    if (d->canvas)
+        d->canvas->update();
+}
+
+void MainWindow::openTimelineDivisionColorSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Timeline Division Color Advanced Settings"));
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+    const QColor baseBg = Settings::instance().backgroundColor();
+    const QColor fg = sidebarTextColorFor(baseBg);
+    const bool darkTheme = (fg.lightness() > 128);
+    const QColor panelBg = darkTheme ? baseBg.lighter(108) : baseBg.darker(103);
+    const QColor panelInputBg = darkTheme ? panelBg.lighter(120) : panelBg.darker(105);
+    const QColor panelButtonBg = darkTheme ? panelBg.lighter(132) : panelBg.darker(112);
+    const QColor panelBorder = darkTheme ? panelBg.lighter(165) : panelBg.darker(145);
+    const QColor selectionText = darkTheme ? QColor(20, 20, 20) : QColor(245, 245, 245);
+    dialog.setStyleSheet(QString(
+                             "QDialog { background-color: %1; color: %2; }"
+                             "QLabel, QCheckBox, QRadioButton, QGroupBox { color: %2; }"
+                             "QGroupBox { border: 1px solid %4; margin-top: 8px; padding-top: 8px; }"
+                             "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: %2; }"
+                             "QLineEdit, QComboBox, QListWidget { background-color: %3; color: %2; border: 1px solid %4; }"
+                             "QListWidget::item:selected { background-color: %5; color: %6; }"
+                             "QPushButton { background-color: %5; color: %2; border: 1px solid %4; padding: 3px 8px; }")
+                             .arg(panelBg.name(), fg.name(), panelInputBg.name(),
+                                  panelBorder.name(), panelButtonBg.name(), selectionText.name()));
+
+    QCheckBox *enableCheck = new QCheckBox(tr("Enable Timeline Division Coloring"), &dialog);
+    enableCheck->setChecked(Settings::instance().timelineDivisionColorEnabled());
+    layout->addWidget(enableCheck);
+
+    QFormLayout *form = new QFormLayout;
+    QComboBox *presetCombo = new QComboBox(&dialog);
+    presetCombo->addItem(tr("Custom"), "custom");
+    presetCombo->addItem(tr("Classic"), "classic");
+    presetCombo->addItem(tr("All"), "all");
+    const QString preset = Settings::instance().timelineDivisionColorPreset().toLower();
+    const int presetIndex = qMax(0, presetCombo->findData(preset));
+    presetCombo->setCurrentIndex(presetIndex);
+    form->addRow(tr("Preset:"), presetCombo);
+    layout->addLayout(form);
+
+    QGroupBox *customGroup = new QGroupBox(tr("Custom Rules"), &dialog);
+    QVBoxLayout *customLayout = new QVBoxLayout(customGroup);
+
+    QLabel *commonLabel = new QLabel(tr("Common divisions:"), customGroup);
+    customLayout->addWidget(commonLabel);
+
+    QWidget *commonWrap = new QWidget(customGroup);
+    QHBoxLayout *commonLayout = new QHBoxLayout(commonWrap);
+    commonLayout->setContentsMargins(0, 0, 0, 0);
+    commonLayout->setSpacing(8);
+
+    const QList<int> commonDivisions = {1, 2, 3, 4, 6, 8, 12, 16, 24, 32};
+    const QList<int> savedCustom = Settings::instance().timelineDivisionColorCustomDivisions();
+    QHash<int, QCheckBox *> commonChecks;
+    for (int div : commonDivisions)
+    {
+        QCheckBox *cb = new QCheckBox(QString("/%1").arg(div), commonWrap);
+        cb->setChecked(savedCustom.contains(div));
+        commonChecks.insert(div, cb);
+        commonLayout->addWidget(cb);
+    }
+    commonLayout->addStretch(1);
+    customLayout->addWidget(commonWrap);
+
+    QLabel *extraLabel = new QLabel(tr("Extra divisions (manual):"), customGroup);
+    customLayout->addWidget(extraLabel);
+
+    QListWidget *extraList = new QListWidget(customGroup);
+    for (int div : savedCustom)
+    {
+        if (!commonDivisions.contains(div))
+            extraList->addItem(QString::number(div));
+    }
+    customLayout->addWidget(extraList);
+
+    QHBoxLayout *addRow = new QHBoxLayout;
+    QLineEdit *addEdit = new QLineEdit(customGroup);
+    addEdit->setPlaceholderText(tr("Enter denominator, e.g. 48"));
+    QPushButton *addBtn = new QPushButton(tr("Add"), customGroup);
+    QPushButton *removeBtn = new QPushButton(tr("Remove Selected"), customGroup);
+    addRow->addWidget(addEdit, 1);
+    addRow->addWidget(addBtn);
+    addRow->addWidget(removeBtn);
+    customLayout->addLayout(addRow);
+
+    layout->addWidget(customGroup);
+
+    auto refreshCustomEnabled = [presetCombo, customGroup]()
+    {
+        const QString p = presetCombo->currentData().toString().toLower();
+        customGroup->setEnabled(p == "custom");
+    };
+    refreshCustomEnabled();
+    connect(presetCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [refreshCustomEnabled](int) {
+        refreshCustomEnabled();
+    });
+
+    connect(addBtn, &QPushButton::clicked, &dialog, [this, addEdit, extraList, commonDivisions]()
+            {
+        bool ok = false;
+        const int v = addEdit->text().trimmed().toInt(&ok);
+        if (!ok || v <= 0)
+        {
+            QMessageBox::warning(this, tr("Invalid Division"), tr("Please enter a positive integer denominator."));
+            return;
+        }
+        if (commonDivisions.contains(v))
+        {
+            QMessageBox::information(this, tr("Already In Common List"), tr("This division is already in common rules. Please use its checkbox."));
+            return;
+        }
+        for (int i = 0; i < extraList->count(); ++i)
+        {
+            if (extraList->item(i)->text().toInt() == v)
+                return;
+        }
+        extraList->addItem(QString::number(v));
+        addEdit->clear(); });
+
+    connect(removeBtn, &QPushButton::clicked, &dialog, [extraList]()
+            {
+        qDeleteAll(extraList->selectedItems()); });
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+
+    const bool enabled = enableCheck->isChecked();
+    const QString selectedPreset = presetCombo->currentData().toString().toLower();
+    QList<int> customRules;
+    for (int div : commonDivisions)
+    {
+        QCheckBox *cb = commonChecks.value(div, nullptr);
+        if (cb && cb->isChecked())
+            customRules.append(div);
+    }
+    for (int i = 0; i < extraList->count(); ++i)
+    {
+        bool ok = false;
+        const int v = extraList->item(i)->text().toInt(&ok);
+        if (ok && v > 0)
+            customRules.append(v);
+    }
+
+    Settings::instance().setTimelineDivisionColorEnabled(enabled);
+    Settings::instance().setTimelineDivisionColorPreset(selectedPreset);
+    Settings::instance().setTimelineDivisionColorCustomDivisions(customRules);
+
+    if (d->timelineDivisionColorAction)
+        d->timelineDivisionColorAction->setChecked(enabled);
+    if (d->canvas)
+        d->canvas->update();
+}
+
 void MainWindow::toggleHyperfruitMode(bool on)
 {
     Logger::info(QString("Hyperfruit mode toggled to %1").arg(on));
@@ -1406,6 +1581,16 @@ void MainWindow::retranslateUi()
         d->bpmPanel->retranslateUi();
     if (d->metaPanel)
         d->metaPanel->retranslateUi();
+    if (d->colorAction)
+        d->colorAction->setText(tr("&Color Notes"));
+    if (d->timelineDivisionColorAction)
+        d->timelineDivisionColorAction->setText(tr("Color Timeline Divisions"));
+    if (d->timelineDivisionColorSettingsAction)
+        d->timelineDivisionColorSettingsAction->setText(tr("Timeline Division Color Advanced Settings..."));
+    if (d->hyperfruitAction)
+        d->hyperfruitAction->setText(tr("&Hyperfruit Outline"));
+    if (d->verticalFlipAction)
+        d->verticalFlipAction->setText(tr("&Vertical Flip"));
     if (d->skinMenu)
         d->skinMenu->setTitle(tr("&Skin"));
     if (d->noteSoundMenu)

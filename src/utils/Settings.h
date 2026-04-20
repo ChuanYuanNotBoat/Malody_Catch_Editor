@@ -3,6 +3,7 @@
 #include <QSettings>
 #include <QKeySequence>
 #include <QColor>
+#include <QList>
 
 class Settings
 {
@@ -18,6 +19,12 @@ public:
 
     bool colorNoteEnabled() const;
     void setColorNoteEnabled(bool enabled);
+    bool timelineDivisionColorEnabled() const;
+    void setTimelineDivisionColorEnabled(bool enabled);
+    QString timelineDivisionColorPreset() const;
+    void setTimelineDivisionColorPreset(const QString &preset);
+    QList<int> timelineDivisionColorCustomDivisions() const;
+    void setTimelineDivisionColorCustomDivisions(const QList<int> &divisions);
 
     bool hyperfruitOutlineEnabled() const;
     void setHyperfruitOutlineEnabled(bool enabled);

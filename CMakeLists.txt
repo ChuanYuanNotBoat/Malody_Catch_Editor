@@ -43,6 +43,7 @@ set(SOURCES
     src/controller/SelectionController.cpp
     src/controller/PlaybackController.cpp
     src/render/NoteRenderer.cpp
+    src/render/BeatDivisionColor.cpp
     src/render/GridRenderer.cpp
     src/render/BackgroundRenderer.cpp
     src/render/HyperfruitDetector.cpp
