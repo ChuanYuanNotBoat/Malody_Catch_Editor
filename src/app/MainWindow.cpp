@@ -60,6 +60,7 @@
 #include <QTextStream>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QInputDialog>
 #include <QListWidget>
 #include <QComboBox>
@@ -519,7 +520,17 @@ QString workingSessionDirFromWorkingPath(const QString &workingPath)
 {
     if (workingPath.isEmpty())
         return QString();
-    return QFileInfo(workingPath).absolutePath();
+
+    const QString baseRoot = QDir(sessionWorkingCopyRootDir()).absolutePath();
+    const QString workingDir = QFileInfo(workingPath).absoluteDir().absolutePath();
+    const QString rel = QDir(baseRoot).relativeFilePath(workingDir);
+    if (rel.isEmpty() || rel.startsWith(".."))
+        return workingDir;
+
+    const QString firstSegment = rel.section('/', 0, 0);
+    if (firstSegment.isEmpty() || firstSegment == ".")
+        return workingDir;
+    return QDir(baseRoot).filePath(firstSegment);
 }
 
 void removePathRecursively(const QString &path)
@@ -599,6 +610,94 @@ bool copyDirectoryRecursively(const QString &sourceDirPath, const QString &targe
     return true;
 }
 
+QStringList collectReferencedResources(const QString &chartPath)
+{
+    QStringList resources;
+    QFile file(chartPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return resources;
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return resources;
+
+    const auto appendIfPresent = [&resources](const QJsonObject &obj, const char *key) {
+        const QString value = obj.value(QString::fromUtf8(key)).toString().trimmed();
+        if (!value.isEmpty())
+            resources.append(value);
+    };
+
+    const QJsonObject root = doc.object();
+    const QJsonObject meta = root.value("meta").toObject();
+    appendIfPresent(meta, "background");
+    appendIfPresent(meta, "audio");
+
+    const QJsonArray notes = root.value("note").toArray();
+    for (const QJsonValue &v : notes)
+    {
+        if (!v.isObject())
+            continue;
+        appendIfPresent(v.toObject(), "sound");
+    }
+
+    resources.removeDuplicates();
+    return resources;
+}
+
+bool isPathInsideRoot(const QString &rootPath, const QString &targetPath)
+{
+    const QString root = QDir::cleanPath(rootPath);
+    const QString target = QDir::cleanPath(targetPath);
+    const QString prefix = root.endsWith('/') ? root : (root + '/');
+    return target == root || target.startsWith(prefix, Qt::CaseInsensitive);
+}
+
+void copyReferencedExternalResources(const QString &sourceChartPath, const QString &workingChartPath)
+{
+    if (sourceChartPath.isEmpty() || workingChartPath.isEmpty())
+        return;
+
+    const QString sourceChartDir = QFileInfo(sourceChartPath).absoluteDir().absolutePath();
+    const QString workingChartDir = QFileInfo(workingChartPath).absoluteDir().absolutePath();
+    const QString sessionRoot = workingSessionDirFromWorkingPath(workingChartPath);
+    const QStringList resources = collectReferencedResources(sourceChartPath);
+    for (const QString &resource : resources)
+    {
+        if (resource.isEmpty() || QDir::isAbsolutePath(resource))
+            continue;
+
+        const QString sourceAbs = QDir::cleanPath(QDir(sourceChartDir).absoluteFilePath(resource));
+        const QFileInfo sourceFi(sourceAbs);
+        if (!sourceFi.exists())
+            continue;
+
+        const QString targetAbs = QDir::cleanPath(QDir(workingChartDir).absoluteFilePath(resource));
+        if (!isPathInsideRoot(sessionRoot, targetAbs))
+        {
+            Logger::warn(QString("Skip copying referenced resource outside working session root: %1").arg(resource));
+            continue;
+        }
+
+        if (sourceFi.isDir() && !sourceFi.isSymLink())
+        {
+            QString copyError;
+            if (!copyDirectoryRecursively(sourceAbs, targetAbs, &copyError))
+            {
+                Logger::warn(QString("Failed to copy referenced resource directory: %1 (%2)").arg(resource, copyError));
+            }
+            continue;
+        }
+
+        QDir().mkpath(QFileInfo(targetAbs).absolutePath());
+        QFile::remove(targetAbs);
+        if (!QFile::copy(sourceAbs, targetAbs))
+        {
+            Logger::warn(QString("Failed to copy referenced resource file: %1").arg(resource));
+        }
+    }
+}
+
 void cleanupSessionWorkingCopies(const QString &preserveWorkingPath)
 {
     QDir dir(sessionWorkingCopyRootDir());
@@ -631,9 +730,11 @@ QString buildWorkingCopyPath(const QString &sourcePath, QString *workingSessionD
                                          uid,
                                          sourceDirName.isEmpty() ? QStringLiteral("chart_session") : sourceDirName);
     const QString sessionDir = QDir(sessionWorkingCopyRootDir()).filePath(sessionName);
+    const QString chartDirName = sourceDirName.isEmpty() ? QStringLiteral("chart_dir") : sourceDirName;
+    const QString chartDir = QDir(sessionDir).filePath(chartDirName);
     if (workingSessionDirOut)
         *workingSessionDirOut = sessionDir;
-    return QDir(sessionDir).filePath(fileName);
+    return QDir(chartDir).filePath(fileName);
 }
 
 bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPathOut, QString *errorOut)
@@ -669,7 +770,7 @@ bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPath
     QString workingSessionDir;
     const QString workingPath = buildWorkingCopyPath(sourcePath, &workingSessionDir);
     removePathRecursively(workingSessionDir);
-    if (!copyDirectoryRecursively(sourceInfo.absolutePath(), workingSessionDir, errorOut))
+    if (!copyDirectoryRecursively(sourceInfo.absolutePath(), QFileInfo(workingPath).absoluteDir().absolutePath(), errorOut))
     {
         removePathRecursively(workingSessionDir);
         return false;
@@ -680,6 +781,8 @@ bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPath
             *errorOut = QObject::tr("Working copy chart file is missing:\n%1").arg(workingPath);
         return false;
     }
+
+    copyReferencedExternalResources(sourcePath, workingPath);
 
     if (workingPathOut)
         *workingPathOut = workingPath;
