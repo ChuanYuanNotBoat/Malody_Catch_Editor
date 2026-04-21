@@ -628,10 +628,12 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->sourceChartPath.clear();
     d->workingChartPath.clear();
     d->isModified = false;
+    d->autoSaveTimer = nullptr;
 
     setupUi();
     createCentralArea();
     createMenus();
+    setupAutoSaveTimer();
 
     connect(d->chartController, &ChartController::chartChanged, this, [this]()
             {
@@ -1220,6 +1222,50 @@ void MainWindow::clearWorkingCopySession(bool removeWorkingFile)
     d->sourceChartPath.clear();
     removeRecoveryState();
     cleanupSessionWorkingCopies(QString());
+}
+
+void MainWindow::setupAutoSaveTimer()
+{
+    if (d->autoSaveTimer)
+    {
+        d->autoSaveTimer->stop();
+        d->autoSaveTimer->deleteLater();
+    }
+    d->autoSaveTimer = new QTimer(this);
+    d->autoSaveTimer->setTimerType(Qt::CoarseTimer);
+    d->autoSaveTimer->setInterval(Settings::instance().autoSaveIntervalSec() * 1000);
+    connect(d->autoSaveTimer, &QTimer::timeout, this, [this]()
+            { performAutoSaveTick(); });
+    if (Settings::instance().autoSaveEnabled())
+        d->autoSaveTimer->start();
+}
+
+void MainWindow::performAutoSaveTick()
+{
+    if (!Settings::instance().autoSaveEnabled())
+        return;
+    if (!d->isModified || !d->chartController)
+        return;
+
+    QString sourcePath = d->sourceChartPath;
+    if (sourcePath.isEmpty())
+        sourcePath = d->currentChartPath;
+    if (sourcePath.isEmpty())
+        return;
+
+    if (!d->chartController->saveChart(sourcePath))
+    {
+        Logger::warn(QString("Auto-save failed: %1").arg(sourcePath));
+        return;
+    }
+
+    d->sourceChartPath = sourcePath;
+    d->currentChartPath = sourcePath;
+    d->isModified = false;
+    if (!d->workingChartPath.isEmpty())
+        d->chartController->saveChart(d->workingChartPath);
+    persistRecoveryState();
+    statusBar()->showMessage(tr("Auto-saved: %1").arg(sourcePath), 1200);
 }
 
 void MainWindow::tryRecoverPreviousSession()

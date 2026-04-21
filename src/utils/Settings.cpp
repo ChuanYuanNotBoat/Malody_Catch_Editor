@@ -270,3 +270,23 @@ void Settings::setMobileUiTestMode(bool enabled)
 {
     m_settings.setValue("debug/mobileUiTestMode", enabled);
 }
+
+bool Settings::autoSaveEnabled() const
+{
+    return m_settings.value("editor/autoSaveEnabled", true).toBool();
+}
+
+void Settings::setAutoSaveEnabled(bool enabled)
+{
+    m_settings.setValue("editor/autoSaveEnabled", enabled);
+}
+
+int Settings::autoSaveIntervalSec() const
+{
+    return qMax(15, m_settings.value("editor/autoSaveIntervalSec", 90).toInt());
+}
+
+void Settings::setAutoSaveIntervalSec(int seconds)
+{
+    m_settings.setValue("editor/autoSaveIntervalSec", qMax(15, seconds));
+}

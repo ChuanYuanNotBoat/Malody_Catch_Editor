@@ -243,6 +243,14 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     }
 
     QVariantMap context;
+    if (!d->workingChartPath.isEmpty())
+    {
+        if (!d->chartController->saveChart(d->workingChartPath))
+        {
+            QMessageBox::warning(this, tr("Plugin Action"), tr("Failed to sync working copy before plugin action."));
+            return false;
+        }
+    }
     context.insert("chart_path", chartPath);
     context.insert("chart_path_native", QDir::toNativeSeparators(chartPath));
     context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());

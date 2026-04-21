@@ -88,6 +88,7 @@ public:
     QScrollArea *mobileLeftPanelHost = nullptr;
     QScrollArea *mobileRightPanelHost = nullptr;
     QTimer *mobileSplitterSettleTimer = nullptr;
+    QTimer *autoSaveTimer = nullptr;
     bool mobileSplitterSuppressCanvasUpdates = false;
     bool compactUiMode = false;
     QMenu *languageMenu = nullptr;

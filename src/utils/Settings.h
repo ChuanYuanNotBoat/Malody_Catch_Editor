@@ -76,6 +76,11 @@ public:
     bool mobileUiTestMode() const;
     void setMobileUiTestMode(bool enabled);
 
+    bool autoSaveEnabled() const;
+    void setAutoSaveEnabled(bool enabled);
+    int autoSaveIntervalSec() const;
+    void setAutoSaveIntervalSec(int seconds);
+
 private:
     Settings();
     QSettings m_settings;
