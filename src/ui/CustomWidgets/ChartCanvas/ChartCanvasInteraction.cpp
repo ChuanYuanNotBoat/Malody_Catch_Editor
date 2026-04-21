@@ -107,6 +107,8 @@ void ChartCanvas::refreshBackground()
 
 void ChartCanvas::requestNextFrame()
 {
+    constexpr double kScrollSignalEpsilonBeat = 1e-6;
+
     if (!m_isPlaying)
     {
         if (m_playbackTimer && m_playbackTimer->isActive())
@@ -168,11 +170,13 @@ void ChartCanvas::requestNextFrame()
             targetScrollBeat = beat - baselineRatio * effectiveVisibleBeatRange();
         }
 
+        const double previousScrollBeat = m_scrollBeat;
         m_scrollBeat = targetScrollBeat;
         if (m_scrollBeat < 0)
             m_scrollBeat = 0;
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-        if (m_lastScrollSignalTimeMs == 0 || nowMs - m_lastScrollSignalTimeMs >= kScrollSignalIntervalMs)
+        const bool scrollChanged = std::abs(m_scrollBeat - previousScrollBeat) > kScrollSignalEpsilonBeat;
+        if (scrollChanged && (m_lastScrollSignalTimeMs == 0 || nowMs - m_lastScrollSignalTimeMs >= kScrollSignalIntervalMs))
         {
             emit scrollPositionChanged(m_scrollBeat);
             m_lastScrollSignalTimeMs = nowMs;
