@@ -129,6 +129,13 @@ int computeSmallIrregularDenominatorForColor(const Note &note)
     }
     return base;
 }
+
+QRect selectionPreviewDirtyRect(const QPointF &start, const QPointF &oldEnd, const QPointF &newEnd)
+{
+    const QRect oldRect = QRectF(start, oldEnd).normalized().toAlignedRect();
+    const QRect newRect = QRectF(start, newEnd).normalized().toAlignedRect();
+    return oldRect.united(newRect).adjusted(-2, -2, 2, 2);
+}
 } // namespace
 
 
@@ -170,6 +177,9 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
         return;
 
     QPointF delta = currentPos - m_moveStartPos;
+    if (qAbs(delta.x()) < 1e-6 && qAbs(delta.y()) < 1e-6)
+        return;
+
     double deltaY = delta.y();
     if (m_verticalFlip)
         deltaY = -deltaY;
@@ -670,8 +680,13 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent *event)
 {
     if (m_isSelecting)
     {
-        m_selectionEnd = event->pos();
-        update();
+        if (m_selectionEnd != event->pos())
+        {
+            const QPointF oldEnd = m_selectionEnd;
+            m_selectionEnd = event->pos();
+            const QRect dirty = selectionPreviewDirtyRect(m_selectionStart, oldEnd, m_selectionEnd);
+            update(dirty);
+        }
     }
     else if (m_isMovingSelection)
     {
@@ -688,12 +703,13 @@ bool ChartCanvas::handleSelectionRelease()
     if (!m_isSelecting)
         return false;
 
+    const QRect dirty = QRectF(m_selectionStart, m_selectionEnd).normalized().toAlignedRect().adjusted(-2, -2, 2, 2);
     QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
     m_selectionController->selectInRect(rect, chart()->notes(),
                                         [this](const Note &note)
                                         { return noteToPos(note); });
     m_isSelecting = false;
-    update();
+    update(dirty);
     return true;
 }
 
@@ -760,12 +776,16 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
         double newPos = m_scrollBeat - (delta / 120.0) * step;
         if (newPos < 0)
             newPos = 0;
+        const bool scrollChanged = qAbs(newPos - m_scrollBeat) >= 1e-6;
         m_scrollBeat = newPos;
         m_autoScrollEnabled = false;
-        update();
-        emit scrollPositionChanged(m_scrollBeat);
+        if (scrollChanged)
+        {
+            update();
+            emit scrollPositionChanged(m_scrollBeat);
+        }
 
-        if (chart())
+        if (scrollChanged && chart())
         {
             const auto &bpmList = chart()->bpmList();
             int offset = chart()->meta().offset;

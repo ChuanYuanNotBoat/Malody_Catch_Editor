@@ -72,11 +72,14 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QStandardPaths>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QRegularExpression>
 #include <QStringConverter>
+#include <QDateTime>
+#include <QUuid>
 #include <algorithm>
 
 namespace
@@ -447,6 +450,57 @@ private:
     bool m_hasModifierPreview = false;
     bool m_blockedChordAttempt = false;
 };
+
+QString sessionWorkingCopyRootDir()
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return QDir(base).filePath("session_working_copies");
+}
+
+QString buildWorkingCopyPath(const QString &sourcePath)
+{
+    const QString fileName = QFileInfo(sourcePath).fileName();
+    const QString stamp = QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz");
+    const QString uid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString workingName = QString("%1_%2_%3").arg(stamp, uid, fileName);
+    return QDir(sessionWorkingCopyRootDir()).filePath(workingName);
+}
+
+bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPathOut, QString *errorOut)
+{
+    if (workingPathOut)
+        workingPathOut->clear();
+    if (errorOut)
+        errorOut->clear();
+
+    if (sourcePath.isEmpty())
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Source chart path is empty.");
+        return false;
+    }
+
+    const QString rootDir = sessionWorkingCopyRootDir();
+    if (!QDir().mkpath(rootDir))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Failed to create working copy directory:\n%1").arg(rootDir);
+        return false;
+    }
+
+    const QString workingPath = buildWorkingCopyPath(sourcePath);
+    QFile::remove(workingPath);
+    if (!QFile::copy(sourcePath, workingPath))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Failed to create working copy:\n%1").arg(sourcePath);
+        return false;
+    }
+
+    if (workingPathOut)
+        *workingPathOut = workingPath;
+    return true;
+}
 }
 
 MainWindow::MainWindow(ChartController *chartCtrl,
@@ -495,6 +549,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->checkUpdatesAction = nullptr;
     d->aboutAction = nullptr;
     d->currentChartPath.clear();
+    d->sourceChartPath.clear();
+    d->workingChartPath.clear();
     d->isModified = false;
 
     setupUi();
@@ -542,6 +598,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
 
 MainWindow::~MainWindow()
 {
+    if (!d->workingChartPath.isEmpty())
+        QFile::remove(d->workingChartPath);
     delete d->skin;
     delete d;
     Logger::info("MainWindow destroyed");
@@ -1080,7 +1138,9 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
     if (choice == QMessageBox::Discard)
         return true;
 
-    QString savePath = d->currentChartPath;
+    QString savePath = d->sourceChartPath;
+    if (savePath.isEmpty())
+        savePath = d->currentChartPath;
     if (savePath.isEmpty())
     {
         savePath = QFileDialog::getSaveFileName(
@@ -1098,9 +1158,14 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
         return false;
     }
 
+    d->sourceChartPath = savePath;
     d->currentChartPath = savePath;
     Settings::instance().setLastOpenPath(QFileInfo(savePath).absolutePath());
     d->isModified = false;
+    if (!d->workingChartPath.isEmpty())
+        d->chartController->saveChart(d->workingChartPath);
+    else
+        createWorkingCopyFromSource(savePath, &d->workingChartPath, nullptr);
     statusBar()->showMessage(tr("Saved: %1").arg(savePath), 2000);
     if (PluginManager *pm = activePluginManager())
         pm->notifyChartSaved(savePath);
@@ -1171,6 +1236,8 @@ void MainWindow::openImportedLibrary()
 void MainWindow::loadChartFile(const QString &filePath)
 {
     Logger::info(QString("Loading chart file: %1").arg(filePath));
+    if (!d->workingChartPath.isEmpty())
+        QFile::remove(d->workingChartPath);
 
     QString actualChartPath = filePath;
     QFileInfo fi(filePath);
@@ -1247,12 +1314,22 @@ void MainWindow::loadChartFile(const QString &filePath)
 
     closePluginPanels(tr("Plugin panels were closed after chart switch."));
 
-    if (!d->chartController->loadChart(actualChartPath))
+    QString workingChartPath;
+    QString workingCopyError;
+    if (!createWorkingCopyFromSource(actualChartPath, &workingChartPath, &workingCopyError))
+    {
+        QMessageBox::critical(this, tr("Error"), workingCopyError);
+        return;
+    }
+
+    if (!d->chartController->loadChart(workingChartPath))
     {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
         return;
     }
 
+    d->sourceChartPath = actualChartPath;
+    d->workingChartPath = workingChartPath;
     d->currentChartPath = actualChartPath;
     Settings::instance().setLastOpenPath(QFileInfo(actualChartPath).absolutePath());
 
@@ -1421,7 +1498,9 @@ void MainWindow::switchDifficulty()
 void MainWindow::saveChart()
 {
     Logger::info("Save chart requested");
-    QString currentPath = d->currentChartPath;
+    QString currentPath = d->sourceChartPath;
+    if (currentPath.isEmpty())
+        currentPath = d->currentChartPath;
     if (currentPath.isEmpty())
     {
         currentPath = QFileDialog::getSaveFileName(
@@ -1438,9 +1517,14 @@ void MainWindow::saveChart()
 
     if (d->chartController->saveChart(currentPath))
     {
+        d->sourceChartPath = currentPath;
         d->currentChartPath = currentPath;
         Settings::instance().setLastOpenPath(QFileInfo(currentPath).absolutePath());
         d->isModified = false;
+        if (!d->workingChartPath.isEmpty())
+            d->chartController->saveChart(d->workingChartPath);
+        else
+            createWorkingCopyFromSource(currentPath, &d->workingChartPath, nullptr);
         statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
         Logger::info("Chart saved: " + currentPath);
         if (PluginManager *pm = activePluginManager())
@@ -1465,8 +1549,13 @@ void MainWindow::saveChartAs()
     }
     if (d->chartController->saveChart(fileName))
     {
+        d->sourceChartPath = fileName;
         d->currentChartPath = fileName;
         d->isModified = false;
+        if (!d->workingChartPath.isEmpty())
+            d->chartController->saveChart(d->workingChartPath);
+        else
+            createWorkingCopyFromSource(fileName, &d->workingChartPath, nullptr);
         statusBar()->showMessage(tr("Saved: %1").arg(fileName), 2000);
         Logger::info("Chart saved as: " + fileName);
         if (PluginManager *pm = activePluginManager())

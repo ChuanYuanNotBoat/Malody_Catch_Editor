@@ -290,6 +290,8 @@ private:
 
     int leftMargin() const;
     int rightMargin() const;
+    void invalidateChartCaches(bool includeBackground);
+    void resetOverlayQueryState();
 
 private slots:
     void onSelectionChanged();

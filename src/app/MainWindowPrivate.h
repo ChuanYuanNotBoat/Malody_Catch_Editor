@@ -101,5 +101,7 @@ public:
     QList<QString> shortcutActionOrder;
 
     QString currentChartPath;
+    QString sourceChartPath;
+    QString workingChartPath;
     bool isModified = false;
 };

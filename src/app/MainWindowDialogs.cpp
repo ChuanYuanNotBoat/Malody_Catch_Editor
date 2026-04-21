@@ -234,7 +234,8 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     if (!app || !app->pluginManager() || !d->chartController)
         return false;
 
-    const QString chartPath = d->chartController->chartFilePath();
+    const QString chartPath = d->workingChartPath.isEmpty() ? d->chartController->chartFilePath() : d->workingChartPath;
+    const QString sourceChartPath = d->sourceChartPath.isEmpty() ? d->currentChartPath : d->sourceChartPath;
     if (chartPath.isEmpty())
     {
         QMessageBox::information(this, tr("No Chart"), tr("Please open a chart first."));
@@ -245,6 +246,8 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     context.insert("chart_path", chartPath);
     context.insert("chart_path_native", QDir::toNativeSeparators(chartPath));
     context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
+    if (!sourceChartPath.isEmpty())
+        context.insert("chart_path_source", sourceChartPath);
     context.insert("action_title", actionTitle);
     Logger::info(QString("Running plugin action: plugin=%1 action=%2 path=%3")
                      .arg(pluginId)
@@ -350,13 +353,16 @@ void MainWindow::triggerPluginPanelAction()
         return;
 
     QVariantMap context;
-    const QString chartPath = d->chartController ? d->chartController->chartFilePath() : QString();
+    const QString chartPath = d->workingChartPath.isEmpty() ? (d->chartController ? d->chartController->chartFilePath() : QString())
+                                                            : d->workingChartPath;
     if (!chartPath.isEmpty())
     {
         context.insert("chart_path", chartPath);
         context.insert("chart_path_native", QDir::toNativeSeparators(chartPath));
         context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
     }
+    if (!d->sourceChartPath.isEmpty())
+        context.insert("chart_path_source", d->sourceChartPath);
 
     QDialog *dialog = new QDialog(this, Qt::Tool);
     dialog->setAttribute(Qt::WA_DeleteOnClose);

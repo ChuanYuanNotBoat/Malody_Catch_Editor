@@ -299,7 +299,7 @@ bool PluginManager::runToolAction(const QString &pluginId, const QString &action
     {
         if (!p)
             continue;
-        if (!p->hasCapability(PluginInterface::kCapabilityFloatingPanel))
+        if (!p->hasCapability(PluginInterface::kCapabilityToolActions))
             continue;
         if (p->pluginId() != pluginId)
             continue;
