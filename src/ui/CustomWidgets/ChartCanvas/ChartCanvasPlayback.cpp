@@ -11,11 +11,14 @@
 
 void ChartCanvas::playbackPositionChanged(double timeMs)
 {
+    constexpr double kPlaybackVisualEpsilonMs = 0.05;
+
     if (m_timesDirty || m_noteDataDirty)
         rebuildNoteTimesCache();
 
     if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing)
     {
+        const bool visualChanged = std::abs(m_currentPlayTime - timeMs) > kPlaybackVisualEpsilonMs;
         m_hasPlaybackAnchor = false;
         m_currentPlayTime = timeMs;
         m_lastNoteSoundTimeMs = timeMs;
@@ -23,7 +26,8 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
             m_playableNoteTimesMs.begin(),
             m_playableNoteTimesMs.end(),
             m_lastNoteSoundTimeMs) - m_playableNoteTimesMs.begin());
-        update();
+        if (visualChanged)
+            update();
         return;
     }
 
@@ -68,8 +72,10 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
 
     if (!m_autoScrollEnabled)
     {
+        const bool visualChanged = std::abs(m_currentPlayTime - timeMs) > kPlaybackVisualEpsilonMs;
         m_currentPlayTime = timeMs;
-        update();
+        if (visualChanged)
+            update();
     }
 
     if (m_noteSoundPlayer &&
