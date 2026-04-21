@@ -27,6 +27,7 @@ Makefile
 build_codex
 build_android_apk/
 android
+
 # Qt moc/uic自动生成文件
 moc_*.cpp
 ui_*.h
@@ -49,6 +50,7 @@ ui_*.h
 Thumbs.db
 __pycache__
 *.pyc
+
 # 可能的不应提交的资源
 *.exe
 *.dll
