@@ -61,6 +61,7 @@ private slots:
     void adjustNoteSoundVolume();
     void calibrateSkin();
     void configureOutline();
+    void openSessionSettings();
     void openLogSettings();
     void openPluginManager();
     void triggerPluginToolAction();

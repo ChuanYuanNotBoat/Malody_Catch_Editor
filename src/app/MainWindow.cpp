@@ -845,6 +845,8 @@ void MainWindow::createMenus()
     connect(d->outlineAction, &QAction::triggered, this, &MainWindow::configureOutline);
     d->noteSoundVolumeAction = settingsMenu->addAction(tr("Note Sound Volume..."));
     connect(d->noteSoundVolumeAction, &QAction::triggered, this, &MainWindow::adjustNoteSoundVolume);
+    QAction *sessionSettingsAction = settingsMenu->addAction(tr("Session Settings..."));
+    connect(sessionSettingsAction, &QAction::triggered, this, &MainWindow::openSessionSettings);
     settingsMenu->addSeparator();
     d->skinMenu = settingsMenu->addMenu(tr("&Skin"));
     populateSkinMenu();

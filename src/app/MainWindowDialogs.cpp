@@ -484,8 +484,34 @@ void MainWindow::openLogSettings()
     jsonPathLayout->addWidget(jsonPathEdit);
     layout->addLayout(jsonPathLayout);
 
+    layout->addStretch();
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]()
+            {
+        Logger::setJsonLoggingEnabled(jsonLoggingCheck->isChecked());
+        Logger::setVerbose(verboseCheck->isChecked());
+        Logger::info(QString("Log settings changed - JSON logging: %1, Verbose: %2")
+                     .arg(jsonLoggingCheck->isChecked() ? "enabled" : "disabled")
+                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled"));
+        dialog.accept(); });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    dialog.exec();
+}
+
+void MainWindow::openSessionSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Session Settings"));
+    dialog.setMinimumSize(420, 220);
+    dialog.setStyleSheet(themedDialogCss(Settings::instance().backgroundColor()));
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
     QGroupBox *sessionGroup = new QGroupBox(tr("Editing Session"), &dialog);
     QFormLayout *sessionLayout = new QFormLayout(sessionGroup);
+
     QCheckBox *autoSaveCheck = new QCheckBox(tr("Enable Auto Save"), sessionGroup);
     autoSaveCheck->setChecked(Settings::instance().autoSaveEnabled());
     QSpinBox *autoSaveIntervalSpin = new QSpinBox(sessionGroup);
@@ -494,27 +520,22 @@ void MainWindow::openLogSettings()
     autoSaveIntervalSpin->setValue(Settings::instance().autoSaveIntervalSec());
     autoSaveIntervalSpin->setEnabled(autoSaveCheck->isChecked());
     connect(autoSaveCheck, &QCheckBox::toggled, autoSaveIntervalSpin, &QWidget::setEnabled);
+
     sessionLayout->addRow(autoSaveCheck);
     sessionLayout->addRow(tr("Auto Save Interval:"), autoSaveIntervalSpin);
     layout->addWidget(sessionGroup);
-
     layout->addStretch();
 
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]()
             {
-        Logger::setJsonLoggingEnabled(jsonLoggingCheck->isChecked());
-        Logger::setVerbose(verboseCheck->isChecked());
         Settings::instance().setAutoSaveEnabled(autoSaveCheck->isChecked());
         Settings::instance().setAutoSaveIntervalSec(autoSaveIntervalSpin->value());
         setupAutoSaveTimer();
-        Logger::info(QString("Log settings changed - JSON logging: %1, Verbose: %2")
-                     .arg(jsonLoggingCheck->isChecked() ? "enabled" : "disabled")
-                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled"));
+        statusBar()->showMessage(tr("Session settings updated"), 2000);
         dialog.accept(); });
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
-
     dialog.exec();
 }
 
