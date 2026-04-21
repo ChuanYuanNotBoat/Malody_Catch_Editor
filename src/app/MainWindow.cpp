@@ -81,6 +81,7 @@
 #include <QStringConverter>
 #include <QDateTime>
 #include <QUuid>
+#include <QDirIterator>
 #include <algorithm>
 
 namespace
@@ -514,32 +515,125 @@ void removeRecoveryState()
     QFile::remove(recoveryManifestPath());
 }
 
+QString workingSessionDirFromWorkingPath(const QString &workingPath)
+{
+    if (workingPath.isEmpty())
+        return QString();
+    return QFileInfo(workingPath).absolutePath();
+}
+
+void removePathRecursively(const QString &path)
+{
+    if (path.isEmpty())
+        return;
+
+    const QFileInfo fi(path);
+    if (!fi.exists() && !fi.isSymLink())
+        return;
+
+    if (fi.isDir() && !fi.isSymLink())
+    {
+        QDir(path).removeRecursively();
+        return;
+    }
+
+    QFile::remove(path);
+}
+
+bool copyDirectoryRecursively(const QString &sourceDirPath, const QString &targetDirPath, QString *errorOut)
+{
+    if (errorOut)
+        errorOut->clear();
+
+    QDir sourceDir(sourceDirPath);
+    if (!sourceDir.exists())
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Source directory does not exist:\n%1").arg(sourceDirPath);
+        return false;
+    }
+
+    if (!QDir().mkpath(targetDirPath))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Failed to create working directory:\n%1").arg(targetDirPath);
+        return false;
+    }
+
+    QDirIterator it(sourceDirPath,
+                    QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext())
+    {
+        it.next();
+        const QFileInfo entry = it.fileInfo();
+        const QString relPath = sourceDir.relativeFilePath(entry.absoluteFilePath());
+        const QString targetPath = QDir(targetDirPath).filePath(relPath);
+
+        if (entry.isDir() && !entry.isSymLink())
+        {
+            if (!QDir().mkpath(targetPath))
+            {
+                if (errorOut)
+                    *errorOut = QObject::tr("Failed to create working subdirectory:\n%1").arg(targetPath);
+                return false;
+            }
+            continue;
+        }
+
+        if (!QDir().mkpath(QFileInfo(targetPath).absolutePath()))
+        {
+            if (errorOut)
+                *errorOut = QObject::tr("Failed to prepare working file path:\n%1").arg(targetPath);
+            return false;
+        }
+        QFile::remove(targetPath);
+        if (!QFile::copy(entry.absoluteFilePath(), targetPath))
+        {
+            if (errorOut)
+                *errorOut = QObject::tr("Failed to copy required file:\n%1").arg(entry.absoluteFilePath());
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void cleanupSessionWorkingCopies(const QString &preserveWorkingPath)
 {
     QDir dir(sessionWorkingCopyRootDir());
     if (!dir.exists())
         return;
 
-    const QString preserved = QFileInfo(preserveWorkingPath).absoluteFilePath();
-    const QFileInfoList files = dir.entryInfoList(QDir::Files | QDir::NoSymLinks);
-    for (const QFileInfo &fi : files)
+    const QString preservedDir = workingSessionDirFromWorkingPath(preserveWorkingPath);
+    const QFileInfoList entries = dir.entryInfoList(QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System);
+    for (const QFileInfo &fi : entries)
     {
         if (fi.fileName().compare("recovery.json", Qt::CaseInsensitive) == 0)
             continue;
         const QString abs = fi.absoluteFilePath();
-        if (!preserved.isEmpty() && abs == preserved)
+        if (!preservedDir.isEmpty() && abs == preservedDir)
             continue;
-        QFile::remove(abs);
+        removePathRecursively(abs);
     }
 }
 
-QString buildWorkingCopyPath(const QString &sourcePath)
+QString buildWorkingCopyPath(const QString &sourcePath, QString *workingSessionDirOut)
 {
+    if (workingSessionDirOut)
+        workingSessionDirOut->clear();
     const QString fileName = QFileInfo(sourcePath).fileName();
     const QString stamp = QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz");
     const QString uid = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QString workingName = QString("%1_%2_%3").arg(stamp, uid, fileName);
-    return QDir(sessionWorkingCopyRootDir()).filePath(workingName);
+    const QString sourceDirName = QFileInfo(sourcePath).absoluteDir().dirName();
+    const QString sessionName = QString("%1_%2_%3")
+                                    .arg(stamp,
+                                         uid,
+                                         sourceDirName.isEmpty() ? QStringLiteral("chart_session") : sourceDirName);
+    const QString sessionDir = QDir(sessionWorkingCopyRootDir()).filePath(sessionName);
+    if (workingSessionDirOut)
+        *workingSessionDirOut = sessionDir;
+    return QDir(sessionDir).filePath(fileName);
 }
 
 bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPathOut, QString *errorOut)
@@ -564,12 +658,26 @@ bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPath
         return false;
     }
 
-    const QString workingPath = buildWorkingCopyPath(sourcePath);
-    QFile::remove(workingPath);
-    if (!QFile::copy(sourcePath, workingPath))
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile())
     {
         if (errorOut)
-            *errorOut = QObject::tr("Failed to create working copy:\n%1").arg(sourcePath);
+            *errorOut = QObject::tr("Source chart does not exist:\n%1").arg(sourcePath);
+        return false;
+    }
+
+    QString workingSessionDir;
+    const QString workingPath = buildWorkingCopyPath(sourcePath, &workingSessionDir);
+    removePathRecursively(workingSessionDir);
+    if (!copyDirectoryRecursively(sourceInfo.absolutePath(), workingSessionDir, errorOut))
+    {
+        removePathRecursively(workingSessionDir);
+        return false;
+    }
+    if (!QFile::exists(workingPath))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Working copy chart file is missing:\n%1").arg(workingPath);
         return false;
     }
 
@@ -1219,7 +1327,7 @@ void MainWindow::persistRecoveryState()
 void MainWindow::clearWorkingCopySession(bool removeWorkingFile)
 {
     if (removeWorkingFile && !d->workingChartPath.isEmpty())
-        QFile::remove(d->workingChartPath);
+        removePathRecursively(workingSessionDirFromWorkingPath(d->workingChartPath));
     d->workingChartPath.clear();
     d->sourceChartPath.clear();
     removeRecoveryState();
@@ -1301,7 +1409,7 @@ void MainWindow::tryRecoverPreviousSession()
         QMessageBox::Yes);
     if (choice != QMessageBox::Yes)
     {
-        QFile::remove(state.workingPath);
+        removePathRecursively(workingSessionDirFromWorkingPath(state.workingPath));
         removeRecoveryState();
         cleanupSessionWorkingCopies(QString());
         return;
@@ -1310,7 +1418,7 @@ void MainWindow::tryRecoverPreviousSession()
     if (!d->chartController->loadChart(state.workingPath))
     {
         QMessageBox::warning(this, tr("Recovery Failed"), tr("Failed to load the recovery working copy."));
-        QFile::remove(state.workingPath);
+        removePathRecursively(workingSessionDirFromWorkingPath(state.workingPath));
         removeRecoveryState();
         cleanupSessionWorkingCopies(QString());
         return;
@@ -1545,6 +1653,7 @@ void MainWindow::loadChartFile(const QString &filePath)
 
     if (!d->chartController->loadChart(workingChartPath))
     {
+        removePathRecursively(workingSessionDirFromWorkingPath(workingChartPath));
         QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
         return;
     }
