@@ -44,6 +44,41 @@
 #include <QStatusBar>
 #include <QToolBar>
 #include <QDialog>
+#include <QGroupBox>
+
+namespace
+{
+QColor dialogTextColorFor(const QColor &bg)
+{
+    const double r = bg.redF();
+    const double g = bg.greenF();
+    const double b = bg.blueF();
+    const double luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return (luminance >= 0.5) ? QColor(20, 20, 20) : QColor(245, 245, 245);
+}
+
+QString themedDialogCss(const QColor &baseBg)
+{
+    const QColor fg = dialogTextColorFor(baseBg);
+    const bool darkTheme = (fg.lightness() > 128);
+    const QColor panelBg = darkTheme ? baseBg.lighter(108) : baseBg.darker(103);
+    const QColor inputBg = darkTheme ? panelBg.lighter(120) : panelBg.darker(105);
+    const QColor buttonBg = darkTheme ? panelBg.lighter(132) : panelBg.darker(112);
+    const QColor border = darkTheme ? panelBg.lighter(165) : panelBg.darker(145);
+    const QColor disabledText = darkTheme ? QColor("#9A9A9A") : QColor("#707070");
+
+    return QString(
+               "QDialog { background-color: %1; color: %2; }"
+               "QLabel, QCheckBox, QGroupBox { color: %2; }"
+               "QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit {"
+               "  background-color: %3; color: %2; border: 1px solid %4; }"
+               "QPushButton { background-color: %5; color: %2; border: 1px solid %4; padding: 3px 8px; }"
+               "QPushButton:disabled { color: %6; }"
+               "QGroupBox { border: 1px solid %4; margin-top: 8px; padding-top: 10px; }"
+               "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: %2; }")
+        .arg(panelBg.name(), fg.name(), inputBg.name(), border.name(), buttonBg.name(), disabledText.name());
+}
+}
 
 void MainWindow::populatePluginToolsMenu()
 {
@@ -234,7 +269,8 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     if (!app || !app->pluginManager() || !d->chartController)
         return false;
 
-    const QString chartPath = d->chartController->chartFilePath();
+    const QString chartPath = d->workingChartPath.isEmpty() ? d->chartController->chartFilePath() : d->workingChartPath;
+    const QString sourceChartPath = d->sourceChartPath.isEmpty() ? d->currentChartPath : d->sourceChartPath;
     if (chartPath.isEmpty())
     {
         QMessageBox::information(this, tr("No Chart"), tr("Please open a chart first."));
@@ -242,9 +278,19 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     }
 
     QVariantMap context;
+    if (!d->workingChartPath.isEmpty())
+    {
+        if (!d->chartController->saveChart(d->workingChartPath))
+        {
+            QMessageBox::warning(this, tr("Plugin Action"), tr("Failed to sync working copy before plugin action."));
+            return false;
+        }
+    }
     context.insert("chart_path", chartPath);
     context.insert("chart_path_native", QDir::toNativeSeparators(chartPath));
     context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
+    if (!sourceChartPath.isEmpty())
+        context.insert("chart_path_source", sourceChartPath);
     context.insert("action_title", actionTitle);
     Logger::info(QString("Running plugin action: plugin=%1 action=%2 path=%3")
                      .arg(pluginId)
@@ -350,13 +396,16 @@ void MainWindow::triggerPluginPanelAction()
         return;
 
     QVariantMap context;
-    const QString chartPath = d->chartController ? d->chartController->chartFilePath() : QString();
+    const QString chartPath = d->workingChartPath.isEmpty() ? (d->chartController ? d->chartController->chartFilePath() : QString())
+                                                            : d->workingChartPath;
     if (!chartPath.isEmpty())
     {
         context.insert("chart_path", chartPath);
         context.insert("chart_path_native", QDir::toNativeSeparators(chartPath));
         context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
     }
+    if (!d->sourceChartPath.isEmpty())
+        context.insert("chart_path_source", d->sourceChartPath);
 
     QDialog *dialog = new QDialog(this, Qt::Tool);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -399,6 +448,7 @@ void MainWindow::openLogSettings()
     QDialog dialog(this);
     dialog.setWindowTitle(tr("Log Settings"));
     dialog.setMinimumSize(400, 300);
+    dialog.setStyleSheet(themedDialogCss(Settings::instance().backgroundColor()));
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
 
     QCheckBox *jsonLoggingCheck = new QCheckBox(tr("Enable JSON Logging"));
@@ -448,6 +498,44 @@ void MainWindow::openLogSettings()
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
 
+    dialog.exec();
+}
+
+void MainWindow::openSessionSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Session Settings"));
+    dialog.setMinimumSize(420, 220);
+    dialog.setStyleSheet(themedDialogCss(Settings::instance().backgroundColor()));
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    QGroupBox *sessionGroup = new QGroupBox(tr("Editing Session"), &dialog);
+    QFormLayout *sessionLayout = new QFormLayout(sessionGroup);
+
+    QCheckBox *autoSaveCheck = new QCheckBox(tr("Enable Auto Save"), sessionGroup);
+    autoSaveCheck->setChecked(Settings::instance().autoSaveEnabled());
+    QSpinBox *autoSaveIntervalSpin = new QSpinBox(sessionGroup);
+    autoSaveIntervalSpin->setRange(15, 3600);
+    autoSaveIntervalSpin->setSuffix(tr(" s"));
+    autoSaveIntervalSpin->setValue(Settings::instance().autoSaveIntervalSec());
+    autoSaveIntervalSpin->setEnabled(autoSaveCheck->isChecked());
+    connect(autoSaveCheck, &QCheckBox::toggled, autoSaveIntervalSpin, &QWidget::setEnabled);
+
+    sessionLayout->addRow(autoSaveCheck);
+    sessionLayout->addRow(tr("Auto Save Interval:"), autoSaveIntervalSpin);
+    layout->addWidget(sessionGroup);
+    layout->addStretch();
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]()
+            {
+        Settings::instance().setAutoSaveEnabled(autoSaveCheck->isChecked());
+        Settings::instance().setAutoSaveIntervalSec(autoSaveIntervalSpin->value());
+        setupAutoSaveTimer();
+        statusBar()->showMessage(tr("Session settings updated"), 2000);
+        dialog.accept(); });
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
     dialog.exec();
 }
 

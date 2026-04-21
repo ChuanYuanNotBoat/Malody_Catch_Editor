@@ -76,6 +76,14 @@ public:
     bool mobileUiTestMode() const;
     void setMobileUiTestMode(bool enabled);
 
+    bool autoSaveEnabled() const;
+    void setAutoSaveEnabled(bool enabled);
+    int autoSaveIntervalSec() const;
+    void setAutoSaveIntervalSec(int seconds);
+
+    int chartPickerPrimaryColumnWidth() const;
+    void setChartPickerPrimaryColumnWidth(int width);
+
 private:
     Settings();
     QSettings m_settings;

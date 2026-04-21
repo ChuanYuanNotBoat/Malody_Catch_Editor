@@ -13,6 +13,7 @@ class QSplitter;
 class QMenu;
 class QScrollBar;
 class QKeySequence;
+class QCloseEvent;
 class ChartCanvas;
 class NoteEditPanel;
 class BPMTimePanel;
@@ -37,6 +38,7 @@ public:
 
 protected:
     void changeEvent(QEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void openChart();
@@ -59,6 +61,7 @@ private slots:
     void adjustNoteSoundVolume();
     void calibrateSkin();
     void configureOutline();
+    void openSessionSettings();
     void openLogSettings();
     void openPluginManager();
     void triggerPluginToolAction();
@@ -97,7 +100,15 @@ private:
     void closePluginPanels(const QString &reasonText = QString());
     bool confirmSaveIfModified(const QString &reasonText);
     void loadChartFile(const QString &filePath);
+    void persistRecoveryState();
+    void tryRecoverPreviousSession();
+    void clearWorkingCopySession(bool removeWorkingFile);
+    void setupAutoSaveTimer();
+    void performAutoSaveTick();
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
+    QString selectChartFromFolder(const QString &rootDir,
+                                  const QList<QPair<QString, QString>> &charts,
+                                  const QString &title);
     QString selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong = QString());
     void registerShortcutAction(QAction *action, const QString &actionId, const QKeySequence &defaultShortcut);
     QString beatmapRootPath() const; // Return beatmap root directory.

@@ -277,6 +277,9 @@ void ChartCanvas::updateDragPaste(const QPointF &currentPos)
         return;
 
     QPointF delta = currentPos - m_pasteDragStartPos;
+    if (qAbs(delta.x()) < 1e-6 && qAbs(delta.y()) < 1e-6)
+        return;
+
     double deltaY = delta.y();
     if (m_verticalFlip)
         deltaY = -deltaY;

@@ -271,6 +271,9 @@ void ChartCanvas::rebuildNoteTimesCache()
 
 void ChartCanvas::setChartController(ChartController *controller)
 {
+    if (m_chartController == controller)
+        return;
+
     if (m_chartController)
     {
         disconnect(m_chartController, &ChartController::chartChanged, this, nullptr);
@@ -280,25 +283,12 @@ void ChartCanvas::setChartController(ChartController *controller)
     {
         connect(controller, &ChartController::chartChanged, this, [this]()
                 {
-            m_hyperCacheValid = false;
-            m_noteDataDirty = true;
-            m_timesDirty = true;
-            m_bpmCacheDirty = true;
-            m_backgroundCacheDirty = true;
-            m_overlayCache.clear();
-            m_lastOverlayQueryMs = 0;
-            m_overlayQueryBlockedUntilMs = 0;
+            invalidateChartCaches(true);
             update(); });
         m_hyperfruitDetector->setCS(3.2);
         m_noteRenderer->setHyperfruitDetector(m_hyperfruitDetector);
-        updateBackgroundCache();
-        m_timesDirty = true;
-        m_noteDataDirty = true;
-        m_bpmCacheDirty = true;
-        m_overlayCache.clear();
-        m_lastOverlayQueryMs = 0;
-        m_overlayQueryBlockedUntilMs = 0;
     }
+    invalidateChartCaches(true);
     update();
 }
 
@@ -354,9 +344,17 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
 
 void ChartCanvas::setSelectionController(SelectionController *controller)
 {
+    if (m_selectionController == controller)
+        return;
+    if (m_selectionController)
+        disconnect(m_selectionController, nullptr, this, nullptr);
+
     m_selectionController = controller;
-    connect(controller, &SelectionController::selectionChanged, this, QOverload<>::of(&ChartCanvas::update));
-    connect(controller, &SelectionController::selectionChanged, this, &ChartCanvas::onSelectionChanged);
+    if (m_selectionController)
+    {
+        connect(m_selectionController, &SelectionController::selectionChanged, this, QOverload<>::of(&ChartCanvas::update));
+    }
+    update();
 }
 
 void ChartCanvas::setSkin(Skin *skin)
@@ -367,6 +365,8 @@ void ChartCanvas::setSkin(Skin *skin)
 
 void ChartCanvas::setColorMode(bool enabled)
 {
+    if (m_colorMode == enabled)
+        return;
     m_colorMode = enabled;
     m_noteRenderer->setShowColors(enabled);
     update();
@@ -374,6 +374,8 @@ void ChartCanvas::setColorMode(bool enabled)
 
 void ChartCanvas::setHyperfruitEnabled(bool enabled)
 {
+    if (m_hyperfruitEnabled == enabled)
+        return;
     m_hyperfruitEnabled = enabled;
     m_noteRenderer->setHyperfruitEnabled(enabled);
     m_hyperCacheValid = false;
@@ -415,6 +417,8 @@ void ChartCanvas::setGridDivision(int division)
 
 void ChartCanvas::setGridSnap(bool snap)
 {
+    if (m_gridSnap == snap)
+        return;
     m_gridSnap = snap;
 }
 
@@ -427,19 +431,27 @@ void ChartCanvas::setScrollPos(double timeMs)
     MathUtils::msToBeat(timeMs, chart()->bpmList(),
                         chart()->meta().offset,
                         beatNum, numerator, denominator);
-    m_scrollBeat = beatNum + static_cast<double>(numerator) / denominator;
+    const double newScrollBeat = beatNum + static_cast<double>(numerator) / denominator;
+    if (qAbs(newScrollBeat - m_scrollBeat) < 1e-6)
+        return;
+
+    m_scrollBeat = newScrollBeat;
     update();
     emit scrollPositionChanged(m_scrollBeat);
 }
 
 void ChartCanvas::setNoteSize(int size)
 {
+    if (m_noteRenderer->getNoteSize() == size)
+        return;
     m_noteRenderer->setNoteSize(size);
     update();
 }
 
 void ChartCanvas::setMode(Mode mode)
 {
+    if (m_currentMode == mode)
+        return;
     if (mode != PlaceRain)
     {
         m_rainFirst = true;
@@ -452,12 +464,16 @@ void ChartCanvas::setNoteSoundFile(const QString &filePath)
 {
     if (!m_noteSoundPlayer)
         return;
+    if (m_noteSoundPlayer->soundFile() == filePath)
+        return;
     m_noteSoundPlayer->setSoundFile(filePath);
 }
 
 void ChartCanvas::setNoteSoundEnabled(bool enabled)
 {
     if (!m_noteSoundPlayer)
+        return;
+    if (m_noteSoundPlayer->isEnabled() == enabled)
         return;
     m_noteSoundPlayer->setEnabled(enabled);
 }
@@ -466,7 +482,27 @@ void ChartCanvas::setNoteSoundVolume(int volumePercent)
 {
     if (!m_noteSoundPlayer)
         return;
+    if (m_noteSoundPlayer->volumePercent() == volumePercent)
+        return;
     m_noteSoundPlayer->setVolumePercent(volumePercent);
+}
+
+void ChartCanvas::invalidateChartCaches(bool includeBackground)
+{
+    m_hyperCacheValid = false;
+    m_noteDataDirty = true;
+    m_timesDirty = true;
+    m_bpmCacheDirty = true;
+    if (includeBackground)
+        m_backgroundCacheDirty = true;
+    resetOverlayQueryState();
+}
+
+void ChartCanvas::resetOverlayQueryState()
+{
+    m_overlayCache.clear();
+    m_lastOverlayQueryMs = 0;
+    m_overlayQueryBlockedUntilMs = 0;
 }
 
 

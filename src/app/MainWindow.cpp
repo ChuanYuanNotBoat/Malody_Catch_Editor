@@ -44,6 +44,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QColorDialog>
+#include <QCloseEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -59,6 +60,7 @@
 #include <QTextStream>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QInputDialog>
 #include <QListWidget>
 #include <QComboBox>
@@ -72,11 +74,15 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QStandardPaths>
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QRegularExpression>
 #include <QStringConverter>
+#include <QDateTime>
+#include <QUuid>
+#include <QDirIterator>
 #include <algorithm>
 
 namespace
@@ -447,6 +453,362 @@ private:
     bool m_hasModifierPreview = false;
     bool m_blockedChordAttempt = false;
 };
+
+QString sessionWorkingCopyRootDir()
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return QDir(base).filePath("session_working_copies");
+}
+
+QString recoveryManifestPath()
+{
+    return QDir(sessionWorkingCopyRootDir()).filePath("recovery.json");
+}
+
+struct RecoverySessionState
+{
+    QString sourcePath;
+    QString workingPath;
+    bool modified = false;
+};
+
+bool writeRecoveryState(const RecoverySessionState &state)
+{
+    if (!QDir().mkpath(sessionWorkingCopyRootDir()))
+        return false;
+
+    const QJsonObject obj{
+        {"source_path", state.sourcePath},
+        {"working_path", state.workingPath},
+        {"modified", state.modified},
+        {"updated_at_utc", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}};
+    QFile file(recoveryManifestPath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return false;
+    const QJsonDocument doc(obj);
+    return file.write(doc.toJson(QJsonDocument::Indented)) > 0;
+}
+
+bool readRecoveryState(RecoverySessionState *state)
+{
+    if (!state)
+        return false;
+    *state = RecoverySessionState{};
+
+    QFile file(recoveryManifestPath());
+    if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return false;
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return false;
+
+    const QJsonObject obj = doc.object();
+    state->sourcePath = obj.value("source_path").toString();
+    state->workingPath = obj.value("working_path").toString();
+    state->modified = obj.value("modified").toBool(false);
+    return !state->workingPath.isEmpty();
+}
+
+void removeRecoveryState()
+{
+    QFile::remove(recoveryManifestPath());
+}
+
+QString workingSessionDirFromWorkingPath(const QString &workingPath)
+{
+    if (workingPath.isEmpty())
+        return QString();
+
+    const QString baseRoot = QDir(sessionWorkingCopyRootDir()).absolutePath();
+    const QString workingDir = QFileInfo(workingPath).absoluteDir().absolutePath();
+    const QString rel = QDir(baseRoot).relativeFilePath(workingDir);
+    if (rel.isEmpty() || rel.startsWith(".."))
+        return workingDir;
+
+    const QString firstSegment = rel.section('/', 0, 0);
+    if (firstSegment.isEmpty() || firstSegment == ".")
+        return workingDir;
+    return QDir(baseRoot).filePath(firstSegment);
+}
+
+void removePathRecursively(const QString &path)
+{
+    if (path.isEmpty())
+        return;
+
+    const QFileInfo fi(path);
+    if (!fi.exists() && !fi.isSymLink())
+        return;
+
+    if (fi.isDir() && !fi.isSymLink())
+    {
+        QDir(path).removeRecursively();
+        return;
+    }
+
+    QFile::remove(path);
+}
+
+bool copyDirectoryRecursively(const QString &sourceDirPath, const QString &targetDirPath, QString *errorOut)
+{
+    if (errorOut)
+        errorOut->clear();
+
+    QDir sourceDir(sourceDirPath);
+    if (!sourceDir.exists())
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Source directory does not exist:\n%1").arg(sourceDirPath);
+        return false;
+    }
+
+    if (!QDir().mkpath(targetDirPath))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Failed to create working directory:\n%1").arg(targetDirPath);
+        return false;
+    }
+
+    QDirIterator it(sourceDirPath,
+                    QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext())
+    {
+        it.next();
+        const QFileInfo entry = it.fileInfo();
+        const QString relPath = sourceDir.relativeFilePath(entry.absoluteFilePath());
+        const QString targetPath = QDir(targetDirPath).filePath(relPath);
+
+        if (entry.isDir() && !entry.isSymLink())
+        {
+            if (!QDir().mkpath(targetPath))
+            {
+                if (errorOut)
+                    *errorOut = QObject::tr("Failed to create working subdirectory:\n%1").arg(targetPath);
+                return false;
+            }
+            continue;
+        }
+
+        if (!QDir().mkpath(QFileInfo(targetPath).absolutePath()))
+        {
+            if (errorOut)
+                *errorOut = QObject::tr("Failed to prepare working file path:\n%1").arg(targetPath);
+            return false;
+        }
+        QFile::remove(targetPath);
+        if (!QFile::copy(entry.absoluteFilePath(), targetPath))
+        {
+            if (errorOut)
+                *errorOut = QObject::tr("Failed to copy required file:\n%1").arg(entry.absoluteFilePath());
+            return false;
+        }
+    }
+
+    return true;
+}
+
+QString chartSongTitleFromFile(const QString &chartPath)
+{
+    QFile file(chartPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString();
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return QString();
+
+    const QJsonObject root = doc.object();
+    const QJsonObject meta = root.value("meta").toObject();
+    const QJsonObject song = meta.value("song").toObject();
+
+    QString title = song.value("title").toString().trimmed();
+    if (title.isEmpty())
+        title = meta.value("title").toString().trimmed();
+    return title;
+}
+
+QStringList collectReferencedResources(const QString &chartPath)
+{
+    QStringList resources;
+    QFile file(chartPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return resources;
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return resources;
+
+    const auto appendIfPresent = [&resources](const QJsonObject &obj, const char *key) {
+        const QString value = obj.value(QString::fromUtf8(key)).toString().trimmed();
+        if (!value.isEmpty())
+            resources.append(value);
+    };
+
+    const QJsonObject root = doc.object();
+    const QJsonObject meta = root.value("meta").toObject();
+    appendIfPresent(meta, "background");
+    appendIfPresent(meta, "audio");
+
+    const QJsonArray notes = root.value("note").toArray();
+    for (const QJsonValue &v : notes)
+    {
+        if (!v.isObject())
+            continue;
+        appendIfPresent(v.toObject(), "sound");
+    }
+
+    resources.removeDuplicates();
+    return resources;
+}
+
+bool isPathInsideRoot(const QString &rootPath, const QString &targetPath)
+{
+    const QString root = QDir::cleanPath(rootPath);
+    const QString target = QDir::cleanPath(targetPath);
+    const QString prefix = root.endsWith('/') ? root : (root + '/');
+    return target == root || target.startsWith(prefix, Qt::CaseInsensitive);
+}
+
+void copyReferencedExternalResources(const QString &sourceChartPath, const QString &workingChartPath)
+{
+    if (sourceChartPath.isEmpty() || workingChartPath.isEmpty())
+        return;
+
+    const QString sourceChartDir = QFileInfo(sourceChartPath).absoluteDir().absolutePath();
+    const QString workingChartDir = QFileInfo(workingChartPath).absoluteDir().absolutePath();
+    const QString sessionRoot = workingSessionDirFromWorkingPath(workingChartPath);
+    const QStringList resources = collectReferencedResources(sourceChartPath);
+    for (const QString &resource : resources)
+    {
+        if (resource.isEmpty() || QDir::isAbsolutePath(resource))
+            continue;
+
+        const QString sourceAbs = QDir::cleanPath(QDir(sourceChartDir).absoluteFilePath(resource));
+        const QFileInfo sourceFi(sourceAbs);
+        if (!sourceFi.exists())
+            continue;
+
+        const QString targetAbs = QDir::cleanPath(QDir(workingChartDir).absoluteFilePath(resource));
+        if (!isPathInsideRoot(sessionRoot, targetAbs))
+        {
+            Logger::warn(QString("Skip copying referenced resource outside working session root: %1").arg(resource));
+            continue;
+        }
+
+        if (sourceFi.isDir() && !sourceFi.isSymLink())
+        {
+            QString copyError;
+            if (!copyDirectoryRecursively(sourceAbs, targetAbs, &copyError))
+            {
+                Logger::warn(QString("Failed to copy referenced resource directory: %1 (%2)").arg(resource, copyError));
+            }
+            continue;
+        }
+
+        QDir().mkpath(QFileInfo(targetAbs).absolutePath());
+        QFile::remove(targetAbs);
+        if (!QFile::copy(sourceAbs, targetAbs))
+        {
+            Logger::warn(QString("Failed to copy referenced resource file: %1").arg(resource));
+        }
+    }
+}
+
+void cleanupSessionWorkingCopies(const QString &preserveWorkingPath)
+{
+    QDir dir(sessionWorkingCopyRootDir());
+    if (!dir.exists())
+        return;
+
+    const QString preservedDir = workingSessionDirFromWorkingPath(preserveWorkingPath);
+    const QFileInfoList entries = dir.entryInfoList(QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System);
+    for (const QFileInfo &fi : entries)
+    {
+        if (fi.fileName().compare("recovery.json", Qt::CaseInsensitive) == 0)
+            continue;
+        const QString abs = fi.absoluteFilePath();
+        if (!preservedDir.isEmpty() && abs == preservedDir)
+            continue;
+        removePathRecursively(abs);
+    }
+}
+
+QString buildWorkingCopyPath(const QString &sourcePath, QString *workingSessionDirOut)
+{
+    if (workingSessionDirOut)
+        workingSessionDirOut->clear();
+    const QString fileName = QFileInfo(sourcePath).fileName();
+    const QString stamp = QDateTime::currentDateTimeUtc().toString("yyyyMMdd_HHmmss_zzz");
+    const QString uid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString sourceDirName = QFileInfo(sourcePath).absoluteDir().dirName();
+    const QString sessionName = QString("%1_%2_%3")
+                                    .arg(stamp,
+                                         uid,
+                                         sourceDirName.isEmpty() ? QStringLiteral("chart_session") : sourceDirName);
+    const QString sessionDir = QDir(sessionWorkingCopyRootDir()).filePath(sessionName);
+    const QString chartDirName = sourceDirName.isEmpty() ? QStringLiteral("chart_dir") : sourceDirName;
+    const QString chartDir = QDir(sessionDir).filePath(chartDirName);
+    if (workingSessionDirOut)
+        *workingSessionDirOut = sessionDir;
+    return QDir(chartDir).filePath(fileName);
+}
+
+bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPathOut, QString *errorOut)
+{
+    if (workingPathOut)
+        workingPathOut->clear();
+    if (errorOut)
+        errorOut->clear();
+
+    if (sourcePath.isEmpty())
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Source chart path is empty.");
+        return false;
+    }
+
+    const QString rootDir = sessionWorkingCopyRootDir();
+    if (!QDir().mkpath(rootDir))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Failed to create working copy directory:\n%1").arg(rootDir);
+        return false;
+    }
+
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile())
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Source chart does not exist:\n%1").arg(sourcePath);
+        return false;
+    }
+
+    QString workingSessionDir;
+    const QString workingPath = buildWorkingCopyPath(sourcePath, &workingSessionDir);
+    removePathRecursively(workingSessionDir);
+    if (!copyDirectoryRecursively(sourceInfo.absolutePath(), QFileInfo(workingPath).absoluteDir().absolutePath(), errorOut))
+    {
+        removePathRecursively(workingSessionDir);
+        return false;
+    }
+    if (!QFile::exists(workingPath))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Working copy chart file is missing:\n%1").arg(workingPath);
+        return false;
+    }
+
+    copyReferencedExternalResources(sourcePath, workingPath);
+
+    if (workingPathOut)
+        *workingPathOut = workingPath;
+    return true;
+}
 }
 
 MainWindow::MainWindow(ChartController *chartCtrl,
@@ -495,11 +857,15 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->checkUpdatesAction = nullptr;
     d->aboutAction = nullptr;
     d->currentChartPath.clear();
+    d->sourceChartPath.clear();
+    d->workingChartPath.clear();
     d->isModified = false;
+    d->autoSaveTimer = nullptr;
 
     setupUi();
     createCentralArea();
     createMenus();
+    setupAutoSaveTimer();
 
     connect(d->chartController, &ChartController::chartChanged, this, [this]()
             {
@@ -510,7 +876,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
         if (d->selectionController) {
             d->selectionController->setNotes(&(d->chartController->chart()->notes()));
             d->selectionController->updateSelectionFromNotes();
-        } });
+        }
+        persistRecoveryState(); });
     connect(d->chartController, &ChartController::errorOccurred, this, [this](const QString &msg)
             {
         statusBar()->showMessage(msg, 3000);
@@ -536,12 +903,15 @@ MainWindow::MainWindow(ChartController *chartCtrl,
             connect(pm, &PluginManager::pluginsChanged, this, &MainWindow::refreshPluginUiExtensions);
             refreshPluginUiExtensions();
         } });
+    QTimer::singleShot(0, this, [this]()
+                       { tryRecoverPreviousSession(); });
 
     Logger::info("MainWindow constructor finished");
 }
 
 MainWindow::~MainWindow()
 {
+    clearWorkingCopySession(true);
     delete d->skin;
     delete d;
     Logger::info("MainWindow destroyed");
@@ -707,6 +1077,8 @@ void MainWindow::createMenus()
     connect(d->outlineAction, &QAction::triggered, this, &MainWindow::configureOutline);
     d->noteSoundVolumeAction = settingsMenu->addAction(tr("Note Sound Volume..."));
     connect(d->noteSoundVolumeAction, &QAction::triggered, this, &MainWindow::adjustNoteSoundVolume);
+    QAction *sessionSettingsAction = settingsMenu->addAction(tr("Session Settings..."));
+    connect(sessionSettingsAction, &QAction::triggered, this, &MainWindow::openSessionSettings);
     settingsMenu->addSeparator();
     d->skinMenu = settingsMenu->addMenu(tr("&Skin"));
     populateSkinMenu();
@@ -1061,6 +1433,143 @@ QString MainWindow::beatmapRootPath() const
     return Settings::instance().defaultBeatmapPath();
 }
 
+void MainWindow::persistRecoveryState()
+{
+    if (d->workingChartPath.isEmpty() || !d->isModified)
+    {
+        removeRecoveryState();
+        return;
+    }
+
+    RecoverySessionState state;
+    state.sourcePath = d->sourceChartPath;
+    state.workingPath = d->workingChartPath;
+    state.modified = d->isModified;
+    writeRecoveryState(state);
+}
+
+void MainWindow::clearWorkingCopySession(bool removeWorkingFile)
+{
+    if (removeWorkingFile && !d->workingChartPath.isEmpty())
+        removePathRecursively(workingSessionDirFromWorkingPath(d->workingChartPath));
+    d->workingChartPath.clear();
+    d->sourceChartPath.clear();
+    removeRecoveryState();
+    cleanupSessionWorkingCopies(QString());
+}
+
+void MainWindow::setupAutoSaveTimer()
+{
+    if (d->autoSaveTimer)
+    {
+        d->autoSaveTimer->stop();
+        d->autoSaveTimer->deleteLater();
+    }
+    d->autoSaveTimer = new QTimer(this);
+    d->autoSaveTimer->setTimerType(Qt::CoarseTimer);
+    d->autoSaveTimer->setInterval(Settings::instance().autoSaveIntervalSec() * 1000);
+    connect(d->autoSaveTimer, &QTimer::timeout, this, [this]()
+            { performAutoSaveTick(); });
+    if (Settings::instance().autoSaveEnabled())
+        d->autoSaveTimer->start();
+}
+
+void MainWindow::performAutoSaveTick()
+{
+    if (!Settings::instance().autoSaveEnabled())
+        return;
+    if (!d->isModified || !d->chartController)
+        return;
+
+    QString sourcePath = d->sourceChartPath;
+    if (sourcePath.isEmpty())
+        sourcePath = d->currentChartPath;
+    if (sourcePath.isEmpty())
+        return;
+
+    if (!d->chartController->saveChart(sourcePath))
+    {
+        Logger::warn(QString("Auto-save failed: %1").arg(sourcePath));
+        return;
+    }
+
+    d->sourceChartPath = sourcePath;
+    d->currentChartPath = sourcePath;
+    d->isModified = false;
+    if (!d->workingChartPath.isEmpty())
+        d->chartController->saveChart(d->workingChartPath);
+    persistRecoveryState();
+    statusBar()->showMessage(tr("Auto-saved: %1").arg(sourcePath), 1200);
+}
+
+void MainWindow::tryRecoverPreviousSession()
+{
+    RecoverySessionState state;
+    if (!readRecoveryState(&state))
+    {
+        cleanupSessionWorkingCopies(QString());
+        return;
+    }
+    if (!state.modified)
+    {
+        removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
+        return;
+    }
+    if (!QFile::exists(state.workingPath))
+    {
+        removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
+        return;
+    }
+
+    QMessageBox::StandardButton choice = QMessageBox::question(
+        this,
+        tr("Recover Unsaved Session"),
+        tr("Detected that the previous session may not have exited normally.\n"
+           "Unsaved edits were found in a recovery working copy.\n"
+           "Do you want to recover them now?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+    if (choice != QMessageBox::Yes)
+    {
+        removePathRecursively(workingSessionDirFromWorkingPath(state.workingPath));
+        removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
+        return;
+    }
+
+    if (!d->chartController->loadChart(state.workingPath))
+    {
+        QMessageBox::warning(this, tr("Recovery Failed"), tr("Failed to load the recovery working copy."));
+        removePathRecursively(workingSessionDirFromWorkingPath(state.workingPath));
+        removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
+        return;
+    }
+
+    d->sourceChartPath = state.sourcePath;
+    d->workingChartPath = state.workingPath;
+    d->currentChartPath = state.sourcePath;
+    d->isModified = true;
+    d->canvas->update();
+    statusBar()->showMessage(tr("Recovered unsaved session"), 3000);
+    cleanupSessionWorkingCopies(d->workingChartPath);
+    persistRecoveryState();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (!confirmSaveIfModified(tr("Closing the application will end this editing session.")))
+    {
+        event->ignore();
+        return;
+    }
+
+    clearWorkingCopySession(true);
+    event->accept();
+}
+
 bool MainWindow::confirmSaveIfModified(const QString &reasonText)
 {
     if (!d->isModified)
@@ -1080,7 +1589,9 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
     if (choice == QMessageBox::Discard)
         return true;
 
-    QString savePath = d->currentChartPath;
+    QString savePath = d->sourceChartPath;
+    if (savePath.isEmpty())
+        savePath = d->currentChartPath;
     if (savePath.isEmpty())
     {
         savePath = QFileDialog::getSaveFileName(
@@ -1098,9 +1609,15 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
         return false;
     }
 
+    d->sourceChartPath = savePath;
     d->currentChartPath = savePath;
     Settings::instance().setLastOpenPath(QFileInfo(savePath).absolutePath());
     d->isModified = false;
+    if (!d->workingChartPath.isEmpty())
+        d->chartController->saveChart(d->workingChartPath);
+    else
+        createWorkingCopyFromSource(savePath, &d->workingChartPath, nullptr);
+    persistRecoveryState();
     statusBar()->showMessage(tr("Saved: %1").arg(savePath), 2000);
     if (PluginManager *pm = activePluginManager())
         pm->notifyChartSaved(savePath);
@@ -1147,7 +1664,7 @@ void MainWindow::openFolder()
         return;
     }
 
-    QString selectedPath = selectChartFromList(charts, tr("Select Chart in Folder"));
+    QString selectedPath = selectChartFromFolder(dirPath, charts, tr("Select Chart in Folder"));
     if (selectedPath.isEmpty())
         return;
 
@@ -1171,6 +1688,9 @@ void MainWindow::openImportedLibrary()
 void MainWindow::loadChartFile(const QString &filePath)
 {
     Logger::info(QString("Loading chart file: %1").arg(filePath));
+    if (!confirmSaveIfModified(tr("Opening another chart will replace the current one in editor.")))
+        return;
+    clearWorkingCopySession(true);
 
     QString actualChartPath = filePath;
     QFileInfo fi(filePath);
@@ -1247,12 +1767,23 @@ void MainWindow::loadChartFile(const QString &filePath)
 
     closePluginPanels(tr("Plugin panels were closed after chart switch."));
 
-    if (!d->chartController->loadChart(actualChartPath))
+    QString workingChartPath;
+    QString workingCopyError;
+    if (!createWorkingCopyFromSource(actualChartPath, &workingChartPath, &workingCopyError))
     {
+        QMessageBox::critical(this, tr("Error"), workingCopyError);
+        return;
+    }
+
+    if (!d->chartController->loadChart(workingChartPath))
+    {
+        removePathRecursively(workingSessionDirFromWorkingPath(workingChartPath));
         QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
         return;
     }
 
+    d->sourceChartPath = actualChartPath;
+    d->workingChartPath = workingChartPath;
     d->currentChartPath = actualChartPath;
     Settings::instance().setLastOpenPath(QFileInfo(actualChartPath).absolutePath());
 
@@ -1274,6 +1805,7 @@ void MainWindow::loadChartFile(const QString &filePath)
 
     d->canvas->update();
     d->isModified = false;
+    persistRecoveryState();
     statusBar()->showMessage(tr("Loaded: %1").arg(QFileInfo(actualChartPath).fileName()), 3000);
 }
 
@@ -1306,6 +1838,119 @@ QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>> &ch
     return list->currentItem()->data(Qt::UserRole).toString();
 }
 
+QString MainWindow::selectChartFromFolder(const QString &rootDir,
+                                          const QList<QPair<QString, QString>> &charts,
+                                          const QString &title)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(title);
+    dialog.resize(620, 460);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(tr("Select a chart (grouped by song):")));
+
+    QTreeWidget *tree = new QTreeWidget(&dialog);
+    tree->setColumnCount(2);
+    tree->setHeaderLabels(QStringList() << tr("Song / Folder / Chart") << tr("Difficulty"));
+    tree->setRootIsDecorated(true);
+    tree->setTextElideMode(Qt::ElideMiddle);
+    constexpr int kPickerDifficultyColumnWidth = 150;
+    constexpr int kPickerPrimaryMinWidth = 420;
+    if (QHeaderView *header = tree->header())
+    {
+        header->setSectionResizeMode(0, QHeaderView::Interactive);
+        header->setSectionResizeMode(1, QHeaderView::Fixed);
+        header->setStretchLastSection(false);
+    }
+    tree->setColumnWidth(1, kPickerDifficultyColumnWidth);
+    const int primaryMaxWidth = qMax(kPickerPrimaryMinWidth, dialog.width() - kPickerDifficultyColumnWidth - 72);
+    const int savedPrimaryWidth = Settings::instance().chartPickerPrimaryColumnWidth();
+    tree->setColumnWidth(0, qBound(kPickerPrimaryMinWidth, savedPrimaryWidth, primaryMaxWidth));
+    layout->addWidget(tree);
+
+    QHash<QString, QTreeWidgetItem *> songItems;
+    QHash<QString, QTreeWidgetItem *> folderItems;
+    QTreeWidgetItem *firstChartItem = nullptr;
+
+    const QDir root(rootDir);
+    for (const auto &chart : charts)
+    {
+        const QString chartPath = chart.first;
+        const QString difficulty = chart.second;
+        const QFileInfo chartInfo(chartPath);
+        const QString relDir = root.relativeFilePath(chartInfo.absolutePath());
+        const QString folderLabel = (relDir == "." || relDir.isEmpty()) ? tr("(Root)") : relDir;
+
+        QString songTitle = chartSongTitleFromFile(chartPath);
+        if (songTitle.isEmpty())
+        {
+            const QString fallback = chartInfo.absoluteDir().dirName();
+            songTitle = fallback.isEmpty() ? chartInfo.completeBaseName() : fallback;
+        }
+
+        QTreeWidgetItem *songItem = songItems.value(songTitle, nullptr);
+        if (!songItem)
+        {
+            songItem = new QTreeWidgetItem(tree);
+            songItem->setText(0, songTitle);
+            songItem->setExpanded(true);
+            songItems.insert(songTitle, songItem);
+        }
+
+        const QString folderKey = songTitle + QStringLiteral("||") + folderLabel;
+        QTreeWidgetItem *folderItem = folderItems.value(folderKey, nullptr);
+        if (!folderItem)
+        {
+            folderItem = new QTreeWidgetItem(songItem);
+            folderItem->setText(0, folderLabel);
+            folderItem->setExpanded(true);
+            folderItems.insert(folderKey, folderItem);
+        }
+
+        QTreeWidgetItem *chartItem = new QTreeWidgetItem(folderItem);
+        chartItem->setText(0, chartInfo.fileName());
+        chartItem->setText(1, difficulty);
+        chartItem->setData(0, Qt::UserRole, chartPath);
+        chartItem->setToolTip(0, chartPath);
+        if (!firstChartItem)
+            firstChartItem = chartItem;
+    }
+
+    if (tree->topLevelItemCount() == 0)
+    {
+        QMessageBox::information(this, tr("No Charts"), tr("No .mc files found in the selected folder."));
+        return QString();
+    }
+
+    tree->expandToDepth(1);
+    if (firstChartItem)
+        tree->setCurrentItem(firstChartItem);
+
+    connect(tree, &QTreeWidget::itemDoubleClicked, &dialog, [&dialog](QTreeWidgetItem *item, int) {
+        if (!item->data(0, Qt::UserRole).toString().isEmpty())
+            dialog.accept();
+    });
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    const int dialogResult = dialog.exec();
+    Settings::instance().setChartPickerPrimaryColumnWidth(tree->columnWidth(0));
+    if (dialogResult != QDialog::Accepted || tree->currentItem() == nullptr)
+        return QString();
+
+    const QString selectedPath = tree->currentItem()->data(0, Qt::UserRole).toString();
+    if (selectedPath.isEmpty())
+    {
+        QMessageBox::information(this, tr("Select Chart"), tr("Please select a chart item, not a song or folder group."));
+        return QString();
+    }
+
+    return selectedPath;
+}
+
 QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong)
 {
     QDir rootDir(libraryRoot);
@@ -1323,6 +1968,19 @@ QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QSt
     tree->setColumnCount(2);
     tree->setHeaderLabels(QStringList() << tr("Song / Chart") << tr("Difficulty"));
     tree->setRootIsDecorated(true);
+    tree->setTextElideMode(Qt::ElideMiddle);
+    constexpr int kPickerDifficultyColumnWidth = 150;
+    constexpr int kPickerPrimaryMinWidth = 420;
+    if (QHeaderView *header = tree->header())
+    {
+        header->setSectionResizeMode(0, QHeaderView::Interactive);
+        header->setSectionResizeMode(1, QHeaderView::Fixed);
+        header->setStretchLastSection(false);
+    }
+    tree->setColumnWidth(1, kPickerDifficultyColumnWidth);
+    const int primaryMaxWidth = qMax(kPickerPrimaryMinWidth, dialog.width() - kPickerDifficultyColumnWidth - 72);
+    const int savedPrimaryWidth = Settings::instance().chartPickerPrimaryColumnWidth();
+    tree->setColumnWidth(0, qBound(kPickerPrimaryMinWidth, savedPrimaryWidth, primaryMaxWidth));
     layout->addWidget(tree);
 
     QStringList songDirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
@@ -1367,7 +2025,9 @@ QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QSt
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
 
-    if (dialog.exec() != QDialog::Accepted || tree->currentItem() == nullptr)
+    const int dialogResult = dialog.exec();
+    Settings::instance().setChartPickerPrimaryColumnWidth(tree->columnWidth(0));
+    if (dialogResult != QDialog::Accepted || tree->currentItem() == nullptr)
         return QString();
 
     const QString selectedPath = tree->currentItem()->data(0, Qt::UserRole).toString();
@@ -1387,9 +2047,6 @@ void MainWindow::switchDifficulty()
         QMessageBox::information(this, tr("No Chart"), tr("No chart is currently open."));
         return;
     }
-
-    if (!confirmSaveIfModified(tr("Switching difficulty will replace the current chart in editor.")))
-        return;
 
     QString currentDir = QFileInfo(d->currentChartPath).absolutePath();
     QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(currentDir);
@@ -1421,7 +2078,9 @@ void MainWindow::switchDifficulty()
 void MainWindow::saveChart()
 {
     Logger::info("Save chart requested");
-    QString currentPath = d->currentChartPath;
+    QString currentPath = d->sourceChartPath;
+    if (currentPath.isEmpty())
+        currentPath = d->currentChartPath;
     if (currentPath.isEmpty())
     {
         currentPath = QFileDialog::getSaveFileName(
@@ -1438,9 +2097,15 @@ void MainWindow::saveChart()
 
     if (d->chartController->saveChart(currentPath))
     {
+        d->sourceChartPath = currentPath;
         d->currentChartPath = currentPath;
         Settings::instance().setLastOpenPath(QFileInfo(currentPath).absolutePath());
         d->isModified = false;
+        if (!d->workingChartPath.isEmpty())
+            d->chartController->saveChart(d->workingChartPath);
+        else
+            createWorkingCopyFromSource(currentPath, &d->workingChartPath, nullptr);
+        persistRecoveryState();
         statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
         Logger::info("Chart saved: " + currentPath);
         if (PluginManager *pm = activePluginManager())
@@ -1465,8 +2130,14 @@ void MainWindow::saveChartAs()
     }
     if (d->chartController->saveChart(fileName))
     {
+        d->sourceChartPath = fileName;
         d->currentChartPath = fileName;
         d->isModified = false;
+        if (!d->workingChartPath.isEmpty())
+            d->chartController->saveChart(d->workingChartPath);
+        else
+            createWorkingCopyFromSource(fileName, &d->workingChartPath, nullptr);
+        persistRecoveryState();
         statusBar()->showMessage(tr("Saved: %1").arg(fileName), 2000);
         Logger::info("Chart saved as: " + fileName);
         if (PluginManager *pm = activePluginManager())

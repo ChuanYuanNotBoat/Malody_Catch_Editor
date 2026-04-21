@@ -88,6 +88,7 @@ public:
     QScrollArea *mobileLeftPanelHost = nullptr;
     QScrollArea *mobileRightPanelHost = nullptr;
     QTimer *mobileSplitterSettleTimer = nullptr;
+    QTimer *autoSaveTimer = nullptr;
     bool mobileSplitterSuppressCanvasUpdates = false;
     bool compactUiMode = false;
     QMenu *languageMenu = nullptr;
@@ -101,5 +102,7 @@ public:
     QList<QString> shortcutActionOrder;
 
     QString currentChartPath;
+    QString sourceChartPath;
+    QString workingChartPath;
     bool isModified = false;
 };
