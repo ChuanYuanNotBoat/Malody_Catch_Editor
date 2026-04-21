@@ -287,13 +287,8 @@ void ChartCanvas::setChartController(ChartController *controller)
             update(); });
         m_hyperfruitDetector->setCS(3.2);
         m_noteRenderer->setHyperfruitDetector(m_hyperfruitDetector);
-        updateBackgroundCache();
-        invalidateChartCaches(true);
     }
-    else
-    {
-        invalidateChartCaches(true);
-    }
+    invalidateChartCaches(true);
     update();
 }
 
