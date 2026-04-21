@@ -1294,9 +1294,11 @@ void MainWindow::tryRecoverPreviousSession()
     QMessageBox::StandardButton choice = QMessageBox::question(
         this,
         tr("Recover Unsaved Session"),
-        tr("Detected an unsaved editing session from the previous run.\nDo you want to recover it now?"),
+        tr("Detected that the previous session may not have exited normally.\n"
+           "Unsaved edits were found in a recovery working copy.\n"
+           "Do you want to recover them now?"),
         QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::Yes);
+        QMessageBox::No);
     if (choice != QMessageBox::Yes)
     {
         QFile::remove(state.workingPath);
