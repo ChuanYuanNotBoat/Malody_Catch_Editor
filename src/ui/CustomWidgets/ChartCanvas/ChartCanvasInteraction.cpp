@@ -102,6 +102,12 @@ void ChartCanvas::updateBackgroundCache()
 void ChartCanvas::refreshBackground()
 {
     updateBackgroundCache();
+    // When auto-scroll is disabled during playback, playbackPositionChanged()
+    // already drives repaint; avoid duplicate frame updates from both paths.
+    if (!m_autoScrollEnabled && m_playbackController &&
+        m_playbackController->state() == PlaybackController::Playing)
+        return;
+
     update();
 }
 
