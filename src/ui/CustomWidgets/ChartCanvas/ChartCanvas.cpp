@@ -271,6 +271,9 @@ void ChartCanvas::rebuildNoteTimesCache()
 
 void ChartCanvas::setChartController(ChartController *controller)
 {
+    if (m_chartController == controller)
+        return;
+
     if (m_chartController)
     {
         disconnect(m_chartController, &ChartController::chartChanged, this, nullptr);
@@ -355,7 +358,6 @@ void ChartCanvas::setSelectionController(SelectionController *controller)
     if (m_selectionController)
     {
         connect(m_selectionController, &SelectionController::selectionChanged, this, QOverload<>::of(&ChartCanvas::update));
-        connect(m_selectionController, &SelectionController::selectionChanged, this, &ChartCanvas::onSelectionChanged);
     }
     update();
 }
