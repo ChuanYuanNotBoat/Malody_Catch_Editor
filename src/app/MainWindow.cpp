@@ -44,6 +44,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QColorDialog>
+#include <QCloseEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -457,6 +458,62 @@ QString sessionWorkingCopyRootDir()
     return QDir(base).filePath("session_working_copies");
 }
 
+QString recoveryManifestPath()
+{
+    return QDir(sessionWorkingCopyRootDir()).filePath("recovery.json");
+}
+
+struct RecoverySessionState
+{
+    QString sourcePath;
+    QString workingPath;
+    bool modified = false;
+};
+
+bool writeRecoveryState(const RecoverySessionState &state)
+{
+    if (!QDir().mkpath(sessionWorkingCopyRootDir()))
+        return false;
+
+    const QJsonObject obj{
+        {"source_path", state.sourcePath},
+        {"working_path", state.workingPath},
+        {"modified", state.modified},
+        {"updated_at_utc", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}};
+    QFile file(recoveryManifestPath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return false;
+    const QJsonDocument doc(obj);
+    return file.write(doc.toJson(QJsonDocument::Indented)) > 0;
+}
+
+bool readRecoveryState(RecoverySessionState *state)
+{
+    if (!state)
+        return false;
+    *state = RecoverySessionState{};
+
+    QFile file(recoveryManifestPath());
+    if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return false;
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return false;
+
+    const QJsonObject obj = doc.object();
+    state->sourcePath = obj.value("source_path").toString();
+    state->workingPath = obj.value("working_path").toString();
+    state->modified = obj.value("modified").toBool(false);
+    return !state->workingPath.isEmpty();
+}
+
+void removeRecoveryState()
+{
+    QFile::remove(recoveryManifestPath());
+}
+
 QString buildWorkingCopyPath(const QString &sourcePath)
 {
     const QString fileName = QFileInfo(sourcePath).fileName();
@@ -566,7 +623,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
         if (d->selectionController) {
             d->selectionController->setNotes(&(d->chartController->chart()->notes()));
             d->selectionController->updateSelectionFromNotes();
-        } });
+        }
+        persistRecoveryState(); });
     connect(d->chartController, &ChartController::errorOccurred, this, [this](const QString &msg)
             {
         statusBar()->showMessage(msg, 3000);
@@ -592,14 +650,15 @@ MainWindow::MainWindow(ChartController *chartCtrl,
             connect(pm, &PluginManager::pluginsChanged, this, &MainWindow::refreshPluginUiExtensions);
             refreshPluginUiExtensions();
         } });
+    QTimer::singleShot(0, this, [this]()
+                       { tryRecoverPreviousSession(); });
 
     Logger::info("MainWindow constructor finished");
 }
 
 MainWindow::~MainWindow()
 {
-    if (!d->workingChartPath.isEmpty())
-        QFile::remove(d->workingChartPath);
+    clearWorkingCopySession(true);
     delete d->skin;
     delete d;
     Logger::info("MainWindow destroyed");
@@ -1119,6 +1178,88 @@ QString MainWindow::beatmapRootPath() const
     return Settings::instance().defaultBeatmapPath();
 }
 
+void MainWindow::persistRecoveryState()
+{
+    if (d->workingChartPath.isEmpty())
+    {
+        removeRecoveryState();
+        return;
+    }
+
+    RecoverySessionState state;
+    state.sourcePath = d->sourceChartPath;
+    state.workingPath = d->workingChartPath;
+    state.modified = d->isModified;
+    writeRecoveryState(state);
+}
+
+void MainWindow::clearWorkingCopySession(bool removeWorkingFile)
+{
+    if (removeWorkingFile && !d->workingChartPath.isEmpty())
+        QFile::remove(d->workingChartPath);
+    d->workingChartPath.clear();
+    d->sourceChartPath.clear();
+    removeRecoveryState();
+}
+
+void MainWindow::tryRecoverPreviousSession()
+{
+    RecoverySessionState state;
+    if (!readRecoveryState(&state))
+        return;
+    if (!state.modified)
+    {
+        removeRecoveryState();
+        return;
+    }
+    if (!QFile::exists(state.workingPath))
+    {
+        removeRecoveryState();
+        return;
+    }
+
+    QMessageBox::StandardButton choice = QMessageBox::question(
+        this,
+        tr("Recover Unsaved Session"),
+        tr("Detected an unsaved editing session from the previous run.\nDo you want to recover it now?"),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+    if (choice != QMessageBox::Yes)
+    {
+        QFile::remove(state.workingPath);
+        removeRecoveryState();
+        return;
+    }
+
+    if (!d->chartController->loadChart(state.workingPath))
+    {
+        QMessageBox::warning(this, tr("Recovery Failed"), tr("Failed to load the recovery working copy."));
+        QFile::remove(state.workingPath);
+        removeRecoveryState();
+        return;
+    }
+
+    d->sourceChartPath = state.sourcePath;
+    d->workingChartPath = state.workingPath;
+    d->currentChartPath = state.sourcePath;
+    d->isModified = true;
+    d->canvas->update();
+    statusBar()->showMessage(tr("Recovered unsaved session"), 3000);
+    persistRecoveryState();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (!confirmSaveIfModified(tr("Closing the application will end this editing session.")))
+    {
+        event->ignore();
+        return;
+    }
+
+    clearWorkingCopySession(true);
+    event->accept();
+}
+
 bool MainWindow::confirmSaveIfModified(const QString &reasonText)
 {
     if (!d->isModified)
@@ -1166,6 +1307,7 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
         d->chartController->saveChart(d->workingChartPath);
     else
         createWorkingCopyFromSource(savePath, &d->workingChartPath, nullptr);
+    persistRecoveryState();
     statusBar()->showMessage(tr("Saved: %1").arg(savePath), 2000);
     if (PluginManager *pm = activePluginManager())
         pm->notifyChartSaved(savePath);
@@ -1236,8 +1378,9 @@ void MainWindow::openImportedLibrary()
 void MainWindow::loadChartFile(const QString &filePath)
 {
     Logger::info(QString("Loading chart file: %1").arg(filePath));
-    if (!d->workingChartPath.isEmpty())
-        QFile::remove(d->workingChartPath);
+    if (!confirmSaveIfModified(tr("Opening another chart will replace the current one in editor.")))
+        return;
+    clearWorkingCopySession(true);
 
     QString actualChartPath = filePath;
     QFileInfo fi(filePath);
@@ -1351,6 +1494,7 @@ void MainWindow::loadChartFile(const QString &filePath)
 
     d->canvas->update();
     d->isModified = false;
+    persistRecoveryState();
     statusBar()->showMessage(tr("Loaded: %1").arg(QFileInfo(actualChartPath).fileName()), 3000);
 }
 
@@ -1465,9 +1609,6 @@ void MainWindow::switchDifficulty()
         return;
     }
 
-    if (!confirmSaveIfModified(tr("Switching difficulty will replace the current chart in editor.")))
-        return;
-
     QString currentDir = QFileInfo(d->currentChartPath).absolutePath();
     QList<QPair<QString, QString>> charts = ProjectIO::findChartsInDirectory(currentDir);
     if (charts.size() <= 1)
@@ -1525,6 +1666,7 @@ void MainWindow::saveChart()
             d->chartController->saveChart(d->workingChartPath);
         else
             createWorkingCopyFromSource(currentPath, &d->workingChartPath, nullptr);
+        persistRecoveryState();
         statusBar()->showMessage(tr("Saved: %1").arg(currentPath), 2000);
         Logger::info("Chart saved: " + currentPath);
         if (PluginManager *pm = activePluginManager())
@@ -1556,6 +1698,7 @@ void MainWindow::saveChartAs()
             d->chartController->saveChart(d->workingChartPath);
         else
             createWorkingCopyFromSource(fileName, &d->workingChartPath, nullptr);
+        persistRecoveryState();
         statusBar()->showMessage(tr("Saved: %1").arg(fileName), 2000);
         Logger::info("Chart saved as: " + fileName);
         if (PluginManager *pm = activePluginManager())
