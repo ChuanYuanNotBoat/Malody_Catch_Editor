@@ -106,6 +106,9 @@ private:
     void setupAutoSaveTimer();
     void performAutoSaveTick();
     QString selectChartFromList(const QList<QPair<QString, QString>> &charts, const QString &title);
+    QString selectChartFromFolder(const QString &rootDir,
+                                  const QList<QPair<QString, QString>> &charts,
+                                  const QString &title);
     QString selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong = QString());
     void registerShortcutAction(QAction *action, const QString &actionId, const QKeySequence &defaultShortcut);
     QString beatmapRootPath() const; // Return beatmap root directory.

@@ -610,6 +610,27 @@ bool copyDirectoryRecursively(const QString &sourceDirPath, const QString &targe
     return true;
 }
 
+QString chartSongTitleFromFile(const QString &chartPath)
+{
+    QFile file(chartPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return QString();
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
+        return QString();
+
+    const QJsonObject root = doc.object();
+    const QJsonObject meta = root.value("meta").toObject();
+    const QJsonObject song = meta.value("song").toObject();
+
+    QString title = song.value("title").toString().trimmed();
+    if (title.isEmpty())
+        title = meta.value("title").toString().trimmed();
+    return title;
+}
+
 QStringList collectReferencedResources(const QString &chartPath)
 {
     QStringList resources;
@@ -1643,7 +1664,7 @@ void MainWindow::openFolder()
         return;
     }
 
-    QString selectedPath = selectChartFromList(charts, tr("Select Chart in Folder"));
+    QString selectedPath = selectChartFromFolder(dirPath, charts, tr("Select Chart in Folder"));
     if (selectedPath.isEmpty())
         return;
 
@@ -1817,6 +1838,111 @@ QString MainWindow::selectChartFromList(const QList<QPair<QString, QString>> &ch
     return list->currentItem()->data(Qt::UserRole).toString();
 }
 
+QString MainWindow::selectChartFromFolder(const QString &rootDir,
+                                          const QList<QPair<QString, QString>> &charts,
+                                          const QString &title)
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(title);
+    dialog.resize(620, 460);
+
+    QVBoxLayout *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(tr("Select a chart (grouped by song):")));
+
+    QTreeWidget *tree = new QTreeWidget(&dialog);
+    tree->setColumnCount(2);
+    tree->setHeaderLabels(QStringList() << tr("Song / Folder / Chart") << tr("Difficulty"));
+    tree->setRootIsDecorated(true);
+    tree->setTextElideMode(Qt::ElideMiddle);
+    if (QHeaderView *header = tree->header())
+    {
+        header->setSectionResizeMode(0, QHeaderView::Interactive);
+        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    }
+    tree->setColumnWidth(0, 460);
+    layout->addWidget(tree);
+
+    QHash<QString, QTreeWidgetItem *> songItems;
+    QHash<QString, QTreeWidgetItem *> folderItems;
+    QTreeWidgetItem *firstChartItem = nullptr;
+
+    const QDir root(rootDir);
+    for (const auto &chart : charts)
+    {
+        const QString chartPath = chart.first;
+        const QString difficulty = chart.second;
+        const QFileInfo chartInfo(chartPath);
+        const QString relDir = root.relativeFilePath(chartInfo.absolutePath());
+        const QString folderLabel = (relDir == "." || relDir.isEmpty()) ? tr("(Root)") : relDir;
+
+        QString songTitle = chartSongTitleFromFile(chartPath);
+        if (songTitle.isEmpty())
+        {
+            const QString fallback = chartInfo.absoluteDir().dirName();
+            songTitle = fallback.isEmpty() ? chartInfo.completeBaseName() : fallback;
+        }
+
+        QTreeWidgetItem *songItem = songItems.value(songTitle, nullptr);
+        if (!songItem)
+        {
+            songItem = new QTreeWidgetItem(tree);
+            songItem->setText(0, songTitle);
+            songItem->setExpanded(true);
+            songItems.insert(songTitle, songItem);
+        }
+
+        const QString folderKey = songTitle + QStringLiteral("||") + folderLabel;
+        QTreeWidgetItem *folderItem = folderItems.value(folderKey, nullptr);
+        if (!folderItem)
+        {
+            folderItem = new QTreeWidgetItem(songItem);
+            folderItem->setText(0, folderLabel);
+            folderItem->setExpanded(true);
+            folderItems.insert(folderKey, folderItem);
+        }
+
+        QTreeWidgetItem *chartItem = new QTreeWidgetItem(folderItem);
+        chartItem->setText(0, chartInfo.fileName());
+        chartItem->setText(1, difficulty);
+        chartItem->setData(0, Qt::UserRole, chartPath);
+        chartItem->setToolTip(0, chartPath);
+        if (!firstChartItem)
+            firstChartItem = chartItem;
+    }
+
+    if (tree->topLevelItemCount() == 0)
+    {
+        QMessageBox::information(this, tr("No Charts"), tr("No .mc files found in the selected folder."));
+        return QString();
+    }
+
+    tree->expandToDepth(1);
+    if (firstChartItem)
+        tree->setCurrentItem(firstChartItem);
+
+    connect(tree, &QTreeWidget::itemDoubleClicked, &dialog, [&dialog](QTreeWidgetItem *item, int) {
+        if (!item->data(0, Qt::UserRole).toString().isEmpty())
+            dialog.accept();
+    });
+
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+
+    if (dialog.exec() != QDialog::Accepted || tree->currentItem() == nullptr)
+        return QString();
+
+    const QString selectedPath = tree->currentItem()->data(0, Qt::UserRole).toString();
+    if (selectedPath.isEmpty())
+    {
+        QMessageBox::information(this, tr("Select Chart"), tr("Please select a chart item, not a song or folder group."));
+        return QString();
+    }
+
+    return selectedPath;
+}
+
 QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QString &preferredSong)
 {
     QDir rootDir(libraryRoot);
@@ -1834,6 +1960,13 @@ QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QSt
     tree->setColumnCount(2);
     tree->setHeaderLabels(QStringList() << tr("Song / Chart") << tr("Difficulty"));
     tree->setRootIsDecorated(true);
+    tree->setTextElideMode(Qt::ElideMiddle);
+    if (QHeaderView *header = tree->header())
+    {
+        header->setSectionResizeMode(0, QHeaderView::Interactive);
+        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    }
+    tree->setColumnWidth(0, 460);
     layout->addWidget(tree);
 
     QStringList songDirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
