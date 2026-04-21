@@ -1856,10 +1856,11 @@ QString MainWindow::selectChartFromFolder(const QString &rootDir,
     tree->setTextElideMode(Qt::ElideMiddle);
     if (QHeaderView *header = tree->header())
     {
-        header->setSectionResizeMode(0, QHeaderView::Interactive);
-        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(0, QHeaderView::Stretch);
+        header->setSectionResizeMode(1, QHeaderView::Fixed);
+        header->setStretchLastSection(false);
     }
-    tree->setColumnWidth(0, 460);
+    tree->setColumnWidth(1, 150);
     layout->addWidget(tree);
 
     QHash<QString, QTreeWidgetItem *> songItems;
@@ -1963,10 +1964,11 @@ QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QSt
     tree->setTextElideMode(Qt::ElideMiddle);
     if (QHeaderView *header = tree->header())
     {
-        header->setSectionResizeMode(0, QHeaderView::Interactive);
-        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(0, QHeaderView::Stretch);
+        header->setSectionResizeMode(1, QHeaderView::Fixed);
+        header->setStretchLastSection(false);
     }
-    tree->setColumnWidth(0, 460);
+    tree->setColumnWidth(1, 150);
     layout->addWidget(tree);
 
     QStringList songDirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
