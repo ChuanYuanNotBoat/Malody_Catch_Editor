@@ -1298,7 +1298,7 @@ void MainWindow::tryRecoverPreviousSession()
            "Unsaved edits were found in a recovery working copy.\n"
            "Do you want to recover them now?"),
         QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
+        QMessageBox::Yes);
     if (choice != QMessageBox::Yes)
     {
         QFile::remove(state.workingPath);
