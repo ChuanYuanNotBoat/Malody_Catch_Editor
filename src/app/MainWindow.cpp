@@ -514,6 +514,25 @@ void removeRecoveryState()
     QFile::remove(recoveryManifestPath());
 }
 
+void cleanupSessionWorkingCopies(const QString &preserveWorkingPath)
+{
+    QDir dir(sessionWorkingCopyRootDir());
+    if (!dir.exists())
+        return;
+
+    const QString preserved = QFileInfo(preserveWorkingPath).absoluteFilePath();
+    const QFileInfoList files = dir.entryInfoList(QDir::Files | QDir::NoSymLinks);
+    for (const QFileInfo &fi : files)
+    {
+        if (fi.fileName().compare("recovery.json", Qt::CaseInsensitive) == 0)
+            continue;
+        const QString abs = fi.absoluteFilePath();
+        if (!preserved.isEmpty() && abs == preserved)
+            continue;
+        QFile::remove(abs);
+    }
+}
+
 QString buildWorkingCopyPath(const QString &sourcePath)
 {
     const QString fileName = QFileInfo(sourcePath).fileName();
@@ -1180,7 +1199,7 @@ QString MainWindow::beatmapRootPath() const
 
 void MainWindow::persistRecoveryState()
 {
-    if (d->workingChartPath.isEmpty())
+    if (d->workingChartPath.isEmpty() || !d->isModified)
     {
         removeRecoveryState();
         return;
@@ -1200,21 +1219,27 @@ void MainWindow::clearWorkingCopySession(bool removeWorkingFile)
     d->workingChartPath.clear();
     d->sourceChartPath.clear();
     removeRecoveryState();
+    cleanupSessionWorkingCopies(QString());
 }
 
 void MainWindow::tryRecoverPreviousSession()
 {
     RecoverySessionState state;
     if (!readRecoveryState(&state))
+    {
+        cleanupSessionWorkingCopies(QString());
         return;
+    }
     if (!state.modified)
     {
         removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
         return;
     }
     if (!QFile::exists(state.workingPath))
     {
         removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
         return;
     }
 
@@ -1228,6 +1253,7 @@ void MainWindow::tryRecoverPreviousSession()
     {
         QFile::remove(state.workingPath);
         removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
         return;
     }
 
@@ -1236,6 +1262,7 @@ void MainWindow::tryRecoverPreviousSession()
         QMessageBox::warning(this, tr("Recovery Failed"), tr("Failed to load the recovery working copy."));
         QFile::remove(state.workingPath);
         removeRecoveryState();
+        cleanupSessionWorkingCopies(QString());
         return;
     }
 
@@ -1245,6 +1272,7 @@ void MainWindow::tryRecoverPreviousSession()
     d->isModified = true;
     d->canvas->update();
     statusBar()->showMessage(tr("Recovered unsaved session"), 3000);
+    cleanupSessionWorkingCopies(d->workingChartPath);
     persistRecoveryState();
 }
 
