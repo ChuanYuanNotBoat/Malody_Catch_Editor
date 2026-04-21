@@ -1854,13 +1854,18 @@ QString MainWindow::selectChartFromFolder(const QString &rootDir,
     tree->setHeaderLabels(QStringList() << tr("Song / Folder / Chart") << tr("Difficulty"));
     tree->setRootIsDecorated(true);
     tree->setTextElideMode(Qt::ElideMiddle);
+    constexpr int kPickerDifficultyColumnWidth = 150;
+    constexpr int kPickerPrimaryMinWidth = 420;
     if (QHeaderView *header = tree->header())
     {
-        header->setSectionResizeMode(0, QHeaderView::Stretch);
+        header->setSectionResizeMode(0, QHeaderView::Interactive);
         header->setSectionResizeMode(1, QHeaderView::Fixed);
         header->setStretchLastSection(false);
     }
-    tree->setColumnWidth(1, 150);
+    tree->setColumnWidth(1, kPickerDifficultyColumnWidth);
+    const int primaryMaxWidth = qMax(kPickerPrimaryMinWidth, dialog.width() - kPickerDifficultyColumnWidth - 72);
+    const int savedPrimaryWidth = Settings::instance().chartPickerPrimaryColumnWidth();
+    tree->setColumnWidth(0, qBound(kPickerPrimaryMinWidth, savedPrimaryWidth, primaryMaxWidth));
     layout->addWidget(tree);
 
     QHash<QString, QTreeWidgetItem *> songItems;
@@ -1931,7 +1936,9 @@ QString MainWindow::selectChartFromFolder(const QString &rootDir,
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
 
-    if (dialog.exec() != QDialog::Accepted || tree->currentItem() == nullptr)
+    const int dialogResult = dialog.exec();
+    Settings::instance().setChartPickerPrimaryColumnWidth(tree->columnWidth(0));
+    if (dialogResult != QDialog::Accepted || tree->currentItem() == nullptr)
         return QString();
 
     const QString selectedPath = tree->currentItem()->data(0, Qt::UserRole).toString();
@@ -1962,13 +1969,18 @@ QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QSt
     tree->setHeaderLabels(QStringList() << tr("Song / Chart") << tr("Difficulty"));
     tree->setRootIsDecorated(true);
     tree->setTextElideMode(Qt::ElideMiddle);
+    constexpr int kPickerDifficultyColumnWidth = 150;
+    constexpr int kPickerPrimaryMinWidth = 420;
     if (QHeaderView *header = tree->header())
     {
-        header->setSectionResizeMode(0, QHeaderView::Stretch);
+        header->setSectionResizeMode(0, QHeaderView::Interactive);
         header->setSectionResizeMode(1, QHeaderView::Fixed);
         header->setStretchLastSection(false);
     }
-    tree->setColumnWidth(1, 150);
+    tree->setColumnWidth(1, kPickerDifficultyColumnWidth);
+    const int primaryMaxWidth = qMax(kPickerPrimaryMinWidth, dialog.width() - kPickerDifficultyColumnWidth - 72);
+    const int savedPrimaryWidth = Settings::instance().chartPickerPrimaryColumnWidth();
+    tree->setColumnWidth(0, qBound(kPickerPrimaryMinWidth, savedPrimaryWidth, primaryMaxWidth));
     layout->addWidget(tree);
 
     QStringList songDirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
@@ -2013,7 +2025,9 @@ QString MainWindow::selectChartFromLibrary(const QString &libraryRoot, const QSt
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
 
-    if (dialog.exec() != QDialog::Accepted || tree->currentItem() == nullptr)
+    const int dialogResult = dialog.exec();
+    Settings::instance().setChartPickerPrimaryColumnWidth(tree->columnWidth(0));
+    if (dialogResult != QDialog::Accepted || tree->currentItem() == nullptr)
         return QString();
 
     const QString selectedPath = tree->currentItem()->data(0, Qt::UserRole).toString();

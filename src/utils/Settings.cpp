@@ -290,3 +290,13 @@ void Settings::setAutoSaveIntervalSec(int seconds)
 {
     m_settings.setValue("editor/autoSaveIntervalSec", qMax(15, seconds));
 }
+
+int Settings::chartPickerPrimaryColumnWidth() const
+{
+    return qMax(320, m_settings.value("ui/chartPickerPrimaryColumnWidth", 500).toInt());
+}
+
+void Settings::setChartPickerPrimaryColumnWidth(int width)
+{
+    m_settings.setValue("ui/chartPickerPrimaryColumnWidth", qBound(320, width, 2000));
+}

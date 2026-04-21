@@ -81,6 +81,9 @@ public:
     int autoSaveIntervalSec() const;
     void setAutoSaveIntervalSec(int seconds);
 
+    int chartPickerPrimaryColumnWidth() const;
+    void setChartPickerPrimaryColumnWidth(int width);
+
 private:
     Settings();
     QSettings m_settings;
