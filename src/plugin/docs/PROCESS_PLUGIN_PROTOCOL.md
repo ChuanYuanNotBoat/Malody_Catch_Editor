@@ -183,3 +183,58 @@ Recommended pattern: expose a normal tool action and open your own external floa
 - For one-shot mode (--run-tool-action), host also exports:
   - MALODY_LOCALE
   - MALODY_LANGUAGE
+
+## 8. Host API v3 Extensions (Addendum)
+
+When plugin declares `pluginApiVersion: 3`, host may call additional methods:
+
+- `handleCanvasInput` (interactive canvas tool-mode input)
+- `getPanelWorkspaceConfig` (dock/merge workspace hints)
+
+### 8.1 handleCanvasInput
+
+Request payload:
+
+```json
+{
+  "context": {"canvas_width":1200,"canvas_height":800,"tool_mode_active":true},
+  "event": {
+    "type":"mouse_move",
+    "x":420.0,
+    "y":260.0,
+    "button":0,
+    "buttons":1,
+    "modifiers":0,
+    "wheel_delta":0.0,
+    "key":0,
+    "timestamp_ms":1713512345684
+  }
+}
+```
+
+Response result object:
+
+```json
+{
+  "consumed": true,
+  "overlay": [],
+  "preview_batch_edit": {"add":[],"remove":[],"move":[]},
+  "cursor": "crosshair",
+  "status_text": "Dragging control point"
+}
+```
+
+### 8.2 getPanelWorkspaceConfig
+
+Request payload: normal context object.
+
+Response result example:
+
+```json
+{
+  "workspace_id": "note_chain_workspace",
+  "docking_supported": true,
+  "tab_merge_supported": true,
+  "default_layout": "advanced"
+}
+```
