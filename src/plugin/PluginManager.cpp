@@ -92,11 +92,14 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
             if (!pluginIdKey.isEmpty())
                 seenPluginIdsLower.insert(pluginIdKey);
 
-            if (p->pluginApiVersion() != PluginInterface::kHostApiVersion)
+            const int pluginApi = p->pluginApiVersion();
+            if (pluginApi < PluginInterface::kMinSupportedPluginApiVersion ||
+                pluginApi > PluginInterface::kHostApiVersion)
             {
                 info.active = false;
-                info.loadError = QString("API mismatch: plugin=%1 host=%2")
-                                     .arg(p->pluginApiVersion())
+                info.loadError = QString("API mismatch: plugin=%1 supported=[%2..%3]")
+                                     .arg(pluginApi)
+                                     .arg(PluginInterface::kMinSupportedPluginApiVersion)
                                      .arg(PluginInterface::kHostApiVersion);
                 rejected.append(p);
                 m_pluginInfos.append(info);

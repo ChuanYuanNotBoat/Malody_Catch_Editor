@@ -77,7 +77,8 @@ public:
     };
 
     // Host ABI/API version for runtime compatibility checks.
-    static constexpr int kHostApiVersion = 2;
+    static constexpr int kHostApiVersion = 3;
+    static constexpr int kMinSupportedPluginApiVersion = 2;
 
     // Capability keys.
     static constexpr const char *kCapabilityChartObserver = "chart_observer";
