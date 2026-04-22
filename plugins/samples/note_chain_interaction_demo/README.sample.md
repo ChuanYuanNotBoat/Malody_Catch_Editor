@@ -1,14 +1,16 @@
 ﻿# Note Chain Interaction Demo (Process Plugin)
 
-A runnable sample for Host API v3 interactive canvas flow:
+A runnable Host API v3 sample focused on pen-like curve editing:
 
-- capabilities: `tool_actions`, `canvas_overlay`, `canvas_interaction`, `panel_workspace`
-- methods demonstrated:
-  - `listToolActions`
-  - `runToolAction`
-  - `listCanvasOverlays`
-  - `handleCanvasInput`
-  - `getPanelWorkspaceConfig`
+- capabilities: `tool_actions`, `canvas_overlay`, `canvas_interaction`, `panel_workspace`, `host_batch_edit`
+- interactive features:
+  - left click empty area: add anchor
+  - left drag anchor: move anchor
+  - drag handle square: adjust Bezier handle
+  - double click anchor: smooth/corner toggle
+  - right click anchor: delete anchor
+- action:
+  - `Commit Curve -> Notes` (builds one batch edit with normal notes)
 
 ## Files
 
@@ -23,6 +25,7 @@ A runnable sample for Host API v3 interactive canvas flow:
 
 ## Usage
 
-- Open `Tools -> Plugin Enhanced Tool Mode`
-- Hover/drag control points in canvas to see interactive overlay updates
-- Use `Tools -> Plugin Actions -> Reset Demo Points` to reset sample state
+1. Enable `Tools -> Plugin Enhanced Tool Mode`
+2. Edit curve directly in main canvas
+3. Use `Tools -> Plugin Actions -> Commit Curve -> Notes` to generate notes
+4. Undo once to rollback the whole generated batch

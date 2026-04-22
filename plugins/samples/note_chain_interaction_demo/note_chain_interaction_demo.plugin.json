@@ -1,8 +1,8 @@
 ﻿{
   "pluginId": "sample.note_chain_interaction_demo",
   "displayName": "Note Chain Interaction Demo",
-  "version": "0.1.0",
-  "description": "Interactive canvas demo plugin for note-chain tool mode",
+  "version": "0.2.0",
+  "description": "Interactive pen-curve canvas demo plugin for note-chain tool mode",
   "author": "Malody Catch Editor",
   "pluginApiVersion": 3,
   "executable": "python",
@@ -11,12 +11,13 @@
     "tool_actions",
     "canvas_overlay",
     "canvas_interaction",
-    "panel_workspace"
+    "panel_workspace",
+    "host_batch_edit"
   ],
   "localizedDisplayName": {
     "zh_CN": "Note 串交互演示插件"
   },
   "localizedDescription": {
-    "zh_CN": "用于演示画布交互、叠加绘制与面板工作台配置"
+    "zh_CN": "演示钢笔曲线编辑、画布交互、叠加绘制与批量生成 note"
   }
 }
