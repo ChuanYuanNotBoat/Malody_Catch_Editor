@@ -1,6 +1,7 @@
 ﻿# Plugin Docs Index
 
 - `PROCESS_PLUGIN_PROTOCOL.md`: process plugin message protocol and action schema
+- `CANVAS_INTERACTION_PROTOCOL.md`: host v3 proposal for interactive canvas input + overlay fusion
 - `PROCESS_PLUGIN_MINIMAL_EXAMPLE.md`: minimal runnable process plugin example + error/log conventions
 - `ADVANCED_COLOR_EDITOR_PLUGIN.md`: capability contract for advanced color editor
 - `PLUGIN_TEMPLATE.md`: minimal native plugin template
