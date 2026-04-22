@@ -10,12 +10,15 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QGroupBox>
 #include <QMessageBox>
 #include <QDebug>
+#include <QSignalBlocker>
 
 NoteEditPanel::NoteEditPanel(QWidget *parent)
     : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20)
@@ -72,6 +75,34 @@ void NoteEditPanel::setupUi()
     m_gridSettingsBtn = new QPushButton(tr("Grid Settings..."), this);
     connect(m_gridSettingsBtn, &QPushButton::clicked, this, &NoteEditPanel::onGridSettingsClicked);
     mainLayout->addWidget(m_gridSettingsBtn);
+
+    m_mirrorGroup = new QGroupBox(tr("Mirror Flip"), this);
+    QVBoxLayout *mirrorLayout = new QVBoxLayout(m_mirrorGroup);
+    QHBoxLayout *axisLayout = new QHBoxLayout;
+    m_mirrorAxisLabel = new QLabel(tr("Axis X:"), m_mirrorGroup);
+    m_mirrorAxisSpin = new QSpinBox(m_mirrorGroup);
+    m_mirrorAxisSpin->setRange(0, 512);
+    m_mirrorAxisSpin->setValue(256);
+    axisLayout->addWidget(m_mirrorAxisLabel);
+    axisLayout->addWidget(m_mirrorAxisSpin, 1);
+    mirrorLayout->addLayout(axisLayout);
+
+    m_mirrorGuideCheck = new QCheckBox(tr("Show Guide"), m_mirrorGroup);
+    m_mirrorGuideCheck->setChecked(false);
+    mirrorLayout->addWidget(m_mirrorGuideCheck);
+
+    m_mirrorPreviewCheck = new QCheckBox(tr("Show Preview"), m_mirrorGroup);
+    m_mirrorPreviewCheck->setChecked(false);
+    mirrorLayout->addWidget(m_mirrorPreviewCheck);
+
+    m_mirrorFlipButton = new QPushButton(tr("Flip Selected"), m_mirrorGroup);
+    mirrorLayout->addWidget(m_mirrorFlipButton);
+    mainLayout->addWidget(m_mirrorGroup);
+
+    connect(m_mirrorAxisSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &NoteEditPanel::onMirrorAxisSpinChanged);
+    connect(m_mirrorGuideCheck, &QCheckBox::toggled, this, &NoteEditPanel::mirrorGuideVisibilityChanged);
+    connect(m_mirrorPreviewCheck, &QCheckBox::toggled, this, &NoteEditPanel::mirrorPreviewVisibilityChanged);
+    connect(m_mirrorFlipButton, &QPushButton::clicked, this, &NoteEditPanel::mirrorFlipRequested);
 
     mainLayout->addStretch();
 }
@@ -136,6 +167,11 @@ void NoteEditPanel::onTimeDivisionChanged(int index)
     emit timeDivisionChanged(division);
 }
 
+void NoteEditPanel::onMirrorAxisSpinChanged(int value)
+{
+    emit mirrorAxisChanged(value);
+}
+
 void NoteEditPanel::setChartController(ChartController *controller)
 {
     m_chartController = controller;
@@ -144,6 +180,15 @@ void NoteEditPanel::setChartController(ChartController *controller)
 void NoteEditPanel::setSelectionController(SelectionController *controller)
 {
     m_selectionController = controller;
+}
+
+void NoteEditPanel::setMirrorAxisValue(int axisX)
+{
+    if (!m_mirrorAxisSpin)
+        return;
+
+    const QSignalBlocker blocker(m_mirrorAxisSpin);
+    m_mirrorAxisSpin->setValue(axisX);
 }
 
 void NoteEditPanel::retranslateUi()
@@ -166,5 +211,15 @@ void NoteEditPanel::retranslateUi()
         m_gridSnapCheck->setText(tr("Grid Snap"));
     if (m_gridSettingsBtn)
         m_gridSettingsBtn->setText(tr("Grid Settings..."));
+    if (m_mirrorGroup)
+        m_mirrorGroup->setTitle(tr("Mirror Flip"));
+    if (m_mirrorAxisLabel)
+        m_mirrorAxisLabel->setText(tr("Axis X:"));
+    if (m_mirrorGuideCheck)
+        m_mirrorGuideCheck->setText(tr("Show Guide"));
+    if (m_mirrorPreviewCheck)
+        m_mirrorPreviewCheck->setText(tr("Show Preview"));
+    if (m_mirrorFlipButton)
+        m_mirrorFlipButton->setText(tr("Flip Selected"));
 }
 

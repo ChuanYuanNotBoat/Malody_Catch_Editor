@@ -27,9 +27,29 @@
         <source>Remove</source>
         <translation>移除</translation>
     </message>
+    <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="577"/>
+        <source>Mirror Flip Selected (Center Line)</source>
+        <translation>镜像翻转选中音符（中心线）</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="448"/>
+        <source>Mirrored %1 note(s).</source>
+        <translation>已镜像翻转 %1 个音符。</translation>
+    </message>
 </context>
 <context>
     <name>ChartCanvas</name>
+    <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="577"/>
+        <source>Mirror Flip Selected (Center Line)</source>
+        <translation>镜像翻转选中音符（中心线）</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="448"/>
+        <source>Mirrored %1 note(s).</source>
+        <translation>已镜像翻转 %1 个音符。</translation>
+    </message>
     <message>
         <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasInteraction.cpp" line="40"/>
         <source>Grid Settings</source>
@@ -1775,6 +1795,36 @@ Open the **History** tab for collapsible long update notes.</source>
 </context>
 <context>
     <name>NoteEditPanel</name>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="79"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="215"/>
+        <source>Mirror Flip</source>
+        <translation>镜像翻转</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="82"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="217"/>
+        <source>Axis X:</source>
+        <translation>对称轴 X:</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="90"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="219"/>
+        <source>Show Guide</source>
+        <translation>显示参考线</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="94"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="221"/>
+        <source>Show Preview</source>
+        <translation>显示预览</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="98"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="223"/>
+        <source>Flip Selected</source>
+        <translation>翻转选中音符</translation>
+    </message>
     <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="30"/>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="152"/>

@@ -10,6 +10,7 @@ class QPushButton;
 class QVBoxLayout;
 class QLabel;
 class QRadioButton;
+class QGroupBox;
 
 class NoteEditPanel : public RightPanel
 {
@@ -19,6 +20,7 @@ public:
     void setChartController(ChartController *controller) override;
     void setSelectionController(SelectionController *controller) override;
     void retranslateUi();
+    void setMirrorAxisValue(int axisX);
 
 signals:
     void modeChanged(int mode);
@@ -26,6 +28,10 @@ signals:
     void gridDivisionChanged(int division);
     void gridSnapChanged(bool enabled);
     void copyRequested();
+    void mirrorAxisChanged(int axisX);
+    void mirrorGuideVisibilityChanged(bool visible);
+    void mirrorPreviewVisibilityChanged(bool visible);
+    void mirrorFlipRequested();
 
 private slots:
     void onNoteModeClicked();
@@ -36,6 +42,7 @@ private slots:
     // void onGridDivisionChanged(int value);
     void onGridSnapToggled(bool on);
     void onTimeDivisionChanged(int index);
+    void onMirrorAxisSpinChanged(int value);
 
 private:
     void setupUi();
@@ -54,6 +61,12 @@ private:
     QCheckBox *m_gridSnapCheck;
     QPushButton *m_gridSettingsBtn;
     QPushButton *m_copyButton;
+    QGroupBox *m_mirrorGroup;
+    QLabel *m_mirrorAxisLabel;
+    QSpinBox *m_mirrorAxisSpin;
+    QCheckBox *m_mirrorGuideCheck;
+    QCheckBox *m_mirrorPreviewCheck;
+    QPushButton *m_mirrorFlipButton;
     int m_currentMode;
     int m_gridDivision;
 };

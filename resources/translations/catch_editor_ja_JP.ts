@@ -31,6 +31,16 @@
 <context>
     <name>ChartCanvas</name>
     <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="577"/>
+        <source>Mirror Flip Selected (Center Line)</source>
+        <translation>選択ノートを左右反転（中央線）</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="448"/>
+        <source>Mirrored %1 note(s).</source>
+        <translation>%1 個のノートを左右反転しました。</translation>
+    </message>
+    <message>
         <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasInteraction.cpp" line="40"/>
         <source>Grid Settings</source>
         <translation>グリッド設定</translation>
@@ -1775,6 +1785,36 @@ Open the **History** tab for collapsible long update notes.</source>
 </context>
 <context>
     <name>NoteEditPanel</name>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="79"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="215"/>
+        <source>Mirror Flip</source>
+        <translation>左右反転</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="82"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="217"/>
+        <source>Axis X:</source>
+        <translation>軸 X:</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="90"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="219"/>
+        <source>Show Guide</source>
+        <translation>ガイドを表示</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="94"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="221"/>
+        <source>Show Preview</source>
+        <translation>プレビューを表示</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="98"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="223"/>
+        <source>Flip Selected</source>
+        <translation>選択を反転</translation>
+    </message>
     <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="30"/>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="152"/>

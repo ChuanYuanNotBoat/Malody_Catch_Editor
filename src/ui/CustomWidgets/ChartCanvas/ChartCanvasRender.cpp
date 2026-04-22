@@ -142,6 +142,12 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     if (m_isPasting && !m_pasteNotes.isEmpty())
         drawPastePreview(painter, canvasHeight, lmargin, availableWidth, invVisibleRange, baseY, sign);
 
+    if (m_mirrorPreviewVisible)
+        drawMirrorPreview(painter, canvasHeight, lmargin, availableWidth, invVisibleRange, baseY, sign);
+
+    if (m_mirrorGuideVisible)
+        drawMirrorGuide(painter, canvasHeight, lmargin, availableWidth);
+
     double baselineY = canvasHeight * kReferenceLineRatio;
     painter.setPen(QPen(QColor(0, 0, 255), 3));
     painter.drawLine(lmargin, baselineY, canvasWidth - rmargin, baselineY);
@@ -302,6 +308,81 @@ void ChartCanvas::drawPastePreview(QPainter &painter,
     painter.drawText(QRect(10, 10, 100, 30), Qt::AlignCenter, tr("Confirm"));
     painter.fillRect(QRect(120, 10, 100, 30), QColor(200, 200, 200));
     painter.drawText(QRect(120, 10, 100, 30), Qt::AlignCenter, tr("Cancel"));
+}
+
+void ChartCanvas::drawMirrorPreview(QPainter &painter,
+                                    int canvasHeight,
+                                    int lmargin,
+                                    int availableWidth,
+                                    double invVisibleRange,
+                                    double baseY,
+                                    double sign)
+{
+    if (!chart() || !m_selectionController)
+        return;
+
+    const QSet<int> selectedSet = m_selectionController->selectedIndices();
+    if (selectedSet.isEmpty())
+        return;
+
+    const auto &notes = chart()->notes();
+    painter.save();
+    painter.setOpacity(0.4);
+
+    for (int idx : selectedSet)
+    {
+        if (idx < 0 || idx >= notes.size())
+            continue;
+
+        const Note &note = notes[idx];
+        if (note.type == NoteType::SOUND)
+            continue;
+
+        Note mirrored = note;
+        mirrored.x = qBound(0, m_mirrorAxisX * 2 - note.x, kLaneWidth);
+        const double beat = MathUtils::beatToFloat(mirrored.beatNum, mirrored.numerator, mirrored.denominator);
+        const double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
+
+        if (mirrored.type == NoteType::RAIN)
+        {
+            const double endBeat = MathUtils::beatToFloat(mirrored.endBeatNum, mirrored.endNumerator, mirrored.endDenominator);
+            const double yEnd = baseY + sign * ((endBeat - m_scrollBeat) * invVisibleRange * canvasHeight);
+            const double rectTop = qMin(y, yEnd);
+            const double rectHeight = qAbs(yEnd - y);
+            if (rectHeight <= 0.0)
+                continue;
+            QRectF rainRect(lmargin, rectTop, availableWidth, rectHeight);
+            m_noteRenderer->drawRain(painter, mirrored, rainRect, false);
+        }
+        else
+        {
+            const double x = lmargin + (mirrored.x / static_cast<double>(kLaneWidth)) * availableWidth;
+            m_noteRenderer->drawNote(painter, mirrored, QPointF(x, y), false, -1);
+        }
+    }
+
+    painter.restore();
+}
+
+void ChartCanvas::drawMirrorGuide(QPainter &painter, int canvasHeight, int lmargin, int availableWidth)
+{
+    Q_UNUSED(lmargin);
+    Q_UNUSED(availableWidth);
+
+    const double axisCanvasX = laneXToCanvasX(m_mirrorAxisX);
+    constexpr double kHandleRadius = 10.0;
+
+    painter.save();
+    QPen guidePen(QColor(220, 40, 40), 4, Qt::DashLine);
+    guidePen.setCapStyle(Qt::RoundCap);
+    painter.setPen(guidePen);
+    painter.drawLine(QPointF(axisCanvasX, 0.0), QPointF(axisCanvasX, canvasHeight));
+
+    painter.setPen(QPen(QColor(220, 40, 40), 2));
+    painter.setBrush(QColor(255, 255, 255));
+    painter.drawEllipse(QPointF(axisCanvasX, 14.0), kHandleRadius, kHandleRadius);
+    painter.drawEllipse(QPointF(axisCanvasX, canvasHeight - 14.0), kHandleRadius, kHandleRadius);
+    painter.restore();
 }
 
 void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin)

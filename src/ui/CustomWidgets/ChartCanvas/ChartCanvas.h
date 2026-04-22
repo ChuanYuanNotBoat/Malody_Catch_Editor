@@ -72,6 +72,14 @@ public:
     void setTimeScale(double scale);
     double timeScale() const { return m_timeScale; }
     void refreshBackground();
+    int mirrorAxisX() const { return m_mirrorAxisX; }
+    bool isMirrorGuideVisible() const { return m_mirrorGuideVisible; }
+    bool isMirrorPreviewVisible() const { return m_mirrorPreviewVisible; }
+    void setMirrorAxisX(int axisX);
+    void setMirrorGuideVisible(bool visible);
+    void setMirrorPreviewVisible(bool visible);
+    bool flipSelectedNotes();
+    bool flipSelectedNotesAroundCenter();
 
 public slots:
     void showGridSettings();
@@ -82,6 +90,7 @@ signals:
     void verticalFlipChanged(bool flipped);
     void scrollPositionChanged(double beat);
     void timeScaleChanged(double scale);
+    void mirrorAxisChanged(int axisX);
     void statusMessage(const QString &msg); // Status bar message hook.
 
 protected:
@@ -115,6 +124,14 @@ private:
                           double invVisibleRange,
                           double baseY,
                           double sign);
+    void drawMirrorPreview(QPainter &painter,
+                           int canvasHeight,
+                           int lmargin,
+                           int availableWidth,
+                           double invVisibleRange,
+                           double baseY,
+                           double sign);
+    void drawMirrorGuide(QPainter &painter, int canvasHeight, int lmargin, int availableWidth);
     void drawPluginOverlays(QPainter &painter, int lmargin, int rmargin);
     QPointF noteToPos(const Note &note) const;
     Note posToNote(const QPointF &pos) const;
@@ -133,15 +150,23 @@ private:
     void prepareMoveChanges();
     void showRightClickMenu(QMouseEvent *event);
     QVector<int> collectColorTargetIndices(const QPoint &pos) const;
+    QVector<int> collectMirrorTargetIndices(const QPoint &pos) const;
     void populateColorMenu(QMenu *colorMenu, const QVector<int> &targetIndices);
+    bool performMirrorFlip(const QVector<int> &targetIndices, int axisX, const QString &actionName);
     void handleLeftMousePress(QMouseEvent *event);
     bool handlePastePreviewLeftClick(const QPoint &pos);
     bool handleRainPlacementLeftClick(const QPointF &pos);
     bool handleHitNoteLeftClick(int hitIndex, Qt::KeyboardModifiers modifiers, const QPointF &pos);
+    bool handleMirrorGuidePress(const QPointF &pos);
     bool handleSelectionRelease();
     bool handleMoveSelectionRelease();
     bool handlePasteDragRelease();
+    bool handleMirrorGuideRelease();
     bool handleGenericDragRelease();
+    int clampMirrorAxisX(int axisX) const;
+    int canvasXToLaneX(double canvasX) const;
+    double laneXToCanvasX(int laneX) const;
+    bool isMirrorGuideHandleHit(const QPointF &pos) const;
 
     void snapPlayheadToGrid();
     void startSnapTimer();
@@ -235,6 +260,10 @@ private:
     bool m_isDragging;
     QPointF m_dragStart;
     QSet<int> m_draggedNotes;
+    int m_mirrorAxisX;
+    bool m_mirrorGuideVisible;
+    bool m_mirrorPreviewVisible;
+    bool m_isDraggingMirrorGuide;
 
     bool m_isPasting;
     bool m_useCursorPaste;   // Paste anchored to cursor position (right-click action).

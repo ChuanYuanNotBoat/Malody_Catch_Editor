@@ -136,6 +136,13 @@ QRect selectionPreviewDirtyRect(const QPointF &start, const QPointF &oldEnd, con
     const QRect newRect = QRectF(start, newEnd).normalized().toAlignedRect();
     return oldRect.united(newRect).adjusted(-2, -2, 2, 2);
 }
+
+Note mirroredNote(const Note &note, int axisX, int laneWidth)
+{
+    Note mirrored = note;
+    mirrored.x = qBound(0, axisX * 2 - note.x, laneWidth);
+    return mirrored;
+}
 } // namespace
 
 
@@ -371,6 +378,77 @@ QVector<int> ChartCanvas::collectColorTargetIndices(const QPoint &pos) const
     return targetIndices;
 }
 
+QVector<int> ChartCanvas::collectMirrorTargetIndices(const QPoint &pos) const
+{
+    QVector<int> targetIndices;
+    if (!chart())
+        return targetIndices;
+
+    const QVector<Note> &notes = chart()->notes();
+    const bool hasPoint = !pos.isNull();
+    const int hitIndex = hasPoint ? hitTestNote(pos) : -1;
+    const QSet<int> selected = m_selectionController ? m_selectionController->selectedIndices() : QSet<int>();
+
+    auto appendFiltered = [&notes, &targetIndices](const QSet<int> &indices)
+    {
+        QList<int> sorted = indices.values();
+        std::sort(sorted.begin(), sorted.end());
+        for (int idx : sorted)
+        {
+            if (idx >= 0 && idx < notes.size() && notes[idx].type != NoteType::SOUND)
+                targetIndices.append(idx);
+        }
+    };
+
+    if (hitIndex >= 0 && hitIndex < notes.size())
+    {
+        if (!selected.isEmpty() && selected.contains(hitIndex))
+        {
+            appendFiltered(selected);
+        }
+        else if (notes[hitIndex].type != NoteType::SOUND)
+        {
+            targetIndices.append(hitIndex);
+        }
+    }
+    else if (!selected.isEmpty())
+    {
+        appendFiltered(selected);
+    }
+
+    return targetIndices;
+}
+
+bool ChartCanvas::performMirrorFlip(const QVector<int> &targetIndices, int axisX, const QString &actionName)
+{
+    Q_UNUSED(actionName);
+    if (!chart() || !m_chartController || targetIndices.isEmpty())
+        return false;
+
+    const QVector<Note> &notes = chart()->notes();
+    QList<QPair<Note, Note>> changes;
+    for (int idx : targetIndices)
+    {
+        if (idx < 0 || idx >= notes.size())
+            continue;
+
+        const Note &original = notes[idx];
+        if (original.type == NoteType::SOUND)
+            continue;
+
+        const Note updated = mirroredNote(original, clampMirrorAxisX(axisX), kLaneWidth);
+        if (!(updated == original))
+            changes.append(qMakePair(original, updated));
+    }
+
+    if (changes.isEmpty())
+        return false;
+
+    m_chartController->moveNotes(changes);
+    emit statusMessage(tr("Mirrored %1 note(s).").arg(changes.size()));
+    return true;
+}
+
 void ChartCanvas::populateColorMenu(QMenu *colorMenu, const QVector<int> &targetIndices)
 {
     if (!colorMenu || targetIndices.isEmpty() || !chart())
@@ -495,6 +573,9 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
     QAction *playFromRefAction = menu.addAction(tr("Play from Reference Time"));
     QAction *pasteAction = menu.addAction(tr("Paste"));
     pasteAction->setEnabled(m_selectionController && !m_selectionController->getClipboard().isEmpty());
+    const QVector<int> mirrorTargetIndices = collectMirrorTargetIndices(event->pos());
+    QAction *mirrorFlipAction = menu.addAction(tr("Mirror Flip Selected (Center Line)"));
+    mirrorFlipAction->setEnabled(!mirrorTargetIndices.isEmpty());
     QMenu *colorMenu = menu.addMenu(tr("Edit Color (By Division)"));
     colorMenu->setEnabled(false);
 
@@ -511,6 +592,20 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
     {
         pasteAtCursor(event->pos());
     }
+    else if (selectedAction == mirrorFlipAction)
+    {
+        performMirrorFlip(mirrorTargetIndices, kLaneWidth / 2, tr("Mirror Flip Notes"));
+    }
+}
+
+bool ChartCanvas::handleMirrorGuidePress(const QPointF &pos)
+{
+    if (!isMirrorGuideHandleHit(pos))
+        return false;
+
+    m_isDraggingMirrorGuide = true;
+    setMirrorAxisX(canvasXToLaneX(pos.x()));
+    return true;
 }
 
 bool ChartCanvas::handlePastePreviewLeftClick(const QPoint &pos)
@@ -614,6 +709,9 @@ bool ChartCanvas::handleHitNoteLeftClick(int hitIndex, Qt::KeyboardModifiers mod
 
 void ChartCanvas::handleLeftMousePress(QMouseEvent *event)
 {
+    if (handleMirrorGuidePress(event->pos()))
+        return;
+
     if (handlePastePreviewLeftClick(event->pos()))
         return;
 
@@ -678,7 +776,11 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
 
 void ChartCanvas::mouseMoveEvent(QMouseEvent *event)
 {
-    if (m_isSelecting)
+    if (m_isDraggingMirrorGuide)
+    {
+        setMirrorAxisX(canvasXToLaneX(event->pos().x()));
+    }
+    else if (m_isSelecting)
     {
         if (m_selectionEnd != event->pos())
         {
@@ -729,6 +831,15 @@ bool ChartCanvas::handlePasteDragRelease()
     return true;
 }
 
+bool ChartCanvas::handleMirrorGuideRelease()
+{
+    if (!m_isDraggingMirrorGuide)
+        return false;
+
+    m_isDraggingMirrorGuide = false;
+    return true;
+}
+
 bool ChartCanvas::handleGenericDragRelease()
 {
     if (!m_isDragging)
@@ -741,6 +852,8 @@ bool ChartCanvas::handleGenericDragRelease()
 void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
 {
     Q_UNUSED(event);
+    if (handleMirrorGuideRelease())
+        return;
     if (handleSelectionRelease())
         return;
     if (handleMoveSelectionRelease())

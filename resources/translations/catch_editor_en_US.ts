@@ -77,9 +77,19 @@
         <translation>Paste</translation>
     </message>
     <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="577"/>
+        <source>Mirror Flip Selected (Center Line)</source>
+        <translation>Mirror Flip Selected (Center Line)</translation>
+    </message>
+    <message>
         <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="488"/>
         <source>Edit Color (By Division)</source>
         <translation>Edit Color (By Division)</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="448"/>
+        <source>Mirrored %1 note(s).</source>
+        <translation>Mirrored %1 note(s).</translation>
     </message>
     <message>
         <location filename="../../src/ui/CustomWidgets/ChartCanvas/ChartCanvasMouse.cpp" line="430"/>
@@ -1828,6 +1838,36 @@ Open the **History** tab for collapsible long update notes.</source>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="168"/>
         <source>Grid Settings...</source>
         <translation>Grid Settings...</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="79"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="215"/>
+        <source>Mirror Flip</source>
+        <translation>Mirror Flip</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="82"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="217"/>
+        <source>Axis X:</source>
+        <translation>Axis X:</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="90"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="219"/>
+        <source>Show Guide</source>
+        <translation>Show Guide</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="94"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="221"/>
+        <source>Show Preview</source>
+        <translation>Show Preview</translation>
+    </message>
+    <message>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="98"/>
+        <location filename="../../src/ui/NoteEditPanel.cpp" line="223"/>
+        <source>Flip Selected</source>
+        <translation>Flip Selected</translation>
     </message>
     <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="93"/>

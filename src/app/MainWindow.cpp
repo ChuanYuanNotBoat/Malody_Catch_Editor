@@ -1396,6 +1396,11 @@ void MainWindow::createCentralArea()
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode)
             { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
+    connect(d->notePanel, &NoteEditPanel::mirrorAxisChanged, d->canvas, &ChartCanvas::setMirrorAxisX);
+    connect(d->notePanel, &NoteEditPanel::mirrorGuideVisibilityChanged, d->canvas, &ChartCanvas::setMirrorGuideVisible);
+    connect(d->notePanel, &NoteEditPanel::mirrorPreviewVisibilityChanged, d->canvas, &ChartCanvas::setMirrorPreviewVisible);
+    connect(d->notePanel, &NoteEditPanel::mirrorFlipRequested, d->canvas, &ChartCanvas::flipSelectedNotes);
+    connect(d->canvas, &ChartCanvas::mirrorAxisChanged, d->notePanel, &NoteEditPanel::setMirrorAxisValue);
 
     if (useCompactMobileLayout())
     {
@@ -2883,6 +2888,8 @@ void MainWindow::applySidebarTheme()
     const QColor panelBg = darkTheme ? bg.lighter(108) : bg.darker(103);
     const QColor panelInputBg = darkTheme ? panelBg.lighter(120) : panelBg.darker(105);
     const QColor panelButtonBg = darkTheme ? panelBg.lighter(132) : panelBg.darker(112);
+    const QColor panelButtonHoverBg = darkTheme ? panelButtonBg.lighter(120) : panelButtonBg.lighter(108);
+    const QColor panelButtonPressedBg = darkTheme ? panelButtonBg.darker(118) : panelButtonBg.darker(118);
     const QColor panelBorder = darkTheme ? panelBg.lighter(165) : panelBg.darker(145);
     const QColor panelDisabledText = darkTheme ? QColor("#9A9A9A") : QColor("#707070");
 
@@ -2892,16 +2899,18 @@ void MainWindow::applySidebarTheme()
             return;
 
         const QString css = QString(
-                                "QWidget#%7 { background-color: %1; color: %2; border: 1px solid %4; }"
+                                "QWidget#%9 { background-color: %1; color: %2; border: 1px solid %4; }"
                                 "QLabel, QCheckBox, QRadioButton, QGroupBox { color: %2; }"
                                 "QLineEdit, QAbstractSpinBox, QComboBox, QListWidget, QTextEdit, QPlainTextEdit {"
                                 "  background-color: %3; color: %2; border: 1px solid %4; }"
                                 "QAbstractItemView { background-color: %3; color: %2; border: 1px solid %4; selection-background-color: %5; selection-color: %6; }"
-                                "QPushButton { background-color: %5; color: %2; border: 1px solid %4; padding: 3px 6px; }"
+                                "QPushButton { background-color: %5; color: %2; border: 1px solid %4; border-radius: 6px; padding: 4px 8px; }"
+                                "QPushButton:hover { background-color: %7; }"
+                                "QPushButton:pressed { background-color: %8; }"
                                 "QPushButton:disabled { color: %6; }"
                                 "QScrollBar:vertical, QScrollBar:horizontal { background-color: %1; }")
                                 .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
-                                     panelDisabledText.name(), rootName);
+                                     panelDisabledText.name(), panelButtonHoverBg.name(), panelButtonPressedBg.name(), rootName);
 
         panel->setStyleSheet(css);
     };
@@ -2925,9 +2934,11 @@ void MainWindow::applySidebarTheme()
     {
         const QString toolbarCss = QString(
                                        "QToolBar { background-color: %1; color: %2; border-bottom: 1px solid %4; border-top: 1px solid %4; spacing: 6px; padding: 2px 4px; }"
-                                       "QToolButton { background-color: %5; color: %2; border: 1px solid %4; padding: 3px 8px; }"
-                                       "QToolButton:hover { background-color: %3; }")
-                                       .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name());
+                                       "QToolButton { background-color: %5; color: %2; border: 1px solid %4; border-radius: 6px; padding: 4px 8px; }"
+                                       "QToolButton:hover { background-color: %6; }"
+                                       "QToolButton:pressed { background-color: %7; }")
+                                       .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
+                                            panelButtonHoverBg.name(), panelButtonPressedBg.name());
         d->mainToolBar->setStyleSheet(toolbarCss);
     }
 
@@ -2967,13 +2978,17 @@ void MainWindow::applySidebarTheme()
                                   "  background-color: %3; color: %2; border: 1px solid %4;"
                                   "  selection-background-color: %5; selection-color: %6; }"
                                   "QDialog QPushButton, QMessageBox QPushButton, QInputDialog QPushButton {"
-                                  "  background-color: %5; color: %2; border: 1px solid %4; padding: 3px 8px; }"
+                                  "  background-color: %5; color: %2; border: 1px solid %4; border-radius: 6px; padding: 4px 8px; }"
+                                  "QDialog QPushButton:hover, QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {"
+                                  "  background-color: %7; }"
+                                  "QDialog QPushButton:pressed, QMessageBox QPushButton:pressed, QInputDialog QPushButton:pressed {"
+                                  "  background-color: %8; }"
                                   "QDialog QPushButton:disabled, QMessageBox QPushButton:disabled, QInputDialog QPushButton:disabled {"
                                   "  color: %6; }"
                                   "QDialog QMenuBar, QDialog QMenu { background-color: %1; color: %2; }"
                                   "QDialog QTabWidget::pane { border: 1px solid %4; }")
                                   .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
-                                       panelDisabledText.name());
+                                       panelDisabledText.name(), panelButtonHoverBg.name(), panelButtonPressedBg.name());
     qApp->setStyleSheet(dialogCss);
 }
 

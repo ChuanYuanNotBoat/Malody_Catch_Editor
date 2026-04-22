@@ -94,6 +94,79 @@ void ChartCanvas::setTimeScale(double scale)
     emit timeScaleChanged(m_timeScale);
 }
 
+void ChartCanvas::setMirrorAxisX(int axisX)
+{
+    const int clamped = clampMirrorAxisX(axisX);
+    if (m_mirrorAxisX == clamped)
+        return;
+
+    m_mirrorAxisX = clamped;
+    emit mirrorAxisChanged(m_mirrorAxisX);
+    update();
+}
+
+void ChartCanvas::setMirrorGuideVisible(bool visible)
+{
+    if (m_mirrorGuideVisible == visible)
+        return;
+    m_mirrorGuideVisible = visible;
+    update();
+}
+
+void ChartCanvas::setMirrorPreviewVisible(bool visible)
+{
+    if (m_mirrorPreviewVisible == visible)
+        return;
+    m_mirrorPreviewVisible = visible;
+    update();
+}
+
+bool ChartCanvas::flipSelectedNotes()
+{
+    return performMirrorFlip(collectMirrorTargetIndices(QPoint()), m_mirrorAxisX, tr("Mirror Flip Notes"));
+}
+
+bool ChartCanvas::flipSelectedNotesAroundCenter()
+{
+    return performMirrorFlip(collectMirrorTargetIndices(QPoint()), kLaneWidth / 2, tr("Mirror Flip Notes"));
+}
+
+int ChartCanvas::clampMirrorAxisX(int axisX) const
+{
+    return qBound(0, axisX, kLaneWidth);
+}
+
+int ChartCanvas::canvasXToLaneX(double canvasX) const
+{
+    const int lmargin = leftMargin();
+    const int rmargin = rightMargin();
+    const int availableWidth = qMax(1, width() - lmargin - rmargin);
+    const double normalized = (canvasX - lmargin) / static_cast<double>(availableWidth);
+    return clampMirrorAxisX(qRound(normalized * kLaneWidth));
+}
+
+double ChartCanvas::laneXToCanvasX(int laneX) const
+{
+    const int lmargin = leftMargin();
+    const int rmargin = rightMargin();
+    const int availableWidth = qMax(1, width() - lmargin - rmargin);
+    return lmargin + (clampMirrorAxisX(laneX) / static_cast<double>(kLaneWidth)) * availableWidth;
+}
+
+bool ChartCanvas::isMirrorGuideHandleHit(const QPointF &pos) const
+{
+    if (!m_mirrorGuideVisible)
+        return false;
+
+    const double axisCanvasX = laneXToCanvasX(m_mirrorAxisX);
+    const QPointF topHandle(axisCanvasX, 14.0);
+    const QPointF bottomHandle(axisCanvasX, height() - 14.0);
+    constexpr double kHandleRadius = 10.0;
+
+    return QLineF(pos, topHandle).length() <= kHandleRadius + 2.0 ||
+           QLineF(pos, bottomHandle).length() <= kHandleRadius + 2.0;
+}
+
 void ChartCanvas::updateBackgroundCache()
 {
     m_backgroundCacheDirty = true;
