@@ -63,6 +63,11 @@ public:
                                  QWidget *parent,
                                  const QVariantMap &context);
     QList<PluginInterface::CanvasOverlayItem> canvasOverlays(const QVariantMap &context) const;
+    bool handleCanvasInput(const QString &pluginId,
+                           const QVariantMap &context,
+                           const PluginInterface::CanvasInputEvent &event,
+                           PluginInterface::CanvasInputResult *outResult);
+    QVariantMap panelWorkspaceConfig(const QString &pluginId, const QVariantMap &context) const;
 
     void notifyChartChanged();
     void notifyChartLoaded(const QString &chartPath);

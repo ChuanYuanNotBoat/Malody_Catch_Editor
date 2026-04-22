@@ -34,6 +34,10 @@ int requestTimeoutMsForMethod(const QString &method)
         return 8000;
     if (method == "listCanvasOverlays")
         return 120;
+    if (method == "handleCanvasInput")
+        return 50;
+    if (method == "getPanelWorkspaceConfig")
+        return 3000;
     return 5000;
 }
 
@@ -273,96 +277,70 @@ bool ExternalProcessPlugin::buildToolActionBatchEdit(const QString &actionId,
     if (!result.isObject())
         return false;
 
-    const QJsonObject obj = result.toObject();
-    auto parseNotes = [](const QJsonValue &value, QVector<Note> *out) -> bool
-    {
-        if (!out)
-            return false;
-        if (!value.isArray())
-            return false;
-        const QJsonArray arr = value.toArray();
-        for (const QJsonValue &v : arr)
-        {
-            if (!v.isObject())
-                continue;
-            Note n;
-            if (ExternalProcessPlugin::parseNoteJson(v.toObject(), &n))
-                out->append(n);
-        }
-        return true;
-    };
-
-    parseNotes(obj.value("add"), &outEdit->notesToAdd);
-    parseNotes(obj.value("remove"), &outEdit->notesToRemove);
-
-    const QJsonValue moveVal = obj.value("move");
-    if (moveVal.isArray())
-    {
-        const QJsonArray moves = moveVal.toArray();
-        for (const QJsonValue &mv : moves)
-        {
-            if (!mv.isObject())
-                continue;
-            const QJsonObject moveObj = mv.toObject();
-            Note from;
-            Note to;
-            if (!moveObj.contains("from") || !moveObj.contains("to"))
-                continue;
-            if (!moveObj.value("from").isObject() || !moveObj.value("to").isObject())
-                continue;
-            if (!parseNoteJson(moveObj.value("from").toObject(), &from))
-                continue;
-            if (!parseNoteJson(moveObj.value("to").toObject(), &to))
-                continue;
-            outEdit->notesToMove.append(qMakePair(from, to));
-        }
-    }
-
-    return !(outEdit->notesToAdd.isEmpty() && outEdit->notesToRemove.isEmpty() && outEdit->notesToMove.isEmpty());
+    return parseBatchEditJson(result.toObject(), outEdit);
 }
 
 QList<PluginInterface::CanvasOverlayItem> ExternalProcessPlugin::canvasOverlays(const QVariantMap &context) const
 {
-    QList<PluginInterface::CanvasOverlayItem> items;
     QJsonValue result;
     if (!requestJson("listCanvasOverlays", toJsonObject(context), &result))
-        return items;
+        return {};
     if (!result.isArray())
-        return items;
+        return {};
+    return parseOverlayItems(result.toArray());
+}
 
-    const QJsonArray arr = result.toArray();
-    for (const QJsonValue &v : arr)
-    {
-        if (!v.isObject())
-            continue;
-        const QJsonObject obj = v.toObject();
-        PluginInterface::CanvasOverlayItem item;
-        const QString kind = obj.value("kind").toString().toLower();
-        if (kind == "rect")
-            item.kind = PluginInterface::CanvasOverlayItem::Rect;
-        else if (kind == "text")
-            item.kind = PluginInterface::CanvasOverlayItem::Text;
-        else
-            item.kind = PluginInterface::CanvasOverlayItem::Line;
+bool ExternalProcessPlugin::handleCanvasInput(const QVariantMap &context,
+                                              const CanvasInputEvent &event,
+                                              CanvasInputResult *outResult)
+{
+    if (outResult)
+        *outResult = CanvasInputResult{};
+    if (!outResult || !hasCapability(kCapabilityCanvasInteraction))
+        return false;
 
-        item.from = QPointF(obj.value("x1").toDouble(), obj.value("y1").toDouble());
-        item.to = QPointF(obj.value("x2").toDouble(), obj.value("y2").toDouble());
-        item.rect = QRectF(obj.value("x").toDouble(),
-                           obj.value("y").toDouble(),
-                           obj.value("w").toDouble(),
-                           obj.value("h").toDouble());
-        item.text = obj.value("text").toString();
-        if (obj.contains("color"))
-            item.color = QColor(obj.value("color").toString());
-        if (obj.contains("fill_color"))
-            item.fillColor = QColor(obj.value("fill_color").toString());
-        if (obj.contains("width"))
-            item.width = obj.value("width").toDouble(item.width);
-        if (obj.contains("font_px"))
-            item.fontPx = obj.value("font_px").toInt(item.fontPx);
-        items.append(item);
-    }
-    return items;
+    QJsonObject eventObj{
+        {"type", event.type},
+        {"x", event.x},
+        {"y", event.y},
+        {"button", event.button},
+        {"buttons", event.buttons},
+        {"modifiers", event.modifiers},
+        {"wheel_delta", event.wheelDelta},
+        {"key", event.key},
+        {"timestamp_ms", static_cast<qint64>(event.timestampMs)},
+    };
+    QJsonObject payload{
+        {"context", toJsonObject(context)},
+        {"event", eventObj},
+    };
+
+    QJsonValue result;
+    if (!requestJson("handleCanvasInput", payload, &result) || !result.isObject())
+        return false;
+
+    const QJsonObject obj = result.toObject();
+    outResult->consumed = obj.value("consumed").toBool(false);
+    outResult->cursor = obj.value("cursor").toString();
+    outResult->statusText = obj.value("status_text").toString();
+    if (obj.value("overlay").isArray())
+        outResult->overlay = parseOverlayItems(obj.value("overlay").toArray());
+    if (obj.value("preview_batch_edit").isObject())
+        parseBatchEditJson(obj.value("preview_batch_edit").toObject(), &outResult->previewEdit);
+    return true;
+}
+
+QVariantMap ExternalProcessPlugin::panelWorkspaceConfig(const QVariantMap &context) const
+{
+    if (!hasCapability(kCapabilityPanelWorkspace))
+        return {};
+
+    QJsonValue result;
+    if (!requestJson("getPanelWorkspaceConfig", toJsonObject(context), &result))
+        return {};
+    if (!result.isObject())
+        return {};
+    return result.toObject().toVariantMap();
 }
 
 bool ExternalProcessPlugin::sendNotification(const QString &event, const QJsonObject &payload)
@@ -659,4 +637,93 @@ bool ExternalProcessPlugin::writeLine(const QByteArray &line)
     if (written <= 0)
         return false;
     return m_process.waitForBytesWritten(1000);
+}
+
+bool ExternalProcessPlugin::parseBatchEditJson(const QJsonObject &obj, BatchEdit *outEdit)
+{
+    if (!outEdit)
+        return false;
+    *outEdit = BatchEdit{};
+    auto parseNotes = [](const QJsonValue &value, QVector<Note> *out) -> bool
+    {
+        if (!out)
+            return false;
+        if (!value.isArray())
+            return false;
+        const QJsonArray arr = value.toArray();
+        for (const QJsonValue &v : arr)
+        {
+            if (!v.isObject())
+                continue;
+            Note n;
+            if (ExternalProcessPlugin::parseNoteJson(v.toObject(), &n))
+                out->append(n);
+        }
+        return true;
+    };
+
+    parseNotes(obj.value("add"), &outEdit->notesToAdd);
+    parseNotes(obj.value("remove"), &outEdit->notesToRemove);
+
+    const QJsonValue moveVal = obj.value("move");
+    if (moveVal.isArray())
+    {
+        const QJsonArray moves = moveVal.toArray();
+        for (const QJsonValue &mv : moves)
+        {
+            if (!mv.isObject())
+                continue;
+            const QJsonObject moveObj = mv.toObject();
+            Note from;
+            Note to;
+            if (!moveObj.contains("from") || !moveObj.contains("to"))
+                continue;
+            if (!moveObj.value("from").isObject() || !moveObj.value("to").isObject())
+                continue;
+            if (!parseNoteJson(moveObj.value("from").toObject(), &from))
+                continue;
+            if (!parseNoteJson(moveObj.value("to").toObject(), &to))
+                continue;
+            outEdit->notesToMove.append(qMakePair(from, to));
+        }
+    }
+
+    return !(outEdit->notesToAdd.isEmpty() && outEdit->notesToRemove.isEmpty() && outEdit->notesToMove.isEmpty());
+}
+
+QList<PluginInterface::CanvasOverlayItem> ExternalProcessPlugin::parseOverlayItems(const QJsonArray &arr)
+{
+    QList<PluginInterface::CanvasOverlayItem> items;
+    for (const QJsonValue &v : arr)
+    {
+        if (!v.isObject())
+            continue;
+        const QJsonObject obj = v.toObject();
+        PluginInterface::CanvasOverlayItem item;
+        const QString kind = obj.value("kind").toString().toLower();
+        if (kind == "rect")
+            item.kind = PluginInterface::CanvasOverlayItem::Rect;
+        else if (kind == "text")
+            item.kind = PluginInterface::CanvasOverlayItem::Text;
+        else
+            item.kind = PluginInterface::CanvasOverlayItem::Line;
+
+        item.from = QPointF(obj.value("x1").toDouble(), obj.value("y1").toDouble());
+        item.to = QPointF(obj.value("x2").toDouble(), obj.value("y2").toDouble());
+        item.rect = QRectF(obj.value("x").toDouble(),
+                           obj.value("y").toDouble(),
+                           obj.value("w").toDouble(),
+                           obj.value("h").toDouble());
+        item.text = obj.value("text").toString();
+        if (obj.contains("color"))
+            item.color = QColor(obj.value("color").toString());
+        if (obj.contains("fill_color"))
+            item.fillColor = QColor(obj.value("fill_color").toString());
+        if (obj.contains("width"))
+            item.width = obj.value("width").toDouble(item.width);
+        if (obj.contains("font_px"))
+            item.fontPx = obj.value("font_px").toInt(item.fontPx);
+        items.append(item);
+    }
+    return items;
 }

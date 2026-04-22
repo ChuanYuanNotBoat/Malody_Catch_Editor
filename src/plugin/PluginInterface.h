@@ -28,6 +28,8 @@ public:
         QString panelId;
         QString title;
         QString description;
+        QString panelRole;      // primary | secondary | library
+        QString dockPreference; // left | right | bottom | float
     };
     struct CanvasOverlayItem
     {
@@ -53,6 +55,26 @@ public:
         QVector<Note> notesToRemove;
         QList<QPair<Note, Note>> notesToMove;
     };
+    struct CanvasInputEvent
+    {
+        QString type; // mouse_down|mouse_move|mouse_up|wheel|key_down|key_up|focus_in|focus_out|cancel
+        double x = 0.0;
+        double y = 0.0;
+        int button = 0;
+        int buttons = 0;
+        int modifiers = 0;
+        double wheelDelta = 0.0;
+        int key = 0;
+        qint64 timestampMs = 0;
+    };
+    struct CanvasInputResult
+    {
+        bool consumed = false;
+        QList<CanvasOverlayItem> overlay;
+        BatchEdit previewEdit;
+        QString cursor;
+        QString statusText;
+    };
 
     // Host ABI/API version for runtime compatibility checks.
     static constexpr int kHostApiVersion = 2;
@@ -64,6 +86,8 @@ public:
     static constexpr const char *kCapabilityFloatingPanel = "floating_panel";
     static constexpr const char *kCapabilityCanvasOverlay = "canvas_overlay";
     static constexpr const char *kCapabilityHostBatchEdit = "host_batch_edit";
+    static constexpr const char *kCapabilityCanvasInteraction = "canvas_interaction";
+    static constexpr const char *kCapabilityPanelWorkspace = "panel_workspace";
     static constexpr const char *kPlacementToolsMenu = "tools_menu";
     static constexpr const char *kPlacementTopToolbar = "top_toolbar";
     static constexpr const char *kPlacementLeftSidebar = "left_sidebar";
@@ -150,6 +174,23 @@ public:
     }
     // Optional canvas overlay rendering extension point.
     virtual QList<CanvasOverlayItem> canvasOverlays(const QVariantMap &context) const
+    {
+        (void)context;
+        return {};
+    }
+    // Optional interactive canvas input extension point.
+    virtual bool handleCanvasInput(const QVariantMap &context,
+                                   const CanvasInputEvent &event,
+                                   CanvasInputResult *outResult)
+    {
+        (void)context;
+        (void)event;
+        if (outResult)
+            *outResult = CanvasInputResult{};
+        return false;
+    }
+    // Optional workspace metadata for dockable/mergeable plugin panels.
+    virtual QVariantMap panelWorkspaceConfig(const QVariantMap &context) const
     {
         (void)context;
         return {};

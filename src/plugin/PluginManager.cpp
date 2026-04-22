@@ -414,6 +414,67 @@ QList<PluginInterface::CanvasOverlayItem> PluginManager::canvasOverlays(const QV
     return items;
 }
 
+bool PluginManager::handleCanvasInput(const QString &pluginId,
+                                      const QVariantMap &context,
+                                      const PluginInterface::CanvasInputEvent &event,
+                                      PluginInterface::CanvasInputResult *outResult)
+{
+    if (outResult)
+        *outResult = PluginInterface::CanvasInputResult{};
+    if (!outResult || pluginId.trimmed().isEmpty())
+        return false;
+
+    const QVariantMap enrichedContext = enrichContextWithLocale(context);
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        if (p->pluginId() != pluginId)
+            continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityCanvasInteraction))
+            return false;
+        try
+        {
+            return p->handleCanvasInput(enrichedContext, event, outResult);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' handleCanvasInput")
+                             .arg(localizedNameForLog(p)));
+            return false;
+        }
+    }
+    return false;
+}
+
+QVariantMap PluginManager::panelWorkspaceConfig(const QString &pluginId, const QVariantMap &context) const
+{
+    if (pluginId.trimmed().isEmpty())
+        return {};
+
+    const QVariantMap enrichedContext = enrichContextWithLocale(context);
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        if (p->pluginId() != pluginId)
+            continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityPanelWorkspace))
+            return {};
+        try
+        {
+            return p->panelWorkspaceConfig(enrichedContext);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' panelWorkspaceConfig")
+                             .arg(localizedNameForLog(p)));
+            return {};
+        }
+    }
+    return {};
+}
+
 void PluginManager::notifyChartChanged()
 {
     for (PluginInterface *p : m_plugins)

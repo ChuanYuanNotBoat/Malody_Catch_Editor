@@ -50,6 +50,10 @@ public:
     bool runToolAction(const QString &actionId, const QVariantMap &context) override;
     bool buildToolActionBatchEdit(const QString &actionId, const QVariantMap &context, BatchEdit *outEdit) override;
     QList<CanvasOverlayItem> canvasOverlays(const QVariantMap &context) const override;
+    bool handleCanvasInput(const QVariantMap &context,
+                           const CanvasInputEvent &event,
+                           CanvasInputResult *outResult) override;
+    QVariantMap panelWorkspaceConfig(const QVariantMap &context) const override;
 
 private:
     bool sendNotification(const QString &event, const QJsonObject &payload = QJsonObject());
@@ -61,6 +65,8 @@ private:
     QString readSingleLine(int timeoutMs) const;
     bool writeLine(const QByteArray &line);
     static bool parseNoteJson(const QJsonObject &obj, Note *outNote);
+    static bool parseBatchEditJson(const QJsonObject &obj, BatchEdit *outEdit);
+    static QList<CanvasOverlayItem> parseOverlayItems(const QJsonArray &arr);
 
 private:
     Manifest m_manifest;
