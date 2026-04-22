@@ -1,5 +1,6 @@
 ﻿import json
 import math
+import os
 import sys
 import time
 
@@ -17,6 +18,8 @@ STATE = {
     "last_click_anchor": -1,
     "last_click_ms": 0,
     "style": {"denominators": [4, 8, 12, 16]},
+    "project_path": "",
+    "project_dirty": False,
 }
 
 
@@ -56,6 +59,14 @@ def _set_anchor_out_abs(a, x, y, mirror=False):
     a["out"] = [x - a["x"], y - a["y"]]
     if mirror and a.get("smooth", True):
         a["in"] = [-a["out"][0], -a["out"][1]]
+
+
+def _default_anchors():
+    return [
+        {"x": 220.0, "y": 220.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
+        {"x": 420.0, "y": 340.0, "in": [-40.0, -20.0], "out": [40.0, 20.0], "smooth": True},
+        {"x": 620.0, "y": 260.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
+    ]
 
 
 def _find_anchor_hit(x, y, threshold=12.0):
@@ -118,7 +129,93 @@ def _sample_curve(samples_per_segment=24):
     return pts
 
 
+def _save_project(path):
+    if not isinstance(path, str) or not path.strip():
+        return False
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        payload = {
+            "format_version": 1,
+            "anchors": STATE["anchors"],
+            "style": STATE.get("style", {"denominators": [4, 8, 12, 16]}),
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        STATE["project_dirty"] = False
+        return True
+    except Exception:
+        return False
+
+
+def _load_project(path):
+    if not isinstance(path, str) or not path.strip() or not os.path.exists(path):
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        anchors = payload.get("anchors")
+        if isinstance(anchors, list) and len(anchors) >= 2:
+            normalized = []
+            for a in anchors:
+                if not isinstance(a, dict):
+                    continue
+                normalized.append(
+                    {
+                        "x": float(a.get("x", 0.0)),
+                        "y": float(a.get("y", 0.0)),
+                        "in": [float((a.get("in") or [0.0, 0.0])[0]), float((a.get("in") or [0.0, 0.0])[1])],
+                        "out": [float((a.get("out") or [0.0, 0.0])[0]), float((a.get("out") or [0.0, 0.0])[1])],
+                        "smooth": bool(a.get("smooth", True)),
+                    }
+                )
+            if len(normalized) >= 2:
+                STATE["anchors"] = normalized
+        style = payload.get("style")
+        if isinstance(style, dict):
+            dens = style.get("denominators")
+            if isinstance(dens, list) and dens:
+                cleaned = []
+                for d in dens:
+                    try:
+                        di = int(d)
+                    except Exception:
+                        continue
+                    if di > 0:
+                        cleaned.append(di)
+                if cleaned:
+                    STATE["style"] = {"denominators": cleaned}
+        STATE["project_dirty"] = False
+        return True
+    except Exception:
+        return False
+
+
+def _ensure_project_context(context):
+    path = ""
+    if isinstance(context, dict):
+        path = str(context.get("curve_project_path", "") or "").strip()
+    if not path:
+        return
+
+    if STATE["project_path"] != path:
+        if STATE["project_path"] and STATE["project_dirty"]:
+            _save_project(STATE["project_path"])
+        STATE["project_path"] = path
+        if not _load_project(path):
+            STATE["anchors"] = _default_anchors()
+            STATE["project_dirty"] = True
+
+
+def _mark_dirty(context):
+    STATE["project_dirty"] = True
+    if isinstance(context, dict):
+        _ensure_project_context(context)
+        if STATE["project_path"]:
+            _save_project(STATE["project_path"])
+
+
 def _build_overlay(context):
+    _ensure_project_context(context)
     toggles = context.get("overlay_toggles", {}) if isinstance(context, dict) else {}
     if not bool(toggles.get("overlay_enabled", True)):
         return []
@@ -246,13 +343,10 @@ def _build_overlay(context):
     return items
 
 
-def _reset_anchors():
-    STATE["anchors"] = [
-        {"x": 220.0, "y": 220.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
-        {"x": 420.0, "y": 340.0, "in": [-40.0, -20.0], "out": [40.0, 20.0], "smooth": True},
-        {"x": 620.0, "y": 260.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
-    ]
+def _reset_anchors(context):
+    STATE["anchors"] = _default_anchors()
     STATE["drag"] = {"mode": "", "index": -1}
+    _mark_dirty(context)
 
 
 def _append_anchor(x, y):
@@ -340,6 +434,7 @@ def _handle_canvas_input(payload):
     context = payload.get("context", {}) if isinstance(payload, dict) else {}
     event = payload.get("event", {}) if isinstance(payload, dict) else {}
     STATE["last_context"] = context if isinstance(context, dict) else {}
+    _ensure_project_context(STATE["last_context"])
 
     et = str(event.get("type", ""))
     x = float(event.get("x", 0.0))
@@ -359,6 +454,7 @@ def _handle_canvas_input(payload):
             if len(STATE["anchors"]) > 1:
                 STATE["anchors"].pop(aidx)
                 STATE["drag"] = {"mode": "", "index": -1}
+                _mark_dirty(STATE["last_context"])
                 consumed = True
                 status = f"Anchor A{aidx} deleted"
         elif button == LEFT_BUTTON:
@@ -373,6 +469,7 @@ def _handle_canvas_input(payload):
                 STATE["last_click_ms"] = ts
                 if is_double:
                     STATE["anchors"][aidx]["smooth"] = not bool(STATE["anchors"][aidx].get("smooth", True))
+                    _mark_dirty(STATE["last_context"])
                     consumed = True
                     mode = "smooth" if STATE["anchors"][aidx]["smooth"] else "corner"
                     status = f"Anchor A{aidx} -> {mode}"
@@ -384,6 +481,7 @@ def _handle_canvas_input(payload):
             else:
                 new_idx = _append_anchor(x, y)
                 STATE["drag"] = {"mode": "anchor", "index": new_idx}
+                _mark_dirty(STATE["last_context"])
                 consumed = True
                 cursor = "size_all"
                 status = f"Anchor A{new_idx} added"
@@ -409,6 +507,7 @@ def _handle_canvas_input(payload):
             elif mode == "out":
                 _set_anchor_out_abs(a, x, y, mirror=True)
                 cursor = "crosshair"
+            _mark_dirty(STATE["last_context"])
             consumed = True
             status = f"Editing A{idx}"
         else:
@@ -431,7 +530,7 @@ def _handle_canvas_input(payload):
 
     return {
         "consumed": consumed,
-        "overlay": _build_overlay(context),
+        "overlay": _build_overlay(STATE["last_context"]),
         "cursor": cursor,
         "status_text": status,
         "preview_batch_edit": {"add": [], "remove": [], "move": []},
@@ -459,11 +558,14 @@ def _list_tool_actions():
 
 def _run_tool_action(payload):
     action_id = str((payload or {}).get("action_id", ""))
+    context = (payload or {}).get("context", {}) or {}
+    _ensure_project_context(context)
     if action_id == "reset_demo_points":
-        _reset_anchors()
+        _reset_anchors(context)
         return True
     if action_id == "commit_curve_to_notes":
-        # Host will prefer buildBatchEdit when capability is available.
+        if STATE["project_path"] and STATE["project_dirty"]:
+            _save_project(STATE["project_path"])
         return True
     return False
 
@@ -481,6 +583,7 @@ def _workspace_config(_payload):
 def _build_batch_edit(payload):
     action_id = str((payload or {}).get("action_id", ""))
     context = (payload or {}).get("context", {}) or {}
+    _ensure_project_context(context)
     if action_id != "commit_curve_to_notes":
         return {"add": [], "remove": [], "move": []}
     return _build_batch_from_curve(context)
@@ -505,6 +608,8 @@ def run_plugin_loop():
         mtype = msg.get("type")
         if mtype == "notify":
             if msg.get("event") == "shutdown":
+                if STATE["project_path"] and STATE["project_dirty"]:
+                    _save_project(STATE["project_path"])
                 break
             continue
 

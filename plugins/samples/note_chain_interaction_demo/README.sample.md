@@ -9,6 +9,7 @@ A runnable Host API v3 sample focused on pen-like curve editing:
   - drag handle square: adjust Bezier handle
   - double click anchor: smooth/corner toggle
   - right click anchor: delete anchor
+  - sidecar auto-save/load via `curve_project_path` context
 - action:
   - `Commit Curve -> Notes` (builds one batch edit with normal notes)
 
