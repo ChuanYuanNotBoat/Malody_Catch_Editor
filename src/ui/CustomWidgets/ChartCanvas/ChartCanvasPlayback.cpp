@@ -135,6 +135,36 @@ void ChartCanvas::onSelectionChanged()
 
 void ChartCanvas::keyPressEvent(QKeyEvent *event)
 {
+    if (m_pluginToolModeActive && event->key() == Qt::Key_Return)
+    {
+        if (triggerPluginBatchAction("commit_curve_to_notes", tr("Commit Curve -> Notes")))
+        {
+            event->accept();
+            return;
+        }
+    }
+    if (m_pluginToolModeActive && event->key() == Qt::Key_Enter)
+    {
+        if (triggerPluginBatchAction("commit_curve_to_notes", tr("Commit Curve -> Notes")))
+        {
+            event->accept();
+            return;
+        }
+    }
+    if (m_pluginToolModeActive && event->key() == Qt::Key_Escape)
+    {
+        PluginInterface::CanvasInputEvent cancelEvent;
+        cancelEvent.type = "cancel";
+        cancelEvent.modifiers = static_cast<int>(event->modifiers());
+        cancelEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+        bool consumedCancel = false;
+        if (dispatchPluginCanvasInput(cancelEvent, &consumedCancel) && consumedCancel)
+        {
+            event->accept();
+            return;
+        }
+    }
+
     PluginInterface::CanvasInputEvent pluginEvent;
     pluginEvent.type = "key_down";
     pluginEvent.key = event->key();

@@ -181,6 +181,7 @@ private:
     QVariantMap buildPluginCanvasContext() const;
     QString resolvePluginCanvasToolId() const;
     void applyPluginCursor(const QString &cursorName);
+    bool triggerPluginBatchAction(const QString &actionId, const QString &actionTitle);
 
     double getNoteTimeMs(const Note &note) const;
     void confirmPaste();
