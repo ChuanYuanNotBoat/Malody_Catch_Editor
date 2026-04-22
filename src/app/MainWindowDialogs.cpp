@@ -526,7 +526,7 @@ void MainWindow::openSessionSettings()
     layout->addWidget(sessionGroup);
     layout->addStretch();
 
-    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, &dialog);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]()
             {
         Settings::instance().setAutoSaveEnabled(autoSaveCheck->isChecked());

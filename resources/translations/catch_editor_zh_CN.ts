@@ -1677,6 +1677,36 @@ Open the **History** tab for collapsible long update notes.</source>
         <source>Run</source>
         <translation>运行</translation>
     </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="507"/>
+        <source>Session Settings</source>
+        <translation>会话设置</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="511"/>
+        <source>Editing Session</source>
+        <translation>编辑会话</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="515"/>
+        <source>Enable Auto Save</source>
+        <translation>启用自动保存</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="519"/>
+        <source> s</source>
+        <translation> 秒</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="525"/>
+        <source>Auto Save Interval:</source>
+        <translation>自动保存间隔:</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="535"/>
+        <source>Session settings updated</source>
+        <translation>会话设置已更新</translation>
+    </message>
 </context>
 <context>
     <name>MetaEditPanel</name>

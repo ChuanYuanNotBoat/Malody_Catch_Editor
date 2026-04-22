@@ -3,7 +3,7 @@
 A desktop chart editor for Malody Catch mode, developed to fill the feature gaps of the official charting tool.
 为 Malody Catch 模式开发的谱面编辑器，弥补官方制谱器功能的缺失。
 
-当前版本 / Current Version: **Beta v1.7.1**
+当前版本 / Current Version: **Beta v1.7.3**
 
 > ⚠️ **Early Stage Notice / 早期状态说明**
 > This project is in a very early stage of development. It is not yet ready for production use. Features may be incomplete, unstable, or subject to change.
@@ -14,7 +14,7 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## 📥 下载
 
-点击下载最新版本：[CatchChartEditor Beta v1.7.1 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
+点击下载最新版本：[CatchChartEditor Beta v1.7.3 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
 
 ---
 

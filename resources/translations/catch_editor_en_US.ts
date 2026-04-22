@@ -1667,6 +1667,36 @@ Open the **History** tab for collapsible long update notes.</source>
         <source>Run</source>
         <translation>Run</translation>
     </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="507"/>
+        <source>Session Settings</source>
+        <translation>Session Settings</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="511"/>
+        <source>Editing Session</source>
+        <translation>Editing Session</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="515"/>
+        <source>Enable Auto Save</source>
+        <translation>Enable Auto Save</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="519"/>
+        <source> s</source>
+        <translation> s</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="525"/>
+        <source>Auto Save Interval:</source>
+        <translation>Auto Save Interval:</translation>
+    </message>
+    <message>
+        <location filename="../../src/app/MainWindowDialogs.cpp" line="535"/>
+        <source>Session settings updated</source>
+        <translation>Session settings updated</translation>
+    </message>
 </context>
 <context>
     <name>MetaEditPanel</name>
