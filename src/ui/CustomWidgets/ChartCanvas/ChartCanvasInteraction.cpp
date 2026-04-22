@@ -12,6 +12,8 @@
 #include "utils/Logger.h"
 #include "utils/DiagnosticCollector.h"
 #include "model/Chart.h"
+#include "app/Application.h"
+#include "plugin/PluginManager.h"
 #include <QPainter>
 #include <QPen>
 #include <QFileInfo>
@@ -32,6 +34,18 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <QCoreApplication>
+
+namespace
+{
+PluginManager *activePluginManager()
+{
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginSystemReady())
+        return nullptr;
+    return app->pluginManager();
+}
+}
 
 
 void ChartCanvas::showGridSettings()
@@ -263,6 +277,174 @@ void ChartCanvas::requestNextFrame()
     }
 
     update();
+}
+
+void ChartCanvas::setPluginToolMode(bool enabled, const QString &pluginId)
+{
+    m_pluginToolModeActive = enabled;
+    if (!pluginId.trimmed().isEmpty())
+        m_pluginToolPluginId = pluginId.trimmed();
+    if (!enabled)
+    {
+        m_eventOverlayCache.clear();
+        applyPluginCursor(QString());
+    }
+    update();
+}
+
+void ChartCanvas::setPluginOverlayToggles(const QVariantMap &toggles)
+{
+    if (toggles.isEmpty())
+        return;
+
+    bool changed = false;
+    for (auto it = toggles.constBegin(); it != toggles.constEnd(); ++it)
+    {
+        if (!it.value().canConvert<bool>())
+            continue;
+        const bool value = it.value().toBool();
+        if (m_pluginOverlayToggles.value(it.key()).toBool() == value)
+            continue;
+        m_pluginOverlayToggles.insert(it.key(), value);
+        changed = true;
+    }
+
+    if (changed)
+        update();
+}
+
+QString ChartCanvas::resolvePluginCanvasToolId() const
+{
+    if (!m_pluginToolPluginId.trimmed().isEmpty())
+        return m_pluginToolPluginId.trimmed();
+
+    PluginManager *pm = activePluginManager();
+    if (!pm)
+        return QString();
+    const QVector<PluginInterface *> plugins = pm->plugins();
+    for (PluginInterface *p : plugins)
+    {
+        if (!p)
+            continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityCanvasInteraction))
+            continue;
+        return p->pluginId();
+    }
+    return QString();
+}
+
+QVariantMap ChartCanvas::buildPluginCanvasContext() const
+{
+    QVariantMap overlayContext;
+    overlayContext.insert("canvas_width", width());
+    overlayContext.insert("canvas_height", height());
+    overlayContext.insert("scroll_beat", m_scrollBeat);
+    overlayContext.insert("visible_beat_range", effectiveVisibleBeatRange());
+    overlayContext.insert("vertical_flip", m_verticalFlip);
+    overlayContext.insert("time_division", m_timeDivision);
+    overlayContext.insert("grid_division", m_gridDivision);
+    overlayContext.insert("left_margin", leftMargin());
+    overlayContext.insert("right_margin", rightMargin());
+    overlayContext.insert("lane_width", kLaneWidth);
+    overlayContext.insert("tool_mode_active", m_pluginToolModeActive);
+    overlayContext.insert("note_type_scope", "normal_only");
+    overlayContext.insert("overlay_toggles", m_pluginOverlayToggles);
+
+    const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
+    if (!chartPath.isEmpty())
+        overlayContext.insert("chart_path", chartPath);
+
+    QVariantList selectedIds;
+    if (m_selectionController && chart())
+    {
+        const auto &notes = chart()->notes();
+        const QSet<int> selected = m_selectionController->selectedIndices();
+        QList<int> sorted = selected.values();
+        std::sort(sorted.begin(), sorted.end());
+        for (int idx : sorted)
+        {
+            if (idx < 0 || idx >= notes.size())
+                continue;
+            if (notes[idx].id.isEmpty())
+                continue;
+            selectedIds.append(notes[idx].id);
+        }
+    }
+    overlayContext.insert("selected_note_ids", selectedIds);
+    return overlayContext;
+}
+
+void ChartCanvas::applyPluginCursor(const QString &cursorName)
+{
+    const QString key = cursorName.trimmed().toLower();
+    if (key.isEmpty() || key == "default" || key == "arrow")
+    {
+        unsetCursor();
+        return;
+    }
+
+    if (key == "crosshair")
+    {
+        setCursor(Qt::CrossCursor);
+        return;
+    }
+    if (key == "size_all")
+    {
+        setCursor(Qt::SizeAllCursor);
+        return;
+    }
+    if (key == "size_hor")
+    {
+        setCursor(Qt::SizeHorCursor);
+        return;
+    }
+    if (key == "size_ver")
+    {
+        setCursor(Qt::SizeVerCursor);
+        return;
+    }
+    if (key == "pointing_hand")
+    {
+        setCursor(Qt::PointingHandCursor);
+        return;
+    }
+
+    unsetCursor();
+}
+
+bool ChartCanvas::dispatchPluginCanvasInput(const PluginInterface::CanvasInputEvent &event, bool *outConsumed)
+{
+    if (outConsumed)
+        *outConsumed = false;
+    if (!m_pluginToolModeActive)
+        return false;
+
+    PluginManager *pm = activePluginManager();
+    if (!pm)
+        return false;
+
+    const QString pluginId = resolvePluginCanvasToolId();
+    if (pluginId.isEmpty())
+        return false;
+
+    PluginInterface::CanvasInputResult result;
+    const QVariantMap context = buildPluginCanvasContext();
+    if (!pm->handleCanvasInput(pluginId, context, event, &result))
+        return false;
+
+    if (!result.overlay.isEmpty())
+    {
+        m_eventOverlayCache = result.overlay;
+        update();
+    }
+    if (!result.cursor.trimmed().isEmpty())
+        applyPluginCursor(result.cursor);
+    if (!result.statusText.trimmed().isEmpty())
+        emit statusMessage(result.statusText);
+
+    if (outConsumed)
+        *outConsumed = result.consumed;
+    return true;
 }
 
 

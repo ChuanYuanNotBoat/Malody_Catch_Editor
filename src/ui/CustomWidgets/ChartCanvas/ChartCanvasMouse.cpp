@@ -10,6 +10,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QMessageBox>
+#include <QDateTime>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -757,6 +758,21 @@ void ChartCanvas::handleLeftMousePress(QMouseEvent *event)
 
 void ChartCanvas::mousePressEvent(QMouseEvent *event)
 {
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "mouse_down";
+    pluginEvent.x = event->position().x();
+    pluginEvent.y = event->position().y();
+    pluginEvent.button = static_cast<int>(event->button());
+    pluginEvent.buttons = static_cast<int>(event->buttons());
+    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+    bool consumed = false;
+    if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
+    {
+        event->accept();
+        return;
+    }
+
     if (m_intervalState != IntervalNone)
     {
         if (event->button() == Qt::RightButton)
@@ -776,6 +792,21 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
 
 void ChartCanvas::mouseMoveEvent(QMouseEvent *event)
 {
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "mouse_move";
+    pluginEvent.x = event->position().x();
+    pluginEvent.y = event->position().y();
+    pluginEvent.button = static_cast<int>(Qt::NoButton);
+    pluginEvent.buttons = static_cast<int>(event->buttons());
+    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+    bool consumed = false;
+    if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
+    {
+        event->accept();
+        return;
+    }
+
     if (m_isDraggingMirrorGuide)
     {
         setMirrorAxisX(canvasXToLaneX(event->pos().x()));
@@ -851,7 +882,21 @@ bool ChartCanvas::handleGenericDragRelease()
 
 void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
 {
-    Q_UNUSED(event);
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "mouse_up";
+    pluginEvent.x = event->position().x();
+    pluginEvent.y = event->position().y();
+    pluginEvent.button = static_cast<int>(event->button());
+    pluginEvent.buttons = static_cast<int>(event->buttons());
+    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+    bool consumed = false;
+    if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
+    {
+        event->accept();
+        return;
+    }
+
     if (handleMirrorGuideRelease())
         return;
     if (handleSelectionRelease())
@@ -865,6 +910,22 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
 
 void ChartCanvas::wheelEvent(QWheelEvent *event)
 {
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "wheel";
+    pluginEvent.x = event->position().x();
+    pluginEvent.y = event->position().y();
+    pluginEvent.button = static_cast<int>(Qt::NoButton);
+    pluginEvent.buttons = static_cast<int>(event->buttons());
+    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    pluginEvent.wheelDelta = static_cast<double>(event->angleDelta().y());
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+    bool consumed = false;
+    if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
+    {
+        event->accept();
+        return;
+    }
+
     if (event->modifiers() & Qt::ControlModifier)
     {
         double delta = event->angleDelta().y();

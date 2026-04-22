@@ -80,6 +80,8 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_playbackTimer(nullptr),
       m_lastOverlayQueryMs(0),
       m_overlayQueryBlockedUntilMs(0),
+      m_pluginToolModeActive(false),
+      m_pluginToolPluginId(QString()),
       m_hyperCacheValid(false),
       m_backgroundCacheDirty(true),
       m_noteDataDirty(true),
@@ -124,6 +126,12 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     connect(m_playbackTimer, &QTimer::timeout, this, &ChartCanvas::requestNextFrame);
 
     m_fpsTimer.start();
+    m_pluginOverlayToggles.insert("overlay_enabled", true);
+    m_pluginOverlayToggles.insert("preview", true);
+    m_pluginOverlayToggles.insert("control_points", true);
+    m_pluginOverlayToggles.insert("handles", true);
+    m_pluginOverlayToggles.insert("sample_points", true);
+    m_pluginOverlayToggles.insert("labels", true);
 }
 
 ChartCanvas::~ChartCanvas()

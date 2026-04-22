@@ -847,6 +847,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->helpMenu = nullptr;
     d->pluginToolsMenu = nullptr;
     d->pluginPanelsMenu = nullptr;
+    d->pluginToolModeAction = nullptr;
     d->mainToolBar = nullptr;
     d->languageMenu = nullptr;
     d->languageActionGroup = nullptr;
@@ -861,6 +862,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->workingChartPath.clear();
     d->isModified = false;
     d->autoSaveTimer = nullptr;
+    d->pluginToolModePluginId.clear();
 
     setupUi();
     createCentralArea();
@@ -1137,6 +1139,32 @@ void MainWindow::createMenus()
     connect(d->pluginToolsMenu, &QMenu::aboutToShow, this, &MainWindow::populatePluginToolsMenu);
     d->pluginPanelsMenu = toolsMenu->addMenu(tr("Plugin &Panels"));
     connect(d->pluginPanelsMenu, &QMenu::aboutToShow, this, &MainWindow::populatePluginPanelsMenu);
+    d->pluginToolModeAction = toolsMenu->addAction(tr("Plugin Enhanced Tool Mode"));
+    d->pluginToolModeAction->setCheckable(true);
+    d->pluginToolModeAction->setEnabled(false);
+    connect(d->pluginToolModeAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
+
+    QMenu *overlayMenu = toolsMenu->addMenu(tr("Plugin Overlay Elements"));
+    auto addOverlayToggle = [this, overlayMenu](const QString &key, const QString &label, bool defaultValue)
+    {
+        QAction *act = overlayMenu->addAction(label);
+        act->setCheckable(true);
+        act->setChecked(defaultValue);
+        connect(act, &QAction::toggled, this, [this, key](bool on)
+                {
+            if (!d->canvas)
+                return;
+            QVariantMap toggles;
+            toggles.insert(key, on);
+            d->canvas->setPluginOverlayToggles(toggles); });
+    };
+    addOverlayToggle("overlay_enabled", tr("Enable Overlay"), true);
+    addOverlayToggle("preview", tr("Preview Notes"), true);
+    addOverlayToggle("control_points", tr("Control Points"), true);
+    addOverlayToggle("handles", tr("Handles"), true);
+    addOverlayToggle("sample_points", tr("Sample Points"), true);
+    addOverlayToggle("labels", tr("Labels"), true);
+
     toolsMenu->addSeparator();
     QAction *gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
     toolsMenu->addSeparator();

@@ -390,6 +390,8 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
     PluginManager *pm = activePluginManager();
     if (!pm)
         return;
+    if (!m_pluginOverlayToggles.value("overlay_enabled", true).toBool())
+        return;
 
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const bool canQuery = nowMs >= m_overlayQueryBlockedUntilMs;
@@ -398,19 +400,9 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
 
     if (canQuery && dueForQuery)
     {
-        QVariantMap overlayContext;
-        overlayContext.insert("canvas_width", width());
-        overlayContext.insert("canvas_height", height());
-        overlayContext.insert("scroll_beat", m_scrollBeat);
-        overlayContext.insert("visible_beat_range", effectiveVisibleBeatRange());
-        overlayContext.insert("vertical_flip", m_verticalFlip);
-        overlayContext.insert("time_division", m_timeDivision);
-        overlayContext.insert("grid_division", m_gridDivision);
+        QVariantMap overlayContext = buildPluginCanvasContext();
         overlayContext.insert("left_margin", lmargin);
         overlayContext.insert("right_margin", rmargin);
-        const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
-        if (!chartPath.isEmpty())
-            overlayContext.insert("chart_path", chartPath);
 
         QElapsedTimer requestTimer;
         requestTimer.start();
@@ -431,7 +423,14 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
         }
     }
 
-    for (const auto &item : m_overlayCache)
+    QList<PluginInterface::CanvasOverlayItem> drawItems = m_overlayCache;
+    if (!m_eventOverlayCache.isEmpty())
+    {
+        for (const auto &item : m_eventOverlayCache)
+            drawItems.append(item);
+    }
+
+    for (const auto &item : drawItems)
     {
         QPen pen(item.color, item.width);
         painter.setPen(pen);

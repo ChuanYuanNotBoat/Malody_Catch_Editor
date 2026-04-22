@@ -64,6 +64,7 @@ public:
     QMenu *helpMenu = nullptr;
     QMenu *pluginToolsMenu = nullptr;
     QMenu *pluginPanelsMenu = nullptr;
+    QAction *pluginToolModeAction = nullptr;
     QAction *noteSizeAction = nullptr;
     QAction *noteSoundVolumeAction = nullptr;
     QAction *calibrateSkinAction = nullptr;
@@ -97,6 +98,7 @@ public:
     QHash<QString, QVariantMap> pluginActionMeta;
     QHash<QString, QPointer<QDialog>> pluginPanelDialogs;
     QSet<QString> batchEditDisabledActions;
+    QString pluginToolModePluginId;
     QHash<QString, QAction *> shortcutActions;
     QHash<QString, QKeySequence> shortcutDefaults;
     QList<QString> shortcutActionOrder;

@@ -78,6 +78,22 @@ QString themedDialogCss(const QColor &baseBg)
                "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: %2; }")
         .arg(panelBg.name(), fg.name(), inputBg.name(), border.name(), buttonBg.name(), disabledText.name());
 }
+
+QString firstCanvasInteractionPluginId(PluginManager *pm)
+{
+    if (!pm)
+        return QString();
+    const QVector<PluginInterface *> plugins = pm->plugins();
+    for (PluginInterface *p : plugins)
+    {
+        if (!p)
+            continue;
+        if (!p->hasCapability(PluginInterface::kCapabilityCanvasInteraction))
+            continue;
+        return p->pluginId();
+    }
+    return QString();
+}
 }
 
 void MainWindow::populatePluginToolsMenu()
@@ -225,6 +241,19 @@ void MainWindow::refreshPluginUiExtensions()
 
     if (d->leftPanel)
         d->leftPanel->setPluginQuickActions(sidebarActions);
+
+    const QString interactionPluginId = firstCanvasInteractionPluginId(app->pluginManager());
+    if (d->pluginToolModeAction)
+    {
+        const bool hasInteractionPlugin = !interactionPluginId.isEmpty();
+        d->pluginToolModeAction->setEnabled(hasInteractionPlugin);
+        if (!hasInteractionPlugin && d->pluginToolModeAction->isChecked())
+            d->pluginToolModeAction->setChecked(false);
+    }
+    if (!interactionPluginId.isEmpty())
+        d->pluginToolModePluginId = interactionPluginId;
+    else
+        d->pluginToolModePluginId.clear();
 }
 
 void MainWindow::triggerPluginToolAction()
@@ -241,6 +270,38 @@ void MainWindow::triggerPluginQuickAction(const QString &pluginId, const QString
     if (!d->pluginActionMeta.contains(key))
         return;
     runPluginActionWithMeta(d->pluginActionMeta.value(key));
+}
+
+void MainWindow::togglePluginEnhancedToolMode(bool enabled)
+{
+    if (!d->canvas)
+        return;
+
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginManager())
+    {
+        if (d->pluginToolModeAction)
+            d->pluginToolModeAction->setChecked(false);
+        return;
+    }
+
+    QString pluginId = d->pluginToolModePluginId.trimmed();
+    if (pluginId.isEmpty())
+        pluginId = firstCanvasInteractionPluginId(app->pluginManager());
+    if (enabled && pluginId.isEmpty())
+    {
+        statusBar()->showMessage(tr("No plugin supports canvas interaction."), 2500);
+        if (d->pluginToolModeAction)
+            d->pluginToolModeAction->setChecked(false);
+        return;
+    }
+
+    d->pluginToolModePluginId = pluginId;
+    d->canvas->setPluginToolMode(enabled, pluginId);
+    statusBar()->showMessage(
+        enabled ? tr("Plugin enhanced tool mode ON")
+                : tr("Plugin enhanced tool mode OFF"),
+        2500);
 }
 
 bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
@@ -406,10 +467,17 @@ void MainWindow::triggerPluginPanelAction()
     }
     if (!d->sourceChartPath.isEmpty())
         context.insert("chart_path_source", d->sourceChartPath);
+    const QVariantMap workspaceConfig = app->pluginManager()->panelWorkspaceConfig(pluginId, context);
+    if (!workspaceConfig.isEmpty())
+        context.insert("workspace", workspaceConfig);
 
     QDialog *dialog = new QDialog(this, Qt::Tool);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setWindowTitle(title.isEmpty() ? tr("Plugin Panel") : title);
+    if (workspaceConfig.value("default_layout").toString().toLower() == "advanced")
+        dialog->resize(680, 520);
+    else if (workspaceConfig.value("default_layout").toString().toLower() == "dual")
+        dialog->resize(580, 460);
     QVBoxLayout *layout = new QVBoxLayout(dialog);
     layout->setContentsMargins(0, 0, 0, 0);
 
@@ -422,7 +490,8 @@ void MainWindow::triggerPluginPanelAction()
     }
 
     layout->addWidget(panel);
-    dialog->resize(520, 420);
+    if (dialog->size().isEmpty())
+        dialog->resize(520, 420);
     d->pluginPanelDialogs.insert(key, dialog);
     connect(dialog, &QDialog::destroyed, this, [this, key]()
             { d->pluginPanelDialogs.remove(key); });

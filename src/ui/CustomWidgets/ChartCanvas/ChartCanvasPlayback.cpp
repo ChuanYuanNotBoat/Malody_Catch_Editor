@@ -135,6 +135,18 @@ void ChartCanvas::onSelectionChanged()
 
 void ChartCanvas::keyPressEvent(QKeyEvent *event)
 {
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "key_down";
+    pluginEvent.key = event->key();
+    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+    bool consumed = false;
+    if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
+    {
+        event->accept();
+        return;
+    }
+
     if (event->key() == Qt::Key_Escape)
     {
         cancelOperation();
@@ -168,6 +180,23 @@ void ChartCanvas::keyPressEvent(QKeyEvent *event)
         }
     }
     QWidget::keyPressEvent(event);
+}
+
+void ChartCanvas::keyReleaseEvent(QKeyEvent *event)
+{
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "key_up";
+    pluginEvent.key = event->key();
+    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+    bool consumed = false;
+    if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
+    {
+        event->accept();
+        return;
+    }
+
+    QWidget::keyReleaseEvent(event);
 }
 
 int ChartCanvas::leftMargin() const

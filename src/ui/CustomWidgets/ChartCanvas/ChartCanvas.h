@@ -80,6 +80,11 @@ public:
     void setMirrorPreviewVisible(bool visible);
     bool flipSelectedNotes();
     bool flipSelectedNotesAroundCenter();
+    void setPluginToolMode(bool enabled, const QString &pluginId = QString());
+    bool isPluginToolModeActive() const { return m_pluginToolModeActive; }
+    QString pluginToolPluginId() const { return m_pluginToolPluginId; }
+    void setPluginOverlayToggles(const QVariantMap &toggles);
+    QVariantMap pluginOverlayToggles() const { return m_pluginOverlayToggles; }
 
 public slots:
     void showGridSettings();
@@ -100,6 +105,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
     void timerEvent(QTimerEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
@@ -171,6 +177,10 @@ private:
     void snapPlayheadToGrid();
     void startSnapTimer();
     void stopSnapTimer();
+    bool dispatchPluginCanvasInput(const PluginInterface::CanvasInputEvent &event, bool *outConsumed = nullptr);
+    QVariantMap buildPluginCanvasContext() const;
+    QString resolvePluginCanvasToolId() const;
+    void applyPluginCursor(const QString &cursorName);
 
     double getNoteTimeMs(const Note &note) const;
     void confirmPaste();
@@ -294,8 +304,12 @@ private:
 
     QTimer *m_playbackTimer; // Playback tick timer (~16ms).
     QList<PluginInterface::CanvasOverlayItem> m_overlayCache;
+    QList<PluginInterface::CanvasOverlayItem> m_eventOverlayCache;
     qint64 m_lastOverlayQueryMs;
     qint64 m_overlayQueryBlockedUntilMs;
+    bool m_pluginToolModeActive;
+    QString m_pluginToolPluginId;
+    QVariantMap m_pluginOverlayToggles;
 
     QSet<int> m_cachedHyperSet;
     bool m_hyperCacheValid;

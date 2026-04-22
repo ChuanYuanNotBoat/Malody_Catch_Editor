@@ -67,6 +67,7 @@ private slots:
     void triggerPluginToolAction();
     void triggerPluginQuickAction(const QString &pluginId, const QString &actionId);
     void triggerPluginPanelAction();
+    void togglePluginEnhancedToolMode(bool enabled);
     void exportDiagnosticsReport();
     void togglePaste288Division(bool enabled);
     void changeNoteSound(const QString &soundPath);
