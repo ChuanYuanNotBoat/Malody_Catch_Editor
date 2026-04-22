@@ -35,6 +35,8 @@
 #include <limits>
 #include <numeric>
 #include <QCoreApplication>
+#include <QDir>
+#include <QStandardPaths>
 
 namespace
 {
@@ -44,6 +46,16 @@ PluginManager *activePluginManager()
     if (!app || !app->pluginSystemReady())
         return nullptr;
     return app->pluginManager();
+}
+
+QString sidecarDirForChart(const QString &chartPath)
+{
+    if (chartPath.trimmed().isEmpty())
+        return QString();
+    const QFileInfo fi(chartPath);
+    if (!fi.exists())
+        return QString();
+    return fi.absoluteDir().filePath(".mcce-plugin");
 }
 }
 
@@ -353,6 +365,21 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
     if (!chartPath.isEmpty())
         overlayContext.insert("chart_path", chartPath);
+    const QString sidecarDir = sidecarDirForChart(chartPath);
+    if (!sidecarDir.isEmpty())
+    {
+        const QString chartStem = QFileInfo(chartPath).completeBaseName();
+        overlayContext.insert("curve_project_path", QDir(sidecarDir).filePath(chartStem + ".curve_tbd.json"));
+        overlayContext.insert("sidecar_dir", sidecarDir);
+    }
+
+    QVariantList styleLibraryPaths;
+    if (!sidecarDir.isEmpty())
+        styleLibraryPaths.append(QDir(sidecarDir).filePath("styles"));
+    const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (!appData.isEmpty())
+        styleLibraryPaths.append(QDir(appData).filePath("plugin_styles"));
+    overlayContext.insert("style_library_paths", styleLibraryPaths);
 
     QVariantList selectedIds;
     if (m_selectionController && chart())

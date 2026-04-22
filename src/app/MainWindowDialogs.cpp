@@ -45,6 +45,7 @@
 #include <QToolBar>
 #include <QDialog>
 #include <QGroupBox>
+#include <QStandardPaths>
 
 namespace
 {
@@ -93,6 +94,30 @@ QString firstCanvasInteractionPluginId(PluginManager *pm)
         return p->pluginId();
     }
     return QString();
+}
+
+void enrichContextWithSidecarPaths(QVariantMap *context, const QString &chartPath)
+{
+    if (!context)
+        return;
+    if (chartPath.trimmed().isEmpty())
+        return;
+
+    const QFileInfo fi(chartPath);
+    if (!fi.exists())
+        return;
+
+    const QString sidecarDir = fi.absoluteDir().filePath(".mcce-plugin");
+    const QString chartStem = fi.completeBaseName();
+    context->insert("sidecar_dir", sidecarDir);
+    context->insert("curve_project_path", QDir(sidecarDir).filePath(chartStem + ".curve_tbd.json"));
+
+    QVariantList styleLibraryPaths;
+    styleLibraryPaths.append(QDir(sidecarDir).filePath("styles"));
+    const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (!appData.isEmpty())
+        styleLibraryPaths.append(QDir(appData).filePath("plugin_styles"));
+    context->insert("style_library_paths", styleLibraryPaths);
 }
 }
 
@@ -352,6 +377,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
     if (!sourceChartPath.isEmpty())
         context.insert("chart_path_source", sourceChartPath);
+    enrichContextWithSidecarPaths(&context, chartPath);
     context.insert("action_title", actionTitle);
     Logger::info(QString("Running plugin action: plugin=%1 action=%2 path=%3")
                      .arg(pluginId)
@@ -467,6 +493,7 @@ void MainWindow::triggerPluginPanelAction()
     }
     if (!d->sourceChartPath.isEmpty())
         context.insert("chart_path_source", d->sourceChartPath);
+    enrichContextWithSidecarPaths(&context, chartPath);
     const QVariantMap workspaceConfig = app->pluginManager()->panelWorkspaceConfig(pluginId, context);
     if (!workspaceConfig.isEmpty())
         context.insert("workspace", workspaceConfig);
