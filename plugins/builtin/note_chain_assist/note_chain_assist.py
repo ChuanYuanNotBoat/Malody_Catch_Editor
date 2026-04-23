@@ -583,14 +583,10 @@ def _handle_canvas_input(payload):
         if mode and 0 <= idx < len(STATE["anchors"]):
             a = STATE["anchors"][idx]
             if mode == "anchor":
-                dx = x - a["x"]
-                dy = y - a["y"]
+                # Keep handle vectors unchanged when moving anchor.
+                # Handles are stored as local vectors relative to anchor.
                 a["x"] = x
                 a["y"] = y
-                a["in"][0] += dx
-                a["in"][1] += dy
-                a["out"][0] += dx
-                a["out"][1] += dy
                 cursor = "size_all"
             elif mode == "in":
                 _set_anchor_in_abs(a, x, y, mirror=True)
