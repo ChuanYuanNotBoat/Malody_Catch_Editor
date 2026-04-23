@@ -356,6 +356,77 @@ def _sample_curve_chart(samples_per_segment=24):
     return pts
 
 
+def _normalize_samples_by_beat(samples):
+    if not samples:
+        return []
+    ordered = sorted(samples, key=lambda p: (p[1], p[0]))
+    out = []
+    eps = 1e-6
+    for lane_x, beat in ordered:
+        bx = float(lane_x)
+        bb = float(beat)
+        if not out:
+            out.append([bx, bb])
+            continue
+        if abs(bb - out[-1][1]) <= eps:
+            out[-1][0] = (out[-1][0] + bx) * 0.5
+        else:
+            out.append([bx, bb])
+    return out
+
+
+def _lane_x_at_beat(samples_by_beat, beat):
+    if not samples_by_beat:
+        return 0.0
+    if beat <= samples_by_beat[0][1]:
+        return samples_by_beat[0][0]
+    if beat >= samples_by_beat[-1][1]:
+        return samples_by_beat[-1][0]
+
+    for i in range(len(samples_by_beat) - 1):
+        a = samples_by_beat[i]
+        b = samples_by_beat[i + 1]
+        if a[1] <= beat <= b[1]:
+            db = b[1] - a[1]
+            if abs(db) <= 1e-9:
+                return a[0]
+            t = (beat - a[1]) / db
+            return a[0] + (b[0] - a[0]) * t
+    return samples_by_beat[-1][0]
+
+
+def _enforce_anchor_time_order(index, context):
+    if not (0 <= index < len(STATE["anchors"])):
+        return
+    den = max(1, int(context.get("time_division", 4)))
+    eps = 1.0 / float(den * 4)
+    cur = STATE["anchors"][index]
+    if index > 0:
+        prev_b = STATE["anchors"][index - 1]["beat"]
+        cur["beat"] = max(cur["beat"], prev_b + eps)
+    if index + 1 < len(STATE["anchors"]):
+        next_b = STATE["anchors"][index + 1]["beat"]
+        cur["beat"] = min(cur["beat"], next_b - eps)
+
+
+def _enforce_handle_time_constraints(index, context):
+    if not (0 <= index < len(STATE["anchors"])):
+        return
+    den = max(1, int(context.get("time_division", 4)))
+    eps = 1.0 / float(den * 4)
+    a = STATE["anchors"][index]
+
+    if index + 1 < len(STATE["anchors"]):
+        next_b = STATE["anchors"][index + 1]["beat"]
+        max_out = max(0.0, next_b - a["beat"] - eps)
+        a["out"][1] = _clamp(a["out"][1], 0.0, max_out)
+
+    if index > 0:
+        prev_b = STATE["anchors"][index - 1]["beat"]
+        min_in = min(0.0, prev_b - a["beat"] + eps)
+        a["in"][1] = _clamp(a["in"][1], min_in, 0.0)
+
+
 def _serialize_anchor(a):
     return {
         "lane_x": float(a.get("lane_x", 0.0)),
@@ -594,7 +665,11 @@ def _append_anchor(context, cx, cy):
     ol = math.cos(angle) * length
     ob = math.sin(angle) * length
     STATE["anchors"].append({"lane_x": lane_x, "beat": beat, "in": [-ol, -ob], "out": [ol, ob], "smooth": True})
-    return len(STATE["anchors"]) - 1
+    idx = len(STATE["anchors"]) - 1
+    _enforce_anchor_time_order(idx, context)
+    _enforce_handle_time_constraints(idx, context)
+    _enforce_handle_time_constraints(idx - 1, context)
+    return idx
 
 
 def _float_beat_to_triplet(beat, den):
@@ -624,22 +699,27 @@ def _build_batch_from_curve(context):
     if not isinstance(context, dict):
         return {"add": [], "remove": [], "move": []}
 
-    sampled = _sample_curve_chart(16)
-    if not sampled:
+    sampled = _sample_curve_chart(32)
+    if len(sampled) < 2:
         return {"add": [], "remove": [], "move": []}
 
-    # Default behavior: follow the editor's current time division directly.
     current_den = max(1, int(context.get("time_division", 4)))
-    dens = [current_den]
+    samples_by_beat = _normalize_samples_by_beat(sampled)
+    if len(samples_by_beat) < 2:
+        return {"add": [], "remove": [], "move": []}
+
+    start_beat = min(STATE["anchors"][0]["beat"], STATE["anchors"][-1]["beat"])
+    end_beat = max(STATE["anchors"][0]["beat"], STATE["anchors"][-1]["beat"])
+    start_tick = int(round(start_beat * current_den))
+    end_tick = int(round(end_beat * current_den))
+    if end_tick < start_tick:
+        start_tick, end_tick = end_tick, start_tick
+
     out = []
-    seen = set()
-    for i, (lane_x, beat) in enumerate(sampled[::2]):
-        den = int(dens[i % len(dens)])
-        note = _chart_to_note(context, lane_x, beat, den)
-        k = (note["beat"][0], note["beat"][1], note["beat"][2], note["x"])
-        if k in seen:
-            continue
-        seen.add(k)
+    for tick in range(start_tick, end_tick + 1):
+        beat = float(tick) / float(current_den)
+        lane_x = _lane_x_at_beat(samples_by_beat, beat)
+        note = _chart_to_note(context, lane_x, beat, current_den)
         out.append(note)
 
     return {"add": out, "remove": [], "move": []}
@@ -725,14 +805,20 @@ def _handle_canvas_input(payload):
                 lane_x, beat = _snap_chart_point(STATE["last_context"], lane_x, beat)
                 a["lane_x"] = lane_x
                 a["beat"] = beat
+                _enforce_anchor_time_order(idx, STATE["last_context"])
+                _enforce_handle_time_constraints(idx, STATE["last_context"])
+                if idx > 0:
+                    _enforce_handle_time_constraints(idx - 1, STATE["last_context"])
                 cursor = "size_all"
             elif mode == "in":
                 lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
                 _set_anchor_in_abs_chart(a, lane_x, beat, mirror=True)
+                _enforce_handle_time_constraints(idx, STATE["last_context"])
                 cursor = "crosshair"
             elif mode == "out":
                 lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
                 _set_anchor_out_abs_chart(a, lane_x, beat, mirror=True)
+                _enforce_handle_time_constraints(idx, STATE["last_context"])
                 cursor = "crosshair"
             _mark_dirty(STATE["last_context"])
             consumed = True
