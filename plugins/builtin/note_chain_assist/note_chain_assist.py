@@ -6,6 +6,10 @@ import time
 
 LEFT_BUTTON = 1
 RIGHT_BUTTON = 2
+CTRL_MODIFIER_MASK = 0x04000000
+KEY_Z = 0x5A
+KEY_Y = 0x59
+MAX_HISTORY = 128
 
 STYLE_PRESETS = [
     [4, 8, 12, 16],
@@ -23,6 +27,8 @@ STATE = {
     "style": {"denominators": [4, 8, 12, 16], "style_name": "balanced"},
     "project_path": "",
     "project_dirty": False,
+    "history": [],
+    "history_index": -1,
 }
 
 
@@ -42,6 +48,63 @@ def _distance(x1, y1, x2, y2):
 
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
+
+
+def _capture_snapshot():
+    return {
+        "anchors": json.loads(json.dumps(STATE.get("anchors", []))),
+        "style": json.loads(json.dumps(STATE.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"}))),
+    }
+
+
+def _restore_snapshot(snapshot):
+    if not isinstance(snapshot, dict):
+        return
+    anchors = snapshot.get("anchors", [])
+    style = snapshot.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"})
+    STATE["anchors"] = anchors if isinstance(anchors, list) else []
+    STATE["style"] = style if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
+
+
+def _push_history():
+    snap = _capture_snapshot()
+    hist = STATE.get("history", [])
+    idx = int(STATE.get("history_index", -1))
+    if idx >= 0 and idx < len(hist):
+        if hist[idx] == snap:
+            return
+        hist = hist[: idx + 1]
+    else:
+        hist = []
+    hist.append(snap)
+    if len(hist) > MAX_HISTORY:
+        hist = hist[-MAX_HISTORY:]
+    STATE["history"] = hist
+    STATE["history_index"] = len(hist) - 1
+
+
+def _undo_history(context):
+    hist = STATE.get("history", [])
+    idx = int(STATE.get("history_index", -1))
+    if not hist or idx <= 0:
+        return False
+    idx -= 1
+    STATE["history_index"] = idx
+    _restore_snapshot(hist[idx])
+    _mark_dirty(context)
+    return True
+
+
+def _redo_history(context):
+    hist = STATE.get("history", [])
+    idx = int(STATE.get("history_index", -1))
+    if not hist or idx >= len(hist) - 1:
+        return False
+    idx += 1
+    STATE["history_index"] = idx
+    _restore_snapshot(hist[idx])
+    _mark_dirty(context)
+    return True
 
 
 def _safe_denominator_set(context):
@@ -275,6 +338,9 @@ def _ensure_project_context(context):
         if not _load_project(path, context):
             STATE["anchors"] = _default_anchors()
             STATE["project_dirty"] = True
+        STATE["history"] = []
+        STATE["history_index"] = -1
+        _push_history()
 
 
 def _mark_dirty(context):
@@ -420,6 +486,7 @@ def _build_overlay(context):
 
 
 def _reset_anchors(context):
+    _push_history()
     STATE["anchors"] = _default_anchors()
     STATE["drag"] = {"mode": "", "index": -1}
     _mark_dirty(context)
@@ -550,6 +617,7 @@ def _build_batch_from_curve(context):
 
 
 def _cycle_density_style(context):
+    _push_history()
     current = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
     normalized = tuple(_sanitize_denominators(current, context))
     target_index = 0
@@ -586,15 +654,12 @@ def _handle_canvas_input(payload):
         hkind, hidx = _find_handle_hit(x, y)
         aidx = _find_anchor_hit(x, y)
 
-        if button == RIGHT_BUTTON and aidx >= 0:
-            if len(STATE["anchors"]) > 1:
-                STATE["anchors"].pop(aidx)
-                STATE["drag"] = {"mode": "", "index": -1}
-                _mark_dirty(STATE["last_context"])
-                consumed = True
-                status = f"Anchor A{aidx} deleted"
+        if button == RIGHT_BUTTON:
+            consumed = True
+            status = "Right click is reserved (no delete)"
         elif button == LEFT_BUTTON:
             if hidx >= 0:
+                _push_history()
                 STATE["drag"] = {"mode": hkind, "index": hidx}
                 consumed = True
                 cursor = "crosshair"
@@ -604,17 +669,20 @@ def _handle_canvas_input(payload):
                 STATE["last_click_anchor"] = aidx
                 STATE["last_click_ms"] = ts
                 if is_double:
+                    _push_history()
                     STATE["anchors"][aidx]["smooth"] = not bool(STATE["anchors"][aidx].get("smooth", True))
                     _mark_dirty(STATE["last_context"])
                     consumed = True
                     mode = "smooth" if STATE["anchors"][aidx]["smooth"] else "corner"
                     status = f"Anchor A{aidx} -> {mode}"
                 else:
+                    _push_history()
                     STATE["drag"] = {"mode": "anchor", "index": aidx}
                     consumed = True
                     cursor = "size_all"
                     status = f"Dragging anchor A{aidx}"
             else:
+                _push_history()
                 new_idx = _append_anchor(STATE["last_context"], x, y)
                 STATE["drag"] = {"mode": "anchor", "index": new_idx}
                 _mark_dirty(STATE["last_context"])
@@ -656,6 +724,7 @@ def _handle_canvas_input(payload):
         STATE["drag"] = {"mode": "", "index": -1}
 
     elif et == "wheel":
+        _push_history()
         direction = float(event.get("wheel_delta", 0.0))
         dens = list(_sanitize_denominators(STATE.get("style", {}).get("denominators", [4, 8, 12, 16]), context))
         shift = 1 if direction > 0 else -1
@@ -669,6 +738,18 @@ def _handle_canvas_input(payload):
         STATE["drag"] = {"mode": "", "index": -1}
         consumed = True
         status = "Interaction cancelled"
+    elif et == "key_down":
+        key = int(event.get("key", 0))
+        mods = int(event.get("modifiers", 0))
+        ctrl = (mods & CTRL_MODIFIER_MASK) != 0
+        if ctrl and key == KEY_Z:
+            if _undo_history(STATE["last_context"]):
+                consumed = True
+                status = "Undo curve edit"
+        elif ctrl and key == KEY_Y:
+            if _redo_history(STATE["last_context"]):
+                consumed = True
+                status = "Redo curve edit"
 
     if et in ("mouse_down", "mouse_up") and not consumed:
         # In tool mode, canvas click ownership belongs to this plugin.
@@ -749,6 +830,7 @@ def _run_tool_action(payload):
     if action_id == "export_style_preset":
         return _save_style(context)
     if action_id == "import_style_preset":
+        _push_history()
         ok = _load_style(context)
         if ok:
             _mark_dirty(context)
