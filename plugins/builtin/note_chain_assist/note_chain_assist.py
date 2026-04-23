@@ -15,11 +15,7 @@ STYLE_PRESETS = [
 ]
 
 STATE = {
-    "anchors": [
-        {"x": 220.0, "y": 220.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
-        {"x": 420.0, "y": 340.0, "in": [-40.0, -20.0], "out": [40.0, 20.0], "smooth": True},
-        {"x": 620.0, "y": 260.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
-    ],
+    "anchors": [],
     "drag": {"mode": "", "index": -1},
     "last_context": {},
     "last_click_anchor": -1,
@@ -150,14 +146,10 @@ def _set_anchor_out_abs(a, x, y, mirror=False):
 
 
 def _default_anchors():
-    return [
-        {"x": 220.0, "y": 220.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
-        {"x": 420.0, "y": 340.0, "in": [-40.0, -20.0], "out": [40.0, 20.0], "smooth": True},
-        {"x": 620.0, "y": 260.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
-    ]
+    return []
 
 
-def _find_anchor_hit(x, y, threshold=12.0):
+def _find_anchor_hit(x, y, threshold=16.0):
     best = -1
     best_dist = 1e9
     for i, a in enumerate(STATE["anchors"]):
@@ -168,7 +160,7 @@ def _find_anchor_hit(x, y, threshold=12.0):
     return best
 
 
-def _find_handle_hit(x, y, threshold=10.0):
+def _find_handle_hit(x, y, threshold=14.0):
     best = ("", -1)
     best_dist = 1e9
     for i, a in enumerate(STATE["anchors"]):
@@ -242,7 +234,7 @@ def _load_project(path, context):
         with open(path, "r", encoding="utf-8") as f:
             payload = json.load(f)
         anchors = payload.get("anchors")
-        if isinstance(anchors, list) and len(anchors) >= 2:
+        if isinstance(anchors, list):
             normalized = []
             for a in anchors:
                 if not isinstance(a, dict):
@@ -256,8 +248,7 @@ def _load_project(path, context):
                         "smooth": bool(a.get("smooth", True)),
                     }
                 )
-            if len(normalized) >= 2:
-                STATE["anchors"] = normalized
+            STATE["anchors"] = normalized
         style = payload.get("style")
         if isinstance(style, dict):
             STATE["style"] = {
@@ -637,6 +628,12 @@ def _handle_canvas_input(payload):
         STATE["drag"] = {"mode": "", "index": -1}
         consumed = True
         status = "Interaction cancelled"
+
+    if et in ("mouse_down", "mouse_up") and not consumed:
+        # In tool mode, canvas click ownership belongs to this plugin.
+        consumed = True
+    if et == "mouse_move" and not consumed and int(event.get("buttons", 0)) != 0:
+        consumed = True
 
     return {
         "consumed": consumed,

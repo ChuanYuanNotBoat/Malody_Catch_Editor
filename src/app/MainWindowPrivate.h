@@ -82,6 +82,7 @@ public:
     QAction *versionAction = nullptr;
     QAction *logsAction = nullptr;
     QToolBar *mainToolBar = nullptr;
+    QToolBar *pluginToolBar = nullptr;
     QWidget *mobileShell = nullptr;
     QQuickWidget *mobilePrimaryBar = nullptr;
     QObject *mobilePrimaryBarRoot = nullptr;

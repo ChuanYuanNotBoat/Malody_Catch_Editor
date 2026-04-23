@@ -852,6 +852,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->pluginToolModeToolbarAction = nullptr;
     d->pluginManagerToolbarAction = nullptr;
     d->mainToolBar = nullptr;
+    d->pluginToolBar = nullptr;
     d->languageMenu = nullptr;
     d->languageActionGroup = nullptr;
     d->noteSoundVolumeAction = nullptr;
@@ -1457,9 +1458,10 @@ void MainWindow::createCentralArea()
         d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
                                                        {
         showEditorPanel(d->metaPanel); });
-        d->mainToolBar->addSeparator();
-        d->pluginManagerToolbarAction = d->mainToolBar->addAction(tr("Plugins"), this, &MainWindow::openPluginManager);
-        d->pluginToolModeToolbarAction = d->mainToolBar->addAction(tr("Curve Tool"));
+        addToolBarBreak(Qt::TopToolBarArea);
+        d->pluginToolBar = addToolBar(tr("Plugins"));
+        d->pluginManagerToolbarAction = d->pluginToolBar->addAction(tr("Plugins"), this, &MainWindow::openPluginManager);
+        d->pluginToolModeToolbarAction = d->pluginToolBar->addAction(tr("Curve Tool"));
         d->pluginToolModeToolbarAction->setCheckable(true);
         d->pluginToolModeToolbarAction->setEnabled(false);
         connect(d->pluginToolModeToolbarAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
@@ -2483,6 +2485,8 @@ void MainWindow::retranslateUi()
     createMenus();
     if (d->mainToolBar)
         d->mainToolBar->setWindowTitle(tr("Tools"));
+    if (d->pluginToolBar)
+        d->pluginToolBar->setWindowTitle(tr("Plugins"));
     if (d->notePanelAction)
         d->notePanelAction->setText(tr("Note"));
     if (d->bpmPanelAction)

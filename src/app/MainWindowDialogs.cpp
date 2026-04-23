@@ -222,8 +222,8 @@ void MainWindow::refreshPluginUiExtensions()
     d->batchEditDisabledActions.clear();
     for (QAction *a : d->pluginToolbarActions)
     {
-        if (d->mainToolBar && a)
-            d->mainToolBar->removeAction(a);
+        if (d->pluginToolBar && a)
+            d->pluginToolBar->removeAction(a);
         delete a;
     }
     d->pluginToolbarActions.clear();
@@ -245,9 +245,9 @@ void MainWindow::refreshPluginUiExtensions()
         d->pluginActionMeta.insert(key, meta);
 
         const QString placement = entry.action.placement.toLower();
-        if (placement == QString(PluginInterface::kPlacementTopToolbar) && d->mainToolBar)
+        if (placement == QString(PluginInterface::kPlacementTopToolbar) && d->pluginToolBar)
         {
-            QAction *act = d->mainToolBar->addAction(entry.action.title);
+            QAction *act = d->pluginToolBar->addAction(entry.action.title);
             if (!entry.action.description.isEmpty())
                 act->setToolTip(entry.action.description);
             act->setData(meta);
