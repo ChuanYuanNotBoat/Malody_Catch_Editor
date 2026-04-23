@@ -423,11 +423,14 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
         }
     }
 
-    QList<PluginInterface::CanvasOverlayItem> drawItems = m_overlayCache;
-    if (!m_eventOverlayCache.isEmpty())
+    QList<PluginInterface::CanvasOverlayItem> drawItems;
+    if (m_pluginToolModeActive)
     {
-        for (const auto &item : m_eventOverlayCache)
-            drawItems.append(item);
+        drawItems = m_eventOverlayCache.isEmpty() ? m_overlayCache : m_eventOverlayCache;
+    }
+    else
+    {
+        drawItems = m_overlayCache;
     }
 
     for (const auto &item : drawItems)

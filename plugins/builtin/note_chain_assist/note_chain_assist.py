@@ -425,7 +425,8 @@ def _reset_anchors(context):
     _mark_dirty(context)
 
 
-def _append_anchor(x, y):
+def _append_anchor(context, x, y):
+    x, y = _snap_anchor_canvas_point(context, x, y)
     if not STATE["anchors"]:
         STATE["anchors"].append({"x": x, "y": y, "in": [-30.0, 0.0], "out": [30.0, 0.0], "smooth": True})
         return len(STATE["anchors"]) - 1
@@ -454,26 +455,70 @@ def _float_beat_to_triplet(beat, den):
     return beat_num, num, den
 
 
-def _canvas_to_note(context, x, y, den):
+def _canvas_to_beat(context, y):
+    ch = max(1.0, float(context.get("canvas_height", 800)))
+    scroll = float(context.get("scroll_beat", 0.0))
+    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
+    vertical_flip = bool(context.get("vertical_flip", False))
+    if vertical_flip:
+        return scroll + ((ch - y) / ch) * vr
+    return scroll + (y / ch) * vr
+
+
+def _beat_to_canvas_y(context, beat):
+    ch = max(1.0, float(context.get("canvas_height", 800)))
+    scroll = float(context.get("scroll_beat", 0.0))
+    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
+    vertical_flip = bool(context.get("vertical_flip", False))
+    t = (beat - scroll) / vr
+    if vertical_flip:
+        return ch - t * ch
+    return t * ch
+
+
+def _snap_anchor_canvas_point(context, x, y):
     cw = float(context.get("canvas_width", 1200))
     ch = max(1.0, float(context.get("canvas_height", 800)))
     l = float(context.get("left_margin", 0.0))
     r = float(context.get("right_margin", 0.0))
-    lane_w = int(context.get("lane_width", 512))
+    lane_w = max(1, int(context.get("lane_width", 512)))
     available = max(1.0, cw - l - r)
+
+    grid_snap = bool(context.get("grid_snap", False))
+    grid_div = max(1, int(context.get("grid_division", 8)))
+    time_div = max(1, int(context.get("time_division", 1)))
 
     nx = _clamp((x - l) / available, 0.0, 1.0)
     lane_x = int(round(nx * lane_w))
+    if grid_snap and grid_div > 0:
+        lane_x = int(round((lane_x / float(lane_w)) * grid_div) * (lane_w / float(grid_div)))
+    lane_x = int(_clamp(lane_x, 0, lane_w))
+    x_snapped = l + (lane_x / float(lane_w)) * available
 
-    scroll = float(context.get("scroll_beat", 0.0))
-    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
-    vertical_flip = bool(context.get("vertical_flip", False))
+    beat = _canvas_to_beat(context, y)
+    beat = round(beat * time_div) / float(time_div)
+    y_snapped = _beat_to_canvas_y(context, beat)
+    y_snapped = _clamp(y_snapped, 0.0, ch)
+    return x_snapped, y_snapped
 
-    if vertical_flip:
-        base_y = ch
-        beat = scroll + ((base_y - y) / ch) * vr
-    else:
-        beat = scroll + (y / ch) * vr
+
+def _canvas_to_note(context, x, y, den):
+    cw = float(context.get("canvas_width", 1200))
+    l = float(context.get("left_margin", 0.0))
+    r = float(context.get("right_margin", 0.0))
+    lane_w = max(1, int(context.get("lane_width", 512)))
+    available = max(1.0, cw - l - r)
+    grid_snap = bool(context.get("grid_snap", False))
+    grid_div = max(1, int(context.get("grid_division", 8)))
+    time_div = max(1, int(context.get("time_division", 1)))
+
+    nx = _clamp((x - l) / available, 0.0, 1.0)
+    lane_x = int(round(nx * lane_w))
+    if grid_snap and grid_div > 0:
+        lane_x = int(round((lane_x / float(lane_w)) * grid_div) * (lane_w / float(grid_div)))
+    lane_x = int(_clamp(lane_x, 0, lane_w))
+    beat = _canvas_to_beat(context, y)
+    beat = round(beat * time_div) / float(time_div)
 
     b, n, d = _float_beat_to_triplet(beat, den)
     return {"beat": [b, n, d], "x": lane_x, "type": 0}
@@ -570,7 +615,7 @@ def _handle_canvas_input(payload):
                     cursor = "size_all"
                     status = f"Dragging anchor A{aidx}"
             else:
-                new_idx = _append_anchor(x, y)
+                new_idx = _append_anchor(STATE["last_context"], x, y)
                 STATE["drag"] = {"mode": "anchor", "index": new_idx}
                 _mark_dirty(STATE["last_context"])
                 consumed = True

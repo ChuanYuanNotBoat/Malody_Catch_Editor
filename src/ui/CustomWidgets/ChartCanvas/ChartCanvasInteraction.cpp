@@ -355,6 +355,7 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     overlayContext.insert("vertical_flip", m_verticalFlip);
     overlayContext.insert("time_division", m_timeDivision);
     overlayContext.insert("grid_division", m_gridDivision);
+    overlayContext.insert("grid_snap", m_gridSnap);
     overlayContext.insert("left_margin", leftMargin());
     overlayContext.insert("right_margin", rightMargin());
     overlayContext.insert("lane_width", kLaneWidth);
@@ -460,6 +461,7 @@ bool ChartCanvas::dispatchPluginCanvasInput(const PluginInterface::CanvasInputEv
         return false;
 
     m_eventOverlayCache = result.overlay;
+    m_overlayCache = result.overlay;
     update();
     if (!result.cursor.trimmed().isEmpty())
         applyPluginCursor(result.cursor);
