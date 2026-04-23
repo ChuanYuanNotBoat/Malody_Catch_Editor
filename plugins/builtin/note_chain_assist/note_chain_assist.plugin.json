@@ -1,0 +1,23 @@
+﻿{
+  "pluginId": "builtin.note_chain_assist",
+  "displayName": "Note Chain Assist",
+  "version": "1.0.0",
+  "description": "Interactive pen-curve tool for direct note-chain editing on canvas",
+  "author": "Malody Catch Editor",
+  "pluginApiVersion": 3,
+  "executable": "python",
+  "args": ["./note_chain_assist.py", "--plugin"],
+  "capabilities": [
+    "tool_actions",
+    "canvas_overlay",
+    "canvas_interaction",
+    "panel_workspace",
+    "host_batch_edit"
+  ],
+  "localizedDisplayName": {
+    "zh_CN": "Note 串编辑增强"
+  },
+  "localizedDescription": {
+    "zh_CN": "在主编辑区直接进行钢笔曲线编辑并批量生成常规 note"
+  }
+}

@@ -1,0 +1,21 @@
+﻿{
+  "pluginId": "builtin.note_color_formatter",
+  "displayName": "Note Color Formatter",
+  "version": "1.1.0",
+  "description": "Format note color timing divisions with supported denominator set",
+  "author": "Malody Catch Editor",
+  "pluginApiVersion": 2,
+  "executable": "python",
+  "args": ["./note_color_formatter.py", "--plugin"],
+  "capabilities": [
+    "chart_observer",
+    "advanced_color_editor",
+    "tool_actions"
+  ],
+  "localizedDisplayName": {
+    "zh_CN": "音符颜色格式化"
+  },
+  "localizedDescription": {
+    "zh_CN": "按支持分母整理颜色节奏序列，不改谱面格式"
+  }
+}
