@@ -11,8 +11,6 @@ Core interactions:
 
 Main actions:
 - Commit Curve
-- Anchor Place (toggle accidental anchor placement)
+- Side quick actions: Anchor Place / Undo Curve / Redo Curve / Reset Curve / Cycle Density
 - Press `A` to toggle Anchor Place quickly
-- Reset Curve
-- Cycle Density
 - Export Style / Import Style

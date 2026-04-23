@@ -201,14 +201,24 @@ bool ExternalProcessPlugin::runToolAction(const QString &actionId, const QVarian
     if (actionId.isEmpty())
         return false;
 
-    // Prefer one-shot execution to match standalone script behavior and avoid
-    // request/response channel stalls for long-running file operations.
-    if (runToolActionOneShot(actionId, context))
-        return true;
+    // Stateful interaction plugins must execute tool actions in the persistent
+    // session process; one-shot child process would lose in-memory state.
+    const bool requiresPersistentSession =
+        hasCapability(kCapabilityCanvasInteraction) ||
+        hasCapability(kCapabilityPanelWorkspace);
 
-    Logger::warn(QString("Process plugin '%1' runToolAction(%2) one-shot path failed, trying protocol fallback.")
-                     .arg(m_manifest.pluginId)
-                     .arg(actionId));
+    if (!requiresPersistentSession)
+    {
+        // Prefer one-shot execution for stateless/script-like actions to avoid
+        // request/response channel stalls on long-running file operations.
+        if (runToolActionOneShot(actionId, context))
+            return true;
+
+        Logger::warn(QString("Process plugin '%1' runToolAction(%2) one-shot path failed, trying protocol fallback.")
+                         .arg(m_manifest.pluginId)
+                         .arg(actionId));
+    }
+
     QJsonObject payload{
         {"action_id", actionId},
         {"context", toJsonObject(context)},
