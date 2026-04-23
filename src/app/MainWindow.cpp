@@ -3021,6 +3021,8 @@ void MainWindow::applySidebarTheme()
                                        .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
                                             panelButtonHoverBg.name(), panelButtonPressedBg.name());
         d->mainToolBar->setStyleSheet(toolbarCss);
+        if (d->pluginToolBar)
+            d->pluginToolBar->setStyleSheet(toolbarCss);
     }
 
     if (statusBar())

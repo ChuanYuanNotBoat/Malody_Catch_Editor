@@ -169,19 +169,19 @@
     </message>
     <message>
         <source>Commit Curve -> Notes</source>
-        <translation>?????????</translation>
+        <translation>曲線をノートに確定</translation>
     </message>
     <message>
         <source>Curve Placement Density</source>
-        <translation>??????</translation>
+        <translation>曲線配置密度</translation>
     </message>
     <message>
         <source>Curve density: follow editor</source>
-        <translation>????: ???????</translation>
+        <translation>曲線密度: エディタに追従</translation>
     </message>
     <message>
         <source>Curve density set to 1/%1</source>
-        <translation>????? 1/%1 ???</translation>
+        <translation>曲線密度を 1/%1 に設定</translation>
     </message>
 </context>
 <context>
@@ -1715,19 +1715,19 @@ Open the **History** tab for collapsible long update notes.</source>
     </message>
     <message>
         <source>Curve Tool</source>
-        <translation>?????</translation>
+        <translation>曲線ツール</translation>
     </message>
     <message>
         <source>No plugin supports canvas interaction.</source>
-        <translation>????????????????????????</translation>
+        <translation>キャンバス操作に対応したプラグインがありません。</translation>
     </message>
     <message>
         <source>Plugin enhanced tool mode ON</source>
-        <translation>?????????????: ON</translation>
+        <translation>プラグイン拡張ツールモード: ON</translation>
     </message>
     <message>
         <source>Plugin enhanced tool mode OFF</source>
-        <translation>?????????????: OFF</translation>
+        <translation>プラグイン拡張ツールモード: OFF</translation>
     </message>
 </context>
 <context>

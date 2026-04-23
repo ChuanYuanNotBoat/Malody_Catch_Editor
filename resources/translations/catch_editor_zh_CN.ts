@@ -179,19 +179,19 @@
     </message>
     <message>
         <source>Commit Curve -> Notes</source>
-        <translation>???????</translation>
+        <translation>提交曲线到音符</translation>
     </message>
     <message>
         <source>Curve Placement Density</source>
-        <translation>??????</translation>
+        <translation>曲线放置密度</translation>
     </message>
     <message>
         <source>Curve density: follow editor</source>
-        <translation>??????????</translation>
+        <translation>曲线密度：跟随编辑器</translation>
     </message>
     <message>
         <source>Curve density set to 1/%1</source>
-        <translation>??????? 1/%1</translation>
+        <translation>曲线密度已设为 1/%1</translation>
     </message>
 </context>
 <context>
@@ -1725,19 +1725,19 @@ Open the **History** tab for collapsible long update notes.</source>
     </message>
     <message>
         <source>Curve Tool</source>
-        <translation>????</translation>
+        <translation>曲线工具</translation>
     </message>
     <message>
         <source>No plugin supports canvas interaction.</source>
-        <translation>????????????</translation>
+        <translation>没有支持画布交互的插件。</translation>
     </message>
     <message>
         <source>Plugin enhanced tool mode ON</source>
-        <translation>???????????</translation>
+        <translation>插件增强工具模式：开启</translation>
     </message>
     <message>
         <source>Plugin enhanced tool mode OFF</source>
-        <translation>???????????</translation>
+        <translation>插件增强工具模式：关闭</translation>
     </message>
 </context>
 <context>
