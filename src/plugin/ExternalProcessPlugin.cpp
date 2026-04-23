@@ -22,6 +22,23 @@ QJsonObject toJsonObject(const QVariantMap &map)
     return QJsonObject::fromVariantMap(map);
 }
 
+QString currentLocale()
+{
+    QString locale = Settings::instance().language().trimmed();
+    if (locale.isEmpty())
+        locale = QLocale::system().name();
+    return locale;
+}
+
+QString languageFromLocale(const QString &locale)
+{
+    QString language = locale.trimmed();
+    const int split = language.indexOf('_');
+    if (split > 0)
+        language = language.left(split);
+    return language;
+}
+
 void applyUtf8ProcessEnv(QProcessEnvironment *env)
 {
     if (!env)
@@ -526,8 +543,12 @@ bool ExternalProcessPlugin::runToolActionOneShot(const QString &actionId, const 
     oneShot.setArguments(args);
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     applyUtf8ProcessEnv(&env);
-    const QString locale = context.value("locale").toString().trimmed();
-    const QString language = context.value("language").toString().trimmed();
+    QString locale = context.value("locale").toString().trimmed();
+    QString language = context.value("language").toString().trimmed();
+    if (locale.isEmpty())
+        locale = currentLocale();
+    if (language.isEmpty())
+        language = languageFromLocale(locale);
     if (!locale.isEmpty())
         env.insert("MALODY_LOCALE", locale);
     if (!language.isEmpty())
@@ -608,6 +629,12 @@ bool ExternalProcessPlugin::ensureProcessRunning()
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     applyUtf8ProcessEnv(&env);
+    const QString locale = currentLocale();
+    const QString language = languageFromLocale(locale);
+    if (!locale.isEmpty())
+        env.insert("MALODY_LOCALE", locale);
+    if (!language.isEmpty())
+        env.insert("MALODY_LANGUAGE", language);
     m_process.setProcessEnvironment(env);
 #ifdef Q_OS_WIN
     m_process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args)

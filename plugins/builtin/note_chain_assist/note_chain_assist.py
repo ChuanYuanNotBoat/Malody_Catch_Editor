@@ -122,6 +122,7 @@ STATE = {
     "history_index": -1,
     "last_shortcut_key": 0,
     "last_shortcut_ms": 0,
+    "lang": "en",
 }
 
 
@@ -172,6 +173,10 @@ def detect_lang(default="en", context=None):
             return normalize_lang(locale_value, default)
         if isinstance(language_value, str) and language_value.strip():
             return normalize_lang(language_value, default)
+
+    state_lang = str(STATE.get("lang", "") or "").strip()
+    if state_lang:
+        return normalize_lang(state_lang, default)
 
     locale_env = os.environ.get("MALODY_LOCALE", "")
     language_env = os.environ.get("MALODY_LANGUAGE", "")
@@ -1181,7 +1186,16 @@ def run_plugin_loop():
 
         mtype = msg.get("type")
         if mtype == "notify":
-            if msg.get("event") == "shutdown":
+            event = msg.get("event")
+            payload = msg.get("payload", {}) or {}
+            if event == "initialize":
+                locale_name = str(payload.get("locale", "") or "")
+                language_name = str(payload.get("language", "") or "")
+                if locale_name.strip():
+                    STATE["lang"] = normalize_lang(locale_name, STATE.get("lang", "en"))
+                elif language_name.strip():
+                    STATE["lang"] = normalize_lang(language_name, STATE.get("lang", "en"))
+            elif event == "shutdown":
                 if STATE["project_path"] and STATE["project_dirty"]:
                     _save_project(STATE["project_path"], STATE.get("last_context", {}))
                 break
