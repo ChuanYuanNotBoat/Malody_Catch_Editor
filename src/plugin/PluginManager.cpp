@@ -31,6 +31,37 @@ QVariantMap enrichContextWithLocale(const QVariantMap &context)
         enriched.insert("language", language);
     return enriched;
 }
+
+QString normalizedPluginDisplayName(PluginInterface *plugin, const QString &locale)
+{
+    if (!plugin)
+        return QString();
+    QString name = plugin->localizedDisplayName(locale).trimmed();
+    if (name.isEmpty())
+        name = plugin->displayName().trimmed();
+    return name.toCaseFolded();
+}
+
+bool isBuiltinPluginId(const QString &pluginId)
+{
+    return pluginId.trimmed().toLower().startsWith("builtin.");
+}
+
+bool shouldPreferPlugin(PluginInterface *currentWinner, PluginInterface *candidate)
+{
+    if (!candidate)
+        return false;
+    if (!currentWinner)
+        return true;
+
+    const bool winnerBuiltin = isBuiltinPluginId(currentWinner->pluginId());
+    const bool candidateBuiltin = isBuiltinPluginId(candidate->pluginId());
+    if (winnerBuiltin != candidateBuiltin)
+        return candidateBuiltin;
+
+    // Keep deterministic ordering for same tier.
+    return false;
+}
 }
 
 PluginManager::PluginManager(QObject *parent) : QObject(parent)
@@ -54,9 +85,25 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
     {
         QVector<PluginInterface *> loaded = PluginLoader::loadPlugins(pluginsDir);
         Logger::info(QString("Discovered %1 plugin candidates.").arg(loaded.size()));
+        const QString locale = currentLocale();
+
+        // Resolve same-display-name conflicts first: keep one canonical plugin
+        // per display name and prefer builtin.* variants.
+        QHash<QString, int> winnerByDisplayName;
+        for (int i = 0; i < loaded.size(); ++i)
+        {
+            PluginInterface *p = loaded[i];
+            if (!p)
+                continue;
+            const QString key = normalizedPluginDisplayName(p, locale);
+            if (key.isEmpty())
+                continue;
+            const int existing = winnerByDisplayName.value(key, -1);
+            if (existing < 0 || shouldPreferPlugin(loaded[existing], p))
+                winnerByDisplayName.insert(key, i);
+        }
 
         QVector<PluginInterface *> rejected;
-        const QString locale = currentLocale();
         QSet<QString> seenPluginIdsLower;
 
         for (int i = 0; i < loaded.size(); ++i)
@@ -65,6 +112,17 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
             if (!p)
             {
                 Logger::warn(QString("Plugin %1 is null!").arg(i));
+                continue;
+            }
+
+            const QString displayKey = normalizedPluginDisplayName(p, locale);
+            const int displayWinnerIndex = winnerByDisplayName.value(displayKey, -1);
+            if (!displayKey.isEmpty() && displayWinnerIndex >= 0 && displayWinnerIndex != i)
+            {
+                Logger::info(QString("Plugin '%1' skipped: duplicate display name, keeping '%2'.")
+                                 .arg(p->pluginId())
+                                 .arg(loaded[displayWinnerIndex] ? loaded[displayWinnerIndex]->pluginId() : QString("unknown")));
+                rejected.append(p);
                 continue;
             }
 
