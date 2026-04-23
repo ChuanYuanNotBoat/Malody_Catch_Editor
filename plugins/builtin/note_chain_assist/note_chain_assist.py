@@ -10,6 +10,7 @@ CTRL_MODIFIER_MASK = 0x04000000
 KEY_Z = 0x5A
 KEY_Y = 0x59
 MAX_HISTORY = 128
+SERIALIZE_DEN = 288
 
 STYLE_PRESETS = [
     [4, 8, 12, 16],
@@ -19,6 +20,8 @@ STYLE_PRESETS = [
 ]
 
 STATE = {
+    # Anchors are stored in chart space:
+    # lane_x in [0..lane_width], beat in timeline beats.
     "anchors": [],
     "drag": {"mode": "", "index": -1},
     "last_context": {},
@@ -30,6 +33,10 @@ STATE = {
     "history": [],
     "history_index": -1,
 }
+
+
+def _clone(v):
+    return json.loads(json.dumps(v))
 
 
 def _write(msg):
@@ -51,31 +58,29 @@ def _clamp(v, lo, hi):
 
 
 def _capture_snapshot():
-    return {
-        "anchors": json.loads(json.dumps(STATE.get("anchors", []))),
-        "style": json.loads(json.dumps(STATE.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"}))),
-    }
+    return {"anchors": _clone(STATE.get("anchors", [])), "style": _clone(STATE.get("style", {}))}
 
 
 def _restore_snapshot(snapshot):
     if not isinstance(snapshot, dict):
         return
-    anchors = snapshot.get("anchors", [])
-    style = snapshot.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"})
-    STATE["anchors"] = anchors if isinstance(anchors, list) else []
-    STATE["style"] = style if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
+    STATE["anchors"] = _clone(snapshot.get("anchors", [])) if isinstance(snapshot.get("anchors"), list) else []
+    style = snapshot.get("style")
+    STATE["style"] = _clone(style) if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
 
 
 def _push_history():
     snap = _capture_snapshot()
     hist = STATE.get("history", [])
     idx = int(STATE.get("history_index", -1))
-    if idx >= 0 and idx < len(hist):
+
+    if 0 <= idx < len(hist):
         if hist[idx] == snap:
             return
         hist = hist[: idx + 1]
     else:
         hist = []
+
     hist.append(snap)
     if len(hist) > MAX_HISTORY:
         hist = hist[-MAX_HISTORY:]
@@ -139,6 +144,83 @@ def _sanitize_denominators(values, context):
     return cleaned
 
 
+def _float_to_triplet(beat, den):
+    den = max(1, int(den))
+    ticks = int(round(float(beat) * den))
+    beat_num = ticks // den
+    num = ticks % den
+    if num < 0:
+        num += den
+        beat_num -= 1
+    return [int(beat_num), int(num), int(den)]
+
+
+def _triplet_to_float(tri):
+    if not isinstance(tri, list) or len(tri) != 3:
+        return None
+    try:
+        b = int(tri[0])
+        n = int(tri[1])
+        d = int(tri[2])
+    except Exception:
+        return None
+    if d <= 0:
+        return None
+    return float(b) + float(n) / float(d)
+
+
+def _context_dims(context):
+    cw = float(context.get("canvas_width", 1200.0))
+    ch = max(1.0, float(context.get("canvas_height", 800.0)))
+    l = float(context.get("left_margin", 0.0))
+    r = float(context.get("right_margin", 0.0))
+    lane_w = max(1.0, float(context.get("lane_width", 512.0)))
+    available = max(1.0, cw - l - r)
+    return cw, ch, l, r, lane_w, available
+
+
+def _canvas_to_chart(context, x, y):
+    _, ch, l, _, lane_w, available = _context_dims(context)
+    nx = _clamp((float(x) - l) / available, 0.0, 1.0)
+    lane_x = nx * lane_w
+
+    scroll = float(context.get("scroll_beat", 0.0))
+    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
+    vertical_flip = bool(context.get("vertical_flip", False))
+    if vertical_flip:
+        beat = scroll + ((ch - float(y)) / ch) * vr
+    else:
+        beat = scroll + (float(y) / ch) * vr
+    return lane_x, beat
+
+
+def _chart_to_canvas(context, lane_x, beat):
+    _, ch, l, _, lane_w, available = _context_dims(context)
+    lane_x = _clamp(float(lane_x), 0.0, lane_w)
+    x = l + (lane_x / lane_w) * available
+
+    scroll = float(context.get("scroll_beat", 0.0))
+    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
+    vertical_flip = bool(context.get("vertical_flip", False))
+    t = (float(beat) - scroll) / vr
+    y = ch - t * ch if vertical_flip else t * ch
+    return x, y
+
+
+def _snap_chart_point(context, lane_x, beat):
+    lane_w = max(1.0, float(context.get("lane_width", 512.0)))
+    grid_snap = bool(context.get("grid_snap", False))
+    grid_div = max(1, int(context.get("grid_division", 8)))
+    time_div = max(1, int(context.get("time_division", 1)))
+
+    lane_x = _clamp(float(lane_x), 0.0, lane_w)
+    if grid_snap and grid_div > 0:
+        lane_x = round((lane_x / lane_w) * grid_div) * (lane_w / float(grid_div))
+
+    beat = round(float(beat) * time_div) / float(time_div)
+    return lane_x, beat
+
+
 def _first_style_path(context):
     if not isinstance(context, dict):
         return ""
@@ -179,31 +261,28 @@ def _load_style(context):
         with open(path, "r", encoding="utf-8") as f:
             payload = json.load(f)
         dens = _sanitize_denominators(payload.get("denominators"), context)
-        STATE["style"] = {
-            "style_name": str(payload.get("style_name", "imported")),
-            "denominators": dens,
-        }
+        STATE["style"] = {"style_name": str(payload.get("style_name", "imported")), "denominators": dens}
         return True
     except Exception:
         return False
 
 
-def _anchor_in_abs(a):
-    return a["x"] + a["in"][0], a["y"] + a["in"][1]
+def _anchor_in_abs_chart(a):
+    return a["lane_x"] + a["in"][0], a["beat"] + a["in"][1]
 
 
-def _anchor_out_abs(a):
-    return a["x"] + a["out"][0], a["y"] + a["out"][1]
+def _anchor_out_abs_chart(a):
+    return a["lane_x"] + a["out"][0], a["beat"] + a["out"][1]
 
 
-def _set_anchor_in_abs(a, x, y, mirror=False):
-    a["in"] = [x - a["x"], y - a["y"]]
+def _set_anchor_in_abs_chart(a, lane_x, beat, mirror=False):
+    a["in"] = [float(lane_x) - a["lane_x"], float(beat) - a["beat"]]
     if mirror and a.get("smooth", True):
         a["out"] = [-a["in"][0], -a["in"][1]]
 
 
-def _set_anchor_out_abs(a, x, y, mirror=False):
-    a["out"] = [x - a["x"], y - a["y"]]
+def _set_anchor_out_abs_chart(a, lane_x, beat, mirror=False):
+    a["out"] = [float(lane_x) - a["lane_x"], float(beat) - a["beat"]]
     if mirror and a.get("smooth", True):
         a["in"] = [-a["out"][0], -a["out"][1]]
 
@@ -212,28 +291,32 @@ def _default_anchors():
     return []
 
 
-def _find_anchor_hit(x, y, threshold=16.0):
+def _find_anchor_hit(context, cx, cy, threshold=16.0):
     best = -1
     best_dist = 1e9
     for i, a in enumerate(STATE["anchors"]):
-        d = _distance(x, y, a["x"], a["y"])
+        ax, ay = _chart_to_canvas(context, a["lane_x"], a["beat"])
+        d = _distance(cx, cy, ax, ay)
         if d < threshold and d < best_dist:
             best = i
             best_dist = d
     return best
 
 
-def _find_handle_hit(x, y, threshold=14.0):
+def _find_handle_hit(context, cx, cy, threshold=14.0):
     best = ("", -1)
     best_dist = 1e9
     for i, a in enumerate(STATE["anchors"]):
-        ix, iy = _anchor_in_abs(a)
-        d1 = _distance(x, y, ix, iy)
+        ilx, ib = _anchor_in_abs_chart(a)
+        olx, ob = _anchor_out_abs_chart(a)
+        ix, iy = _chart_to_canvas(context, ilx, ib)
+        ox, oy = _chart_to_canvas(context, olx, ob)
+
+        d1 = _distance(cx, cy, ix, iy)
         if d1 < threshold and d1 < best_dist:
             best = ("in", i)
             best_dist = d1
-        ox, oy = _anchor_out_abs(a)
-        d2 = _distance(x, y, ox, oy)
+        d2 = _distance(cx, cy, ox, oy)
         if d2 < threshold and d2 < best_dist:
             best = ("out", i)
             best_dist = d2
@@ -251,7 +334,7 @@ def _cubic_point(a, b, c, d, t):
     return x, y
 
 
-def _sample_curve(samples_per_segment=24):
+def _sample_curve_chart(samples_per_segment=24):
     anchors = STATE["anchors"]
     if len(anchors) < 2:
         return []
@@ -260,10 +343,10 @@ def _sample_curve(samples_per_segment=24):
     for i in range(len(anchors) - 1):
         a0 = anchors[i]
         a1 = anchors[i + 1]
-        p0 = (a0["x"], a0["y"])
-        p1 = _anchor_out_abs(a0)
-        p2 = _anchor_in_abs(a1)
-        p3 = (a1["x"], a1["y"])
+        p0 = (a0["lane_x"], a0["beat"])
+        p1 = _anchor_out_abs_chart(a0)
+        p2 = _anchor_in_abs_chart(a1)
+        p3 = (a1["lane_x"], a1["beat"])
         for j in range(samples_per_segment + 1):
             t = j / float(samples_per_segment)
             if i > 0 and j == 0:
@@ -272,14 +355,89 @@ def _sample_curve(samples_per_segment=24):
     return pts
 
 
-def _save_project(path):
+def _serialize_anchor(a):
+    return {
+        "lane_x": float(a.get("lane_x", 0.0)),
+        "beat": _float_to_triplet(float(a.get("beat", 0.0)), SERIALIZE_DEN),
+        "in": {
+            "lane_dx": float((a.get("in") or [0.0, 0.0])[0]),
+            "beat_delta": _float_to_triplet(float((a.get("in") or [0.0, 0.0])[1]), SERIALIZE_DEN),
+        },
+        "out": {
+            "lane_dx": float((a.get("out") or [0.0, 0.0])[0]),
+            "beat_delta": _float_to_triplet(float((a.get("out") or [0.0, 0.0])[1]), SERIALIZE_DEN),
+        },
+        "smooth": bool(a.get("smooth", True)),
+    }
+
+
+def _deserialize_anchor(raw, context):
+    if not isinstance(raw, dict):
+        return None
+
+    # New chart-space format.
+    if "lane_x" in raw:
+        lane_x = float(raw.get("lane_x", 0.0))
+        beat = _triplet_to_float(raw.get("beat"))
+        if beat is None:
+            beat = float(raw.get("beat_float", 0.0))
+
+        in_raw = raw.get("in")
+        out_raw = raw.get("out")
+
+        if isinstance(in_raw, dict):
+            in_dx = float(in_raw.get("lane_dx", 0.0))
+            in_db = _triplet_to_float(in_raw.get("beat_delta"))
+            if in_db is None:
+                in_db = float(in_raw.get("beat_delta_float", 0.0))
+        else:
+            in_arr = in_raw if isinstance(in_raw, list) else [0.0, 0.0]
+            in_dx = float(in_arr[0])
+            in_db = float(in_arr[1])
+
+        if isinstance(out_raw, dict):
+            out_dx = float(out_raw.get("lane_dx", 0.0))
+            out_db = _triplet_to_float(out_raw.get("beat_delta"))
+            if out_db is None:
+                out_db = float(out_raw.get("beat_delta_float", 0.0))
+        else:
+            out_arr = out_raw if isinstance(out_raw, list) else [0.0, 0.0]
+            out_dx = float(out_arr[0])
+            out_db = float(out_arr[1])
+
+        lane_x, beat = _snap_chart_point(context, lane_x, beat)
+        return {
+            "lane_x": lane_x,
+            "beat": beat,
+            "in": [in_dx, in_db],
+            "out": [out_dx, out_db],
+            "smooth": bool(raw.get("smooth", True)),
+        }
+
+    # Legacy canvas-space format migration.
+    if "x" in raw and "y" in raw:
+        lane_x, beat = _canvas_to_chart(context, float(raw.get("x", 0.0)), float(raw.get("y", 0.0)))
+        lane_x, beat = _snap_chart_point(context, lane_x, beat)
+        return {
+            "lane_x": lane_x,
+            "beat": beat,
+            "in": [float((raw.get("in") or [0.0, 0.0])[0]), float((raw.get("in") or [0.0, 0.0])[1])],
+            "out": [float((raw.get("out") or [0.0, 0.0])[0]), float((raw.get("out") or [0.0, 0.0])[1])],
+            "smooth": bool(raw.get("smooth", True)),
+        }
+
+    return None
+
+
+def _save_project(path, context=None):
     if not isinstance(path, str) or not path.strip():
         return False
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         payload = {
-            "format_version": 1,
-            "anchors": STATE["anchors"],
+            "format_version": 2,
+            "coordinate_space": "chart",
+            "anchors": [_serialize_anchor(a) for a in STATE.get("anchors", [])],
             "style": STATE.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"}),
         }
         with open(path, "w", encoding="utf-8") as f:
@@ -296,28 +454,23 @@ def _load_project(path, context):
     try:
         with open(path, "r", encoding="utf-8") as f:
             payload = json.load(f)
-        anchors = payload.get("anchors")
-        if isinstance(anchors, list):
-            normalized = []
-            for a in anchors:
-                if not isinstance(a, dict):
-                    continue
-                normalized.append(
-                    {
-                        "x": float(a.get("x", 0.0)),
-                        "y": float(a.get("y", 0.0)),
-                        "in": [float((a.get("in") or [0.0, 0.0])[0]), float((a.get("in") or [0.0, 0.0])[1])],
-                        "out": [float((a.get("out") or [0.0, 0.0])[0]), float((a.get("out") or [0.0, 0.0])[1])],
-                        "smooth": bool(a.get("smooth", True)),
-                    }
-                )
-            STATE["anchors"] = normalized
+
+        anchors_raw = payload.get("anchors")
+        parsed = []
+        if isinstance(anchors_raw, list):
+            for raw in anchors_raw:
+                a = _deserialize_anchor(raw, context)
+                if a is not None:
+                    parsed.append(a)
+        STATE["anchors"] = parsed
+
         style = payload.get("style")
         if isinstance(style, dict):
             STATE["style"] = {
                 "style_name": str(style.get("style_name", "loaded")),
                 "denominators": _sanitize_denominators(style.get("denominators"), context),
             }
+
         STATE["project_dirty"] = False
         return True
     except Exception:
@@ -333,7 +486,7 @@ def _ensure_project_context(context):
 
     if STATE["project_path"] != path:
         if STATE["project_path"] and STATE["project_dirty"]:
-            _save_project(STATE["project_path"])
+            _save_project(STATE["project_path"], context)
         STATE["project_path"] = path
         if not _load_project(path, context):
             STATE["anchors"] = _default_anchors()
@@ -348,7 +501,7 @@ def _mark_dirty(context):
     if isinstance(context, dict):
         _ensure_project_context(context)
         if STATE["project_path"]:
-            _save_project(STATE["project_path"])
+            _save_project(STATE["project_path"], context)
 
 
 def _build_overlay(context):
@@ -367,115 +520,47 @@ def _build_overlay(context):
     anchors = STATE["anchors"]
 
     if show_preview and len(anchors) >= 2:
-        sampled = _sample_curve(24)
+        sampled = _sample_curve_chart(24)
         for i in range(len(sampled) - 1):
-            a = sampled[i]
-            b = sampled[i + 1]
-            items.append(
-                {
-                    "kind": "line",
-                    "x1": a[0],
-                    "y1": a[1],
-                    "x2": b[0],
-                    "y2": b[1],
-                    "color": "#33CCFF",
-                    "width": 2.0,
-                }
-            )
+            a = _chart_to_canvas(context, sampled[i][0], sampled[i][1])
+            b = _chart_to_canvas(context, sampled[i + 1][0], sampled[i + 1][1])
+            items.append({"kind": "line", "x1": a[0], "y1": a[1], "x2": b[0], "y2": b[1], "color": "#33CCFF", "width": 2.0})
+
         if show_samples:
-            for x, y in sampled[::4]:
-                items.append(
-                    {
-                        "kind": "rect",
-                        "x": x - 2,
-                        "y": y - 2,
-                        "w": 4,
-                        "h": 4,
-                        "color": "#88FFFFFF",
-                        "fill_color": "#88FFFFFF",
-                        "width": 1.0,
-                    }
-                )
+            for lane_x, beat in sampled[::4]:
+                sx, sy = _chart_to_canvas(context, lane_x, beat)
+                items.append({"kind": "rect", "x": sx - 2, "y": sy - 2, "w": 4, "h": 4, "color": "#88FFFFFF", "fill_color": "#88FFFFFF", "width": 1.0})
 
     for i, a in enumerate(anchors):
         is_drag_anchor = STATE["drag"]["mode"] == "anchor" and STATE["drag"]["index"] == i
+        ax, ay = _chart_to_canvas(context, a["lane_x"], a["beat"])
 
         if show_handles:
-            ix, iy = _anchor_in_abs(a)
-            ox, oy = _anchor_out_abs(a)
-            items.append(
-                {
-                    "kind": "line",
-                    "x1": a["x"],
-                    "y1": a["y"],
-                    "x2": ix,
-                    "y2": iy,
-                    "color": "#66A0A0A0",
-                    "width": 1.0,
-                }
-            )
-            items.append(
-                {
-                    "kind": "line",
-                    "x1": a["x"],
-                    "y1": a["y"],
-                    "x2": ox,
-                    "y2": oy,
-                    "color": "#66A0A0A0",
-                    "width": 1.0,
-                }
-            )
-            items.append(
-                {
-                    "kind": "rect",
-                    "x": ix - 4,
-                    "y": iy - 4,
-                    "w": 8,
-                    "h": 8,
-                    "color": "#FFFFFFFF",
-                    "fill_color": "#AAEEAA55",
-                    "width": 1.0,
-                }
-            )
-            items.append(
-                {
-                    "kind": "rect",
-                    "x": ox - 4,
-                    "y": oy - 4,
-                    "w": 8,
-                    "h": 8,
-                    "color": "#FFFFFFFF",
-                    "fill_color": "#AAEEAA55",
-                    "width": 1.0,
-                }
-            )
+            ilx, ib = _anchor_in_abs_chart(a)
+            olx, ob = _anchor_out_abs_chart(a)
+            ix, iy = _chart_to_canvas(context, ilx, ib)
+            ox, oy = _chart_to_canvas(context, olx, ob)
+
+            items.append({"kind": "line", "x1": ax, "y1": ay, "x2": ix, "y2": iy, "color": "#66A0A0A0", "width": 1.0})
+            items.append({"kind": "line", "x1": ax, "y1": ay, "x2": ox, "y2": oy, "color": "#66A0A0A0", "width": 1.0})
+            items.append({"kind": "rect", "x": ix - 4, "y": iy - 4, "w": 8, "h": 8, "color": "#FFFFFFFF", "fill_color": "#AAEEAA55", "width": 1.0})
+            items.append({"kind": "rect", "x": ox - 4, "y": oy - 4, "w": 8, "h": 8, "color": "#FFFFFFFF", "fill_color": "#AAEEAA55", "width": 1.0})
 
         if show_points:
-            items.append(
-                {
-                    "kind": "rect",
-                    "x": a["x"] - 6,
-                    "y": a["y"] - 6,
-                    "w": 12,
-                    "h": 12,
-                    "color": "#FFFFFF",
-                    "fill_color": "#AA0077FF" if is_drag_anchor else "#AA00A3FF",
-                    "width": 1.5,
-                }
-            )
+            items.append({
+                "kind": "rect",
+                "x": ax - 6,
+                "y": ay - 6,
+                "w": 12,
+                "h": 12,
+                "color": "#FFFFFF",
+                "fill_color": "#AA0077FF" if is_drag_anchor else "#AA00A3FF",
+                "width": 1.5,
+            })
 
         if show_labels:
             mode = "S" if a.get("smooth", True) else "C"
-            items.append(
-                {
-                    "kind": "text",
-                    "x1": a["x"] + 8,
-                    "y1": a["y"] - 8,
-                    "text": f"A{i}({mode})",
-                    "color": "#FFFFFF",
-                    "font_px": 12,
-                }
-            )
+            items.append({"kind": "text", "x1": ax + 8, "y1": ay - 8, "text": f"A{i}({mode})", "color": "#FFFFFF", "font_px": 12})
 
     if show_labels:
         dens = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
@@ -492,20 +577,22 @@ def _reset_anchors(context):
     _mark_dirty(context)
 
 
-def _append_anchor(context, x, y):
-    x, y = _snap_anchor_canvas_point(context, x, y)
+def _append_anchor(context, cx, cy):
+    lane_x, beat = _canvas_to_chart(context, cx, cy)
+    lane_x, beat = _snap_chart_point(context, lane_x, beat)
+
     if not STATE["anchors"]:
-        STATE["anchors"].append({"x": x, "y": y, "in": [-30.0, 0.0], "out": [30.0, 0.0], "smooth": True})
+        STATE["anchors"].append({"lane_x": lane_x, "beat": beat, "in": [-16.0, 0.0], "out": [16.0, 0.0], "smooth": True})
         return len(STATE["anchors"]) - 1
 
     prev = STATE["anchors"][-1]
-    dx = x - prev["x"]
-    dy = y - prev["y"]
-    length = max(20.0, min(80.0, math.hypot(dx, dy) * 0.25))
-    angle = math.atan2(dy, dx)
-    ox = math.cos(angle) * length
-    oy = math.sin(angle) * length
-    STATE["anchors"].append({"x": x, "y": y, "in": [-ox, -oy], "out": [ox, oy], "smooth": True})
+    dl = lane_x - prev["lane_x"]
+    db = beat - prev["beat"]
+    length = max(0.25, min(8.0, math.hypot(dl, db) * 0.25))
+    angle = math.atan2(db, dl)
+    ol = math.cos(angle) * length
+    ob = math.sin(angle) * length
+    STATE["anchors"].append({"lane_x": lane_x, "beat": beat, "in": [-ol, -ob], "out": [ol, ob], "smooth": True})
     return len(STATE["anchors"]) - 1
 
 
@@ -522,95 +609,33 @@ def _float_beat_to_triplet(beat, den):
     return beat_num, num, den
 
 
-def _canvas_to_beat(context, y):
-    ch = max(1.0, float(context.get("canvas_height", 800)))
-    scroll = float(context.get("scroll_beat", 0.0))
-    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
-    vertical_flip = bool(context.get("vertical_flip", False))
-    if vertical_flip:
-        return scroll + ((ch - y) / ch) * vr
-    return scroll + (y / ch) * vr
-
-
-def _beat_to_canvas_y(context, beat):
-    ch = max(1.0, float(context.get("canvas_height", 800)))
-    scroll = float(context.get("scroll_beat", 0.0))
-    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
-    vertical_flip = bool(context.get("vertical_flip", False))
-    t = (beat - scroll) / vr
-    if vertical_flip:
-        return ch - t * ch
-    return t * ch
-
-
-def _snap_anchor_canvas_point(context, x, y):
-    cw = float(context.get("canvas_width", 1200))
-    ch = max(1.0, float(context.get("canvas_height", 800)))
-    l = float(context.get("left_margin", 0.0))
-    r = float(context.get("right_margin", 0.0))
-    lane_w = max(1, int(context.get("lane_width", 512)))
-    available = max(1.0, cw - l - r)
-
-    grid_snap = bool(context.get("grid_snap", False))
-    grid_div = max(1, int(context.get("grid_division", 8)))
-    time_div = max(1, int(context.get("time_division", 1)))
-
-    nx = _clamp((x - l) / available, 0.0, 1.0)
-    lane_x = int(round(nx * lane_w))
-    if grid_snap and grid_div > 0:
-        lane_x = int(round((lane_x / float(lane_w)) * grid_div) * (lane_w / float(grid_div)))
-    lane_x = int(_clamp(lane_x, 0, lane_w))
-    x_snapped = l + (lane_x / float(lane_w)) * available
-
-    beat = _canvas_to_beat(context, y)
-    beat = round(beat * time_div) / float(time_div)
-    y_snapped = _beat_to_canvas_y(context, beat)
-    y_snapped = _clamp(y_snapped, 0.0, ch)
-    return x_snapped, y_snapped
-
-
-def _canvas_to_note(context, x, y, den):
-    cw = float(context.get("canvas_width", 1200))
-    l = float(context.get("left_margin", 0.0))
-    r = float(context.get("right_margin", 0.0))
-    lane_w = max(1, int(context.get("lane_width", 512)))
-    available = max(1.0, cw - l - r)
-    grid_snap = bool(context.get("grid_snap", False))
-    grid_div = max(1, int(context.get("grid_division", 8)))
-    time_div = max(1, int(context.get("time_division", 1)))
-
-    nx = _clamp((x - l) / available, 0.0, 1.0)
-    lane_x = int(round(nx * lane_w))
-    if grid_snap and grid_div > 0:
-        lane_x = int(round((lane_x / float(lane_w)) * grid_div) * (lane_w / float(grid_div)))
-    lane_x = int(_clamp(lane_x, 0, lane_w))
-    beat = _canvas_to_beat(context, y)
-    beat = round(beat * time_div) / float(time_div)
+def _chart_to_note(context, lane_x, beat, den):
+    lane_w = max(1.0, float(context.get("lane_width", 512.0)))
+    lane_x, beat = _snap_chart_point(context, lane_x, beat)
+    lane_x = _clamp(lane_x, 0.0, lane_w)
 
     b, n, d = _float_beat_to_triplet(beat, den)
-    return {"beat": [b, n, d], "x": lane_x, "type": 0}
+    return {"beat": [b, n, d], "x": int(round(lane_x)), "type": 0}
 
 
 def _build_batch_from_curve(context):
     if not isinstance(context, dict):
         return {"add": [], "remove": [], "move": []}
 
-    sampled = _sample_curve(16)
+    sampled = _sample_curve_chart(16)
     if not sampled:
         return {"add": [], "remove": [], "move": []}
 
     dens = _sanitize_denominators(STATE.get("style", {}).get("denominators", [4]), context)
-
     out = []
     seen = set()
-    for i, (x, y) in enumerate(sampled[::2]):
+    for i, (lane_x, beat) in enumerate(sampled[::2]):
         den = int(dens[i % len(dens)])
-        note = _canvas_to_note(context, x, y, den)
-        beat = note["beat"]
-        key = (beat[0], beat[1], beat[2], note["x"])
-        if key in seen:
+        note = _chart_to_note(context, lane_x, beat, den)
+        k = (note["beat"][0], note["beat"][1], note["beat"][2], note["x"])
+        if k in seen:
             continue
-        seen.add(key)
+        seen.add(k)
         out.append(note)
 
     return {"add": out, "remove": [], "move": []}
@@ -626,12 +651,8 @@ def _cycle_density_style(context):
             target_index = (i + 1) % len(STYLE_PRESETS)
             break
     next_values = _sanitize_denominators(STYLE_PRESETS[target_index], context)
-    STATE["style"] = {
-        "style_name": f"preset_{target_index + 1}",
-        "denominators": next_values,
-    }
+    STATE["style"] = {"style_name": f"preset_{target_index + 1}", "denominators": next_values}
     _mark_dirty(context)
-    return next_values
 
 
 def _handle_canvas_input(payload):
@@ -651,12 +672,12 @@ def _handle_canvas_input(payload):
     cursor = "arrow"
 
     if et == "mouse_down":
-        hkind, hidx = _find_handle_hit(x, y)
-        aidx = _find_anchor_hit(x, y)
+        hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
+        aidx = _find_anchor_hit(STATE["last_context"], x, y)
 
         if button == RIGHT_BUTTON:
             consumed = True
-            status = "Right click is reserved (no delete)"
+            status = "Right click uses host behavior"
         elif button == LEFT_BUTTON:
             if hidx >= 0:
                 _push_history()
@@ -696,25 +717,27 @@ def _handle_canvas_input(payload):
         if mode and 0 <= idx < len(STATE["anchors"]):
             a = STATE["anchors"][idx]
             if mode == "anchor":
-                # Keep handle vectors unchanged when moving anchor.
-                # Handles are stored as local vectors relative to anchor.
-                a["x"] = x
-                a["y"] = y
+                lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
+                lane_x, beat = _snap_chart_point(STATE["last_context"], lane_x, beat)
+                a["lane_x"] = lane_x
+                a["beat"] = beat
                 cursor = "size_all"
             elif mode == "in":
-                _set_anchor_in_abs(a, x, y, mirror=True)
+                lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
+                _set_anchor_in_abs_chart(a, lane_x, beat, mirror=True)
                 cursor = "crosshair"
             elif mode == "out":
-                _set_anchor_out_abs(a, x, y, mirror=True)
+                lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
+                _set_anchor_out_abs_chart(a, lane_x, beat, mirror=True)
                 cursor = "crosshair"
             _mark_dirty(STATE["last_context"])
             consumed = True
             status = f"Editing A{idx}"
         else:
-            hkind, hidx = _find_handle_hit(x, y)
+            hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
             if hidx >= 0:
                 cursor = "pointing_hand"
-            elif _find_anchor_hit(x, y) >= 0:
+            elif _find_anchor_hit(STATE["last_context"], x, y) >= 0:
                 cursor = "pointing_hand"
 
     elif et == "mouse_up":
@@ -723,21 +746,11 @@ def _handle_canvas_input(payload):
             consumed = True
         STATE["drag"] = {"mode": "", "index": -1}
 
-    elif et == "wheel":
-        _push_history()
-        direction = float(event.get("wheel_delta", 0.0))
-        dens = list(_sanitize_denominators(STATE.get("style", {}).get("denominators", [4, 8, 12, 16]), context))
-        shift = 1 if direction > 0 else -1
-        dens = dens[shift:] + dens[:shift]
-        STATE["style"]["denominators"] = dens
-        _mark_dirty(STATE["last_context"])
-        consumed = True
-        status = "Density sequence rotated"
-
     elif et == "cancel":
         STATE["drag"] = {"mode": "", "index": -1}
         consumed = True
         status = "Interaction cancelled"
+
     elif et == "key_down":
         key = int(event.get("key", 0))
         mods = int(event.get("modifiers", 0))
@@ -751,8 +764,8 @@ def _handle_canvas_input(payload):
                 consumed = True
                 status = "Redo curve edit"
 
-    if et in ("mouse_down", "mouse_up") and not consumed:
-        # In tool mode, canvas click ownership belongs to this plugin.
+    # In tool mode, left-button canvas operations belong to plugin.
+    if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON:
         consumed = True
     if et == "mouse_move" and not consumed and int(event.get("buttons", 0)) != 0:
         consumed = True
@@ -817,12 +830,13 @@ def _run_tool_action(payload):
     action_id = str((payload or {}).get("action_id", ""))
     context = (payload or {}).get("context", {}) or {}
     _ensure_project_context(context)
+
     if action_id == "reset_curve":
         _reset_anchors(context)
         return True
     if action_id in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar"):
         if STATE["project_path"] and STATE["project_dirty"]:
-            _save_project(STATE["project_path"])
+            _save_project(STATE["project_path"], context)
         return True
     if action_id == "cycle_density_style":
         _cycle_density_style(context)
@@ -883,7 +897,7 @@ def run_plugin_loop():
         if mtype == "notify":
             if msg.get("event") == "shutdown":
                 if STATE["project_path"] and STATE["project_dirty"]:
-                    _save_project(STATE["project_path"])
+                    _save_project(STATE["project_path"], STATE.get("last_context", {}))
                 break
             continue
 
