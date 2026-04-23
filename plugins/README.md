@@ -13,10 +13,15 @@ This directory is for runtime plugin deployment (non-source).
 
 ```text
 plugins/
-  samples/
-    beat_normalizer/
-      beat_normalizer.plugin.json
-      malody_catch_colour_changer.py
+  builtin/
+    note_chain_assist/
+      note_chain_assist.plugin.json
+      note_chain_assist.py
+    note_color_formatter/
+      note_color_formatter.plugin.json
+      note_color_formatter.py
+  samples/ (not loaded by default)
+    ...
 ```
 
 ## Notes

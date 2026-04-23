@@ -41,6 +41,7 @@
 #include <QSlider>
 #include <QCoreApplication>
 #include <QAction>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QDialog>
@@ -268,12 +269,18 @@ void MainWindow::refreshPluginUiExtensions()
         d->leftPanel->setPluginQuickActions(sidebarActions);
 
     const QString interactionPluginId = firstCanvasInteractionPluginId(app->pluginManager());
+    const bool hasInteractionPlugin = !interactionPluginId.isEmpty();
     if (d->pluginToolModeAction)
     {
-        const bool hasInteractionPlugin = !interactionPluginId.isEmpty();
         d->pluginToolModeAction->setEnabled(hasInteractionPlugin);
         if (!hasInteractionPlugin && d->pluginToolModeAction->isChecked())
             d->pluginToolModeAction->setChecked(false);
+    }
+    if (d->pluginToolModeToolbarAction)
+    {
+        d->pluginToolModeToolbarAction->setEnabled(hasInteractionPlugin);
+        if (!hasInteractionPlugin && d->pluginToolModeToolbarAction->isChecked())
+            d->pluginToolModeToolbarAction->setChecked(false);
     }
     if (!interactionPluginId.isEmpty())
         d->pluginToolModePluginId = interactionPluginId;
@@ -302,11 +309,31 @@ void MainWindow::togglePluginEnhancedToolMode(bool enabled)
     if (!d->canvas)
         return;
 
+    // Keep menu toggle and toolbar toggle in sync without recursion.
+    if (auto *act = d->pluginToolModeAction)
+    {
+        if (act->isChecked() != enabled)
+        {
+            const QSignalBlocker blocker(act);
+            act->setChecked(enabled);
+        }
+    }
+    if (auto *act = d->pluginToolModeToolbarAction)
+    {
+        if (act->isChecked() != enabled)
+        {
+            const QSignalBlocker blocker(act);
+            act->setChecked(enabled);
+        }
+    }
+
     auto *app = qobject_cast<Application *>(QCoreApplication::instance());
     if (!app || !app->pluginManager())
     {
         if (d->pluginToolModeAction)
             d->pluginToolModeAction->setChecked(false);
+        if (d->pluginToolModeToolbarAction)
+            d->pluginToolModeToolbarAction->setChecked(false);
         return;
     }
 
@@ -318,6 +345,8 @@ void MainWindow::togglePluginEnhancedToolMode(bool enabled)
         statusBar()->showMessage(tr("No plugin supports canvas interaction."), 2500);
         if (d->pluginToolModeAction)
             d->pluginToolModeAction->setChecked(false);
+        if (d->pluginToolModeToolbarAction)
+            d->pluginToolModeToolbarAction->setChecked(false);
         return;
     }
 

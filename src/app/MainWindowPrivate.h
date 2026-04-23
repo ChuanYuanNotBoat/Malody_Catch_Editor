@@ -66,6 +66,8 @@ public:
     QMenu *pluginToolsMenu = nullptr;
     QMenu *pluginPanelsMenu = nullptr;
     QAction *pluginToolModeAction = nullptr;
+    QAction *pluginToolModeToolbarAction = nullptr;
+    QAction *pluginManagerToolbarAction = nullptr;
     QAction *noteSizeAction = nullptr;
     QAction *noteSoundVolumeAction = nullptr;
     QAction *calibrateSkinAction = nullptr;

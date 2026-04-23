@@ -849,6 +849,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->pluginToolsMenu = nullptr;
     d->pluginPanelsMenu = nullptr;
     d->pluginToolModeAction = nullptr;
+    d->pluginToolModeToolbarAction = nullptr;
+    d->pluginManagerToolbarAction = nullptr;
     d->mainToolBar = nullptr;
     d->languageMenu = nullptr;
     d->languageActionGroup = nullptr;
@@ -1455,6 +1457,12 @@ void MainWindow::createCentralArea()
         d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
                                                        {
         showEditorPanel(d->metaPanel); });
+        d->mainToolBar->addSeparator();
+        d->pluginManagerToolbarAction = d->mainToolBar->addAction(tr("Plugins"), this, &MainWindow::openPluginManager);
+        d->pluginToolModeToolbarAction = d->mainToolBar->addAction(tr("Curve Tool"));
+        d->pluginToolModeToolbarAction->setCheckable(true);
+        d->pluginToolModeToolbarAction->setEnabled(false);
+        connect(d->pluginToolModeToolbarAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
     }
     showEditorPanel(d->notePanel);
     applySidebarTheme();
@@ -2481,6 +2489,10 @@ void MainWindow::retranslateUi()
         d->bpmPanelAction->setText(tr("BPM"));
     if (d->metaPanelAction)
         d->metaPanelAction->setText(tr("Meta"));
+    if (d->pluginManagerToolbarAction)
+        d->pluginManagerToolbarAction->setText(tr("Plugins"));
+    if (d->pluginToolModeToolbarAction)
+        d->pluginToolModeToolbarAction->setText(tr("Curve Tool"));
     if (d->leftPanel)
         d->leftPanel->retranslateUi();
     if (d->notePanel)

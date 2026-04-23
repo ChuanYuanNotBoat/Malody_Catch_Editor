@@ -36,6 +36,12 @@ bool isProcessPluginManifestFile(const QString &fileName)
     return fileName.endsWith(".plugin.json", Qt::CaseInsensitive);
 }
 
+bool isSamplePluginPath(const QString &relativePath)
+{
+    const QString normalized = QDir::fromNativeSeparators(relativePath).toLower();
+    return normalized.startsWith("samples/");
+}
+
 QStringList jsonArrayToStringList(const QJsonArray &arr)
 {
     QStringList out;
@@ -133,6 +139,8 @@ QVector<PluginInterface *> PluginLoader::loadPlugins(const QString &pluginsDir)
 
     for (const QString &file : files)
     {
+        if (isSamplePluginPath(file))
+            continue;
         if (!isNativePluginFile(file))
             continue;
 
@@ -216,6 +224,8 @@ QVector<PluginInterface *> PluginLoader::loadPlugins(const QString &pluginsDir)
 
     for (const QString &file : files)
     {
+        if (isSamplePluginPath(file))
+            continue;
         if (!isProcessPluginManifestFile(file))
             continue;
 
