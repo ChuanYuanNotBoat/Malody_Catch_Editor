@@ -212,14 +212,14 @@ def _chart_to_canvas(context, lane_x, beat):
     return x, y
 
 
-def _snap_chart_point(context, lane_x, beat, snap_beat=True):
+def _snap_chart_point(context, lane_x, beat, snap_beat=True, snap_lane=True):
     lane_w = max(1.0, float(context.get("lane_width", 512.0)))
     grid_snap = bool(context.get("grid_snap", False))
     grid_div = max(1, int(context.get("grid_division", 8)))
     time_div = max(1, int(context.get("time_division", 1)))
 
     lane_x = _clamp(float(lane_x), 0.0, lane_w)
-    if grid_snap and grid_div > 0:
+    if snap_lane and grid_snap and grid_div > 0:
         lane_x = round((lane_x / lane_w) * grid_div) * (lane_w / float(grid_div))
 
     if snap_beat:
@@ -694,8 +694,7 @@ def _float_beat_to_triplet(beat, den):
 
 def _chart_to_note(context, lane_x, beat, den):
     lane_w = max(1.0, float(context.get("lane_width", 512.0)))
-    # Keep beat precision in the selected denominator space; only snap X to grid.
-    lane_x, beat = _snap_chart_point(context, lane_x, beat, snap_beat=False)
+    # Keep curve placement free on lane axis; no lane-grid snap for generated notes.
     lane_x = _clamp(lane_x, 0.0, lane_w)
 
     b, n, d = _float_beat_to_triplet(beat, den)
@@ -812,7 +811,8 @@ def _handle_canvas_input(payload):
             a = STATE["anchors"][idx]
             if mode == "anchor":
                 lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
-                lane_x, beat = _snap_chart_point(STATE["last_context"], lane_x, beat)
+                # Anchor drag keeps time snap, but should not apply lane-grid snap.
+                lane_x, beat = _snap_chart_point(STATE["last_context"], lane_x, beat, snap_beat=True, snap_lane=False)
                 a["lane_x"] = lane_x
                 a["beat"] = beat
                 _enforce_anchor_time_order(idx, STATE["last_context"])
