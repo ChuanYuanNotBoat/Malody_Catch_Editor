@@ -12,6 +12,7 @@ A runnable Host API v3 sample focused on pen-like curve editing:
   - sidecar auto-save/load via `curve_project_path` context
 - action:
   - `Commit Curve -> Notes` (builds one batch edit with normal notes)
+  - `Export Style Preset` / `Import Style Preset` (shared style file in style library path)
 
 ## Files
 

@@ -41,6 +41,63 @@ def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
 
+def _first_style_path(context):
+    if not isinstance(context, dict):
+        return ""
+    paths = context.get("style_library_paths")
+    if not isinstance(paths, list):
+        return ""
+    for p in paths:
+        if isinstance(p, str) and p.strip():
+            folder = p.strip()
+            os.makedirs(folder, exist_ok=True)
+            return os.path.join(folder, "default.style_tbd.json")
+    return ""
+
+
+def _save_style(context):
+    path = _first_style_path(context)
+    if not path:
+        return False
+    payload = {
+        "format_version": 1,
+        "style_id": "default",
+        "denominators": list(STATE.get("style", {}).get("denominators", [4, 8, 12, 16])),
+    }
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def _load_style(context):
+    path = _first_style_path(context)
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        dens = payload.get("denominators")
+        if not isinstance(dens, list):
+            return False
+        cleaned = []
+        for d in dens:
+            try:
+                di = int(d)
+            except Exception:
+                continue
+            if di > 0:
+                cleaned.append(di)
+        if not cleaned:
+            return False
+        STATE["style"] = {"denominators": cleaned}
+        return True
+    except Exception:
+        return False
+
+
 def _anchor_in_abs(a):
     return a["x"] + a["in"][0], a["y"] + a["in"][1]
 
@@ -553,6 +610,20 @@ def _list_tool_actions():
             "placement": "left_sidebar",
             "requires_undo_snapshot": True,
         },
+        {
+            "action_id": "export_style_preset",
+            "title": "Export Style Preset",
+            "description": "Export denominators style to shared style file",
+            "placement": "tools_menu",
+            "requires_undo_snapshot": False,
+        },
+        {
+            "action_id": "import_style_preset",
+            "title": "Import Style Preset",
+            "description": "Import denominators style from shared style file",
+            "placement": "tools_menu",
+            "requires_undo_snapshot": False,
+        },
     ]
 
 
@@ -567,6 +638,13 @@ def _run_tool_action(payload):
         if STATE["project_path"] and STATE["project_dirty"]:
             _save_project(STATE["project_path"])
         return True
+    if action_id == "export_style_preset":
+        return _save_style(context)
+    if action_id == "import_style_preset":
+        ok = _load_style(context)
+        if ok:
+            _mark_dirty(context)
+        return ok
     return False
 
 
@@ -590,7 +668,7 @@ def _build_batch_edit(payload):
 
 
 def run_one_shot(action_id):
-    if action_id in ("reset_demo_points", "commit_curve_to_notes"):
+    if action_id in ("reset_demo_points", "commit_curve_to_notes", "export_style_preset", "import_style_preset"):
         return 0
     return 1
 
