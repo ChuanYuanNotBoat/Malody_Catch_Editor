@@ -158,10 +158,12 @@ QVector<PluginInterface *> PluginLoader::loadPlugins(const QString &pluginsDir)
         }
 
         const int runtimeApiVersion = getApiVersion();
-        if (runtimeApiVersion != PluginInterface::kHostApiVersion)
+        if (runtimeApiVersion < PluginInterface::kMinSupportedPluginApiVersion ||
+            runtimeApiVersion > PluginInterface::kHostApiVersion)
         {
             qWarning() << "Plugin API mismatch:" << absPath << "plugin=" << runtimeApiVersion
-                       << "host=" << PluginInterface::kHostApiVersion;
+                       << "supported=[" << PluginInterface::kMinSupportedPluginApiVersion
+                       << ".." << PluginInterface::kHostApiVersion << "]";
             lib->unload();
             delete lib;
             continue;
@@ -195,10 +197,13 @@ QVector<PluginInterface *> PluginLoader::loadPlugins(const QString &pluginsDir)
             continue;
         }
 
-        if (plugin->pluginApiVersion() != PluginInterface::kHostApiVersion)
+        const int pluginApi = plugin->pluginApiVersion();
+        if (pluginApi < PluginInterface::kMinSupportedPluginApiVersion ||
+            pluginApi > PluginInterface::kHostApiVersion)
         {
-            qWarning() << "Plugin instance API mismatch:" << absPath << "plugin=" << plugin->pluginApiVersion()
-                       << "host=" << PluginInterface::kHostApiVersion;
+            qWarning() << "Plugin instance API mismatch:" << absPath << "plugin=" << pluginApi
+                       << "supported=[" << PluginInterface::kMinSupportedPluginApiVersion
+                       << ".." << PluginInterface::kHostApiVersion << "]";
             destroy(plugin);
             lib->unload();
             delete lib;
@@ -220,10 +225,12 @@ QVector<PluginInterface *> PluginLoader::loadPlugins(const QString &pluginsDir)
         if (!manifestOk)
             continue;
 
-        if (manifest.apiVersion != PluginInterface::kHostApiVersion)
+        if (manifest.apiVersion < PluginInterface::kMinSupportedPluginApiVersion ||
+            manifest.apiVersion > PluginInterface::kHostApiVersion)
         {
             qWarning() << "Process plugin API mismatch:" << manifestPath << "plugin=" << manifest.apiVersion
-                       << "host=" << PluginInterface::kHostApiVersion;
+                       << "supported=[" << PluginInterface::kMinSupportedPluginApiVersion
+                       << ".." << PluginInterface::kHostApiVersion << "]";
             continue;
         }
 

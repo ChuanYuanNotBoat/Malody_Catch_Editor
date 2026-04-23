@@ -845,6 +845,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->skinMenu = nullptr;
     d->noteSoundMenu = nullptr;
     d->helpMenu = nullptr;
+    d->pluginsMenu = nullptr;
     d->pluginToolsMenu = nullptr;
     d->pluginPanelsMenu = nullptr;
     d->pluginToolModeAction = nullptr;
@@ -1133,18 +1134,19 @@ void MainWindow::createMenus()
         act->setChecked(qFuzzyCompare(sp, Settings::instance().playbackSpeed()));
     }
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
-    QAction *pluginManagerAction = toolsMenu->addAction(tr("&Plugin Manager..."));
+    d->pluginsMenu = menuBar()->addMenu(tr("&Plugins"));
+    QAction *pluginManagerAction = d->pluginsMenu->addAction(tr("&Plugin Manager..."));
     connect(pluginManagerAction, &QAction::triggered, this, &MainWindow::openPluginManager);
-    d->pluginToolsMenu = toolsMenu->addMenu(tr("Plugin &Actions"));
+    d->pluginToolsMenu = d->pluginsMenu->addMenu(tr("Plugin &Actions"));
     connect(d->pluginToolsMenu, &QMenu::aboutToShow, this, &MainWindow::populatePluginToolsMenu);
-    d->pluginPanelsMenu = toolsMenu->addMenu(tr("Plugin &Panels"));
+    d->pluginPanelsMenu = d->pluginsMenu->addMenu(tr("Plugin &Panels"));
     connect(d->pluginPanelsMenu, &QMenu::aboutToShow, this, &MainWindow::populatePluginPanelsMenu);
-    d->pluginToolModeAction = toolsMenu->addAction(tr("Plugin Enhanced Tool Mode"));
+    d->pluginToolModeAction = d->pluginsMenu->addAction(tr("Plugin Enhanced Tool Mode"));
     d->pluginToolModeAction->setCheckable(true);
     d->pluginToolModeAction->setEnabled(false);
     connect(d->pluginToolModeAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
 
-    QMenu *overlayMenu = toolsMenu->addMenu(tr("Plugin Overlay Elements"));
+    QMenu *overlayMenu = d->pluginsMenu->addMenu(tr("Plugin Overlay Elements"));
     auto addOverlayToggle = [this, overlayMenu](const QString &key, const QString &label, bool defaultValue)
     {
         QAction *act = overlayMenu->addAction(label);
@@ -1165,7 +1167,7 @@ void MainWindow::createMenus()
     addOverlayToggle("sample_points", tr("Sample Points"), true);
     addOverlayToggle("labels", tr("Labels"), true);
 
-    toolsMenu->addSeparator();
+    d->pluginsMenu->addSeparator();
     QAction *gridAction = toolsMenu->addAction(tr("&Grid Settings..."), d->canvas, &ChartCanvas::showGridSettings);
     toolsMenu->addSeparator();
     QAction *logSettingsAction = toolsMenu->addAction(tr("&Log Settings..."));
