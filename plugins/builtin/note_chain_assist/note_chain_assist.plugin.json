@@ -15,9 +15,11 @@
     "host_batch_edit"
   ],
   "localizedDisplayName": {
-    "zh_CN": "Note 串编辑增强"
+    "zh_CN": "Note 串编辑增强",
+    "ja_JP": "ノートチェーン補助"
   },
   "localizedDescription": {
-    "zh_CN": "在主编辑区直接进行钢笔曲线编辑并批量生成常规 note"
+    "zh_CN": "在主编辑区直接进行钢笔曲线编辑并批量生成常规 note",
+    "ja_JP": "メイン編集領域でペン曲線を直接編集し、通常ノートを一括生成します"
   }
 }

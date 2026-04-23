@@ -1,4 +1,5 @@
 ﻿import json
+import locale
 import math
 import os
 import sys
@@ -20,6 +21,90 @@ STYLE_PRESETS = [
     [4, 6, 8, 12, 16, 24],
     [12, 16, 24, 32],
 ]
+
+TRANSLATIONS = {
+    "anchor_mode_smooth": {"en": "S", "zh": "平", "ja": "滑"},
+    "anchor_mode_corner": {"en": "C", "zh": "角", "ja": "角"},
+    "overlay_summary": {
+        "en": "Dens: {dens} | Place: 1/{den} | Anchor: {anchor_mode}",
+        "zh": "密度: {dens} | 放置: 1/{den} | 锚点: {anchor_mode}",
+        "ja": "密度: {dens} | 配置: 1/{den} | アンカー: {anchor_mode}",
+    },
+    "anchor_on": {"en": "ON", "zh": "开", "ja": "ON"},
+    "anchor_off": {"en": "OFF", "zh": "关", "ja": "OFF"},
+    "dragging_handle": {
+        "en": "Dragging {handle_kind} handle A{index}",
+        "zh": "正在拖动 A{index} 的{handle_kind}控制柄",
+        "ja": "A{index} の{handle_kind}ハンドルをドラッグ中",
+    },
+    "handle_kind_in": {"en": "in", "zh": "入侧", "ja": "内側"},
+    "handle_kind_out": {"en": "out", "zh": "出侧", "ja": "外側"},
+    "anchor_mode_changed": {
+        "en": "Anchor A{index} -> {mode}",
+        "zh": "锚点 A{index} 已切换为{mode}",
+        "ja": "アンカー A{index} を{mode}に切り替えました",
+    },
+    "mode_smooth": {"en": "smooth", "zh": "平滑", "ja": "スムーズ"},
+    "mode_corner": {"en": "corner", "zh": "折角", "ja": "コーナー"},
+    "dragging_anchor": {"en": "Dragging anchor A{index}", "zh": "正在拖动锚点 A{index}", "ja": "アンカー A{index} をドラッグ中"},
+    "anchor_place_off_hint": {
+        "en": "Anchor placement is OFF (toggle Anchor Place first)",
+        "zh": "锚点放置已关闭，请先切换“放置锚点”",
+        "ja": "アンカー配置は OFF です（先に「アンカー配置」を切り替えてください）",
+    },
+    "anchor_added": {"en": "Anchor A{index} added", "zh": "已添加锚点 A{index}", "ja": "アンカー A{index} を追加しました"},
+    "editing_anchor": {"en": "Editing A{index}", "zh": "正在编辑 A{index}", "ja": "A{index} を編集中"},
+    "curve_edit_applied": {"en": "Curve edit applied", "zh": "曲线编辑已应用", "ja": "曲線編集を適用しました"},
+    "interaction_cancelled": {"en": "Interaction cancelled", "zh": "交互已取消", "ja": "操作をキャンセルしました"},
+    "anchor_enabled": {"en": "Anchor placement enabled", "zh": "已启用锚点放置", "ja": "アンカー配置を有効にしました"},
+    "anchor_disabled": {"en": "Anchor placement disabled", "zh": "已禁用锚点放置", "ja": "アンカー配置を無効にしました"},
+    "curve_undo": {"en": "Curve undo", "zh": "已撤销曲线编辑", "ja": "曲線編集を元に戻しました"},
+    "curve_redo": {"en": "Curve redo", "zh": "已重做曲线编辑", "ja": "曲線編集をやり直しました"},
+    "action_commit_curve": {"en": "Commit Curve", "zh": "提交曲线", "ja": "曲線を確定"},
+    "action_commit_curve_desc": {
+        "en": "Generate normal notes from current pen curve",
+        "zh": "根据当前钢笔曲线生成普通 note",
+        "ja": "現在のペン曲線から通常ノートを生成します",
+    },
+    "action_anchor_place": {"en": "Anchor Place", "zh": "放置锚点", "ja": "アンカー配置"},
+    "action_anchor_place_desc": {
+        "en": "Toggle anchor placement mode to prevent misclick additions",
+        "zh": "切换锚点放置模式，避免误触新增锚点",
+        "ja": "アンカー配置モードを切り替えて誤操作での追加を防ぎます",
+    },
+    "action_undo_curve": {"en": "Undo Curve", "zh": "撤销曲线", "ja": "曲線を元に戻す"},
+    "action_undo_curve_desc": {
+        "en": "Undo latest curve anchor/handle edit",
+        "zh": "撤销最近一次曲线锚点或控制柄编辑",
+        "ja": "直前の曲線アンカーまたはハンドル編集を取り消します",
+    },
+    "action_redo_curve": {"en": "Redo Curve", "zh": "重做曲线", "ja": "曲線をやり直す"},
+    "action_redo_curve_desc": {
+        "en": "Redo latest curve anchor/handle edit",
+        "zh": "重做最近一次曲线锚点或控制柄编辑",
+        "ja": "直前の曲線アンカーまたはハンドル編集をやり直します",
+    },
+    "action_reset_curve": {"en": "Reset Curve", "zh": "重置曲线", "ja": "曲線をリセット"},
+    "action_reset_curve_desc": {
+        "en": "Reset all anchors and handles",
+        "zh": "重置全部锚点与控制柄",
+        "ja": "すべてのアンカーとハンドルをリセットします",
+    },
+    "action_cycle_density": {"en": "Cycle Density", "zh": "切换密度", "ja": "密度を切替"},
+    "action_cycle_density_desc": {
+        "en": "Rotate predefined denominator sequence styles",
+        "zh": "轮换预设的分母序列样式",
+        "ja": "定義済みの分母シーケンススタイルを切り替えます",
+    },
+    "action_export_style": {"en": "Export Style", "zh": "导出样式", "ja": "スタイルを書き出す"},
+    "action_export_style_desc": {"en": "Export current style", "zh": "导出当前样式", "ja": "現在のスタイルを書き出します"},
+    "action_import_style": {"en": "Import Style", "zh": "导入样式", "ja": "スタイルを読み込む"},
+    "action_import_style_desc": {
+        "en": "Import style from shared style file",
+        "zh": "从共享样式文件导入样式",
+        "ja": "共有スタイルファイルからスタイルを読み込みます",
+    },
+}
 
 STATE = {
     # Anchors are stored in chart space:
@@ -60,6 +145,48 @@ def _distance(x1, y1, x2, y2):
 
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
+
+
+def normalize_lang(value, default="en"):
+    if not isinstance(value, str) or not value.strip():
+        return default
+    lower = value.strip().lower()
+    if lower.startswith("zh"):
+        return "zh"
+    if lower.startswith("ja"):
+        return "ja"
+    if lower.startswith("en"):
+        return "en"
+    return default
+
+
+def detect_lang(default="en", context=None):
+    if isinstance(context, dict):
+        locale_value = context.get("locale")
+        language_value = context.get("language")
+        if isinstance(locale_value, str) and locale_value.strip():
+            return normalize_lang(locale_value, default)
+        if isinstance(language_value, str) and language_value.strip():
+            return normalize_lang(language_value, default)
+
+    locale_env = os.environ.get("MALODY_LOCALE", "")
+    language_env = os.environ.get("MALODY_LANGUAGE", "")
+    if locale_env:
+        return normalize_lang(locale_env, default)
+    if language_env:
+        return normalize_lang(language_env, default)
+
+    sys_locale = locale.getlocale()[0]
+    if sys_locale:
+        return normalize_lang(sys_locale, default)
+    return default
+
+
+def tr(context, key, **kwargs):
+    lang = detect_lang(context=context)
+    table = TRANSLATIONS.get(key, {})
+    text = table.get(lang, table.get("en", key))
+    return text.format(**kwargs)
 
 
 def _capture_snapshot():
@@ -636,15 +763,15 @@ def _build_overlay(context):
             })
 
         if show_labels:
-            mode = "S" if a.get("smooth", True) else "C"
+            mode = tr(context, "anchor_mode_smooth") if a.get("smooth", True) else tr(context, "anchor_mode_corner")
             items.append({"kind": "text", "x1": ax + 8, "y1": ay - 8, "text": f"A{i}({mode})", "color": "#FFFFFF", "font_px": 12})
 
     if show_labels:
         dens = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
         override_den = int(context.get("plugin_time_division_override", 0) or 0) if isinstance(context, dict) else 0
         effective_den = override_den if override_den > 0 else max(1, int(context.get("time_division", 4))) if isinstance(context, dict) else 4
-        anchor_mode = "ON" if bool(STATE.get("anchor_placement_enabled", False)) else "OFF"
-        label = "Dens: " + "/".join(str(d) for d in dens) + f" | Place: 1/{effective_den} | Anchor: {anchor_mode}"
+        anchor_mode = tr(context, "anchor_on") if bool(STATE.get("anchor_placement_enabled", False)) else tr(context, "anchor_off")
+        label = tr(context, "overlay_summary", dens="/".join(str(d) for d in dens), den=effective_den, anchor_mode=anchor_mode)
         items.append({"kind": "text", "x1": 16, "y1": 18, "text": label, "color": "#DDEEFF", "font_px": 12})
 
     return items
@@ -774,7 +901,7 @@ def _handle_canvas_input(payload):
                 STATE["drag"] = {"mode": hkind, "index": hidx}
                 consumed = True
                 cursor = "crosshair"
-                status = f"Dragging {hkind} handle A{hidx}"
+                status = tr(STATE["last_context"], "dragging_handle", handle_kind=tr(STATE["last_context"], f"handle_kind_{hkind}"), index=hidx)
             elif aidx >= 0:
                 is_double = (STATE["last_click_anchor"] == aidx and ts - STATE["last_click_ms"] <= 280)
                 STATE["last_click_anchor"] = aidx
@@ -784,25 +911,25 @@ def _handle_canvas_input(payload):
                     STATE["anchors"][aidx]["smooth"] = not bool(STATE["anchors"][aidx].get("smooth", True))
                     _mark_dirty(STATE["last_context"])
                     consumed = True
-                    mode = "smooth" if STATE["anchors"][aidx]["smooth"] else "corner"
-                    status = f"Anchor A{aidx} -> {mode}"
+                    mode = tr(STATE["last_context"], "mode_smooth") if STATE["anchors"][aidx]["smooth"] else tr(STATE["last_context"], "mode_corner")
+                    status = tr(STATE["last_context"], "anchor_mode_changed", index=aidx, mode=mode)
                 else:
                     _push_history()
                     STATE["drag"] = {"mode": "anchor", "index": aidx}
                     consumed = True
                     cursor = "size_all"
-                    status = f"Dragging anchor A{aidx}"
+                    status = tr(STATE["last_context"], "dragging_anchor", index=aidx)
             else:
                 consumed = True
                 if not bool(STATE.get("anchor_placement_enabled", False)):
-                    status = "Anchor placement is OFF (toggle Anchor Place first)"
+                    status = tr(STATE["last_context"], "anchor_place_off_hint")
                 else:
                     _push_history()
                     new_idx = _append_anchor(STATE["last_context"], x, y)
                     STATE["drag"] = {"mode": "anchor", "index": new_idx}
                     _mark_dirty(STATE["last_context"])
                     cursor = "size_all"
-                    status = f"Anchor A{new_idx} added"
+                    status = tr(STATE["last_context"], "anchor_added", index=new_idx)
 
     elif et == "mouse_move":
         mode = STATE["drag"]["mode"]
@@ -832,7 +959,7 @@ def _handle_canvas_input(payload):
                 cursor = "crosshair"
             _mark_dirty(STATE["last_context"])
             consumed = True
-            status = f"Editing A{idx}"
+            status = tr(STATE["last_context"], "editing_anchor", index=idx)
         else:
             hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
             if hidx >= 0:
@@ -842,14 +969,14 @@ def _handle_canvas_input(payload):
 
     elif et == "mouse_up":
         if STATE["drag"]["mode"]:
-            status = "Curve edit applied"
+            status = tr(STATE["last_context"], "curve_edit_applied")
             consumed = True
         STATE["drag"] = {"mode": "", "index": -1}
 
     elif et == "cancel":
         STATE["drag"] = {"mode": "", "index": -1}
         consumed = True
-        status = "Interaction cancelled"
+        status = tr(STATE["last_context"], "interaction_cancelled")
 
     elif et == "key_down":
         key = int(event.get("key", 0))
@@ -859,7 +986,7 @@ def _handle_canvas_input(payload):
         if not ctrl and key == KEY_A:
             STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
             consumed = True
-            status = "Anchor placement enabled" if STATE["anchor_placement_enabled"] else "Anchor placement disabled"
+            status = tr(STATE["last_context"], "anchor_enabled") if STATE["anchor_placement_enabled"] else tr(STATE["last_context"], "anchor_disabled")
             _mark_dirty(STATE["last_context"])
 
         is_undo = ctrl and key == KEY_Z and not shift
@@ -874,10 +1001,10 @@ def _handle_canvas_input(payload):
                 STATE["last_shortcut_ms"] = ts
                 if is_undo and _undo_history(STATE["last_context"]):
                     consumed = True
-                    status = "Curve undo"
+                    status = tr(STATE["last_context"], "curve_undo")
                 elif is_redo and _redo_history(STATE["last_context"]):
                     consumed = True
-                    status = "Curve redo"
+                    status = tr(STATE["last_context"], "curve_redo")
 
     # In tool mode, left-button canvas operations belong to plugin.
     if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON:
@@ -898,64 +1025,64 @@ def _list_tool_actions():
     return [
         {
             "action_id": "commit_curve_to_notes",
-            "title": "Commit Curve",
-            "description": "Generate normal notes from current pen curve",
+            "title": tr(STATE.get("last_context", {}), "action_commit_curve"),
+            "description": tr(STATE.get("last_context", {}), "action_commit_curve_desc"),
             "placement": "top_toolbar",
             "requires_undo_snapshot": True,
         },
         {
             "action_id": "toggle_anchor_placement",
-            "title": "Anchor Place",
-            "description": "Toggle anchor placement mode to prevent misclick additions",
+            "title": tr(STATE.get("last_context", {}), "action_anchor_place"),
+            "description": tr(STATE.get("last_context", {}), "action_anchor_place_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "undo_curve_edit",
-            "title": "Undo Curve",
-            "description": "Undo latest curve anchor/handle edit",
+            "title": tr(STATE.get("last_context", {}), "action_undo_curve"),
+            "description": tr(STATE.get("last_context", {}), "action_undo_curve_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "redo_curve_edit",
-            "title": "Redo Curve",
-            "description": "Redo latest curve anchor/handle edit",
+            "title": tr(STATE.get("last_context", {}), "action_redo_curve"),
+            "description": tr(STATE.get("last_context", {}), "action_redo_curve_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "commit_curve_to_notes_sidebar",
-            "title": "Commit Curve",
-            "description": "Generate normal notes from current pen curve",
+            "title": tr(STATE.get("last_context", {}), "action_commit_curve"),
+            "description": tr(STATE.get("last_context", {}), "action_commit_curve_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": True,
         },
         {
             "action_id": "reset_curve",
-            "title": "Reset Curve",
-            "description": "Reset all anchors and handles",
+            "title": tr(STATE.get("last_context", {}), "action_reset_curve"),
+            "description": tr(STATE.get("last_context", {}), "action_reset_curve_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "cycle_density_style",
-            "title": "Cycle Density",
-            "description": "Rotate predefined denominator sequence styles",
+            "title": tr(STATE.get("last_context", {}), "action_cycle_density"),
+            "description": tr(STATE.get("last_context", {}), "action_cycle_density_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "export_style_preset",
-            "title": "Export Style",
-            "description": "Export current style",
+            "title": tr(STATE.get("last_context", {}), "action_export_style"),
+            "description": tr(STATE.get("last_context", {}), "action_export_style_desc"),
             "placement": "tools_menu",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "import_style_preset",
-            "title": "Import Style",
-            "description": "Import style from shared style file",
+            "title": tr(STATE.get("last_context", {}), "action_import_style"),
+            "description": tr(STATE.get("last_context", {}), "action_import_style_desc"),
             "placement": "tools_menu",
             "requires_undo_snapshot": False,
         },

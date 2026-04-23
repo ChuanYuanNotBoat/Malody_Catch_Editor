@@ -10,22 +10,27 @@ TRANSLATIONS = {
     "processed": {
         "zh": "处理成功: {file}",
         "en": "Processed: {file}",
+        "ja": "処理成功: {file}",
     },
     "failed": {
         "zh": "处理失败: {file} | 错误: {error}",
         "en": "Failed: {file} | Error: {error}",
+        "ja": "処理失敗: {file} | エラー: {error}",
     },
     "action_title": {
         "zh": "格式化音符颜色",
         "en": "Format Note Colors",
+        "ja": "ノート色を整形",
     },
     "action_desc": {
         "zh": "按支持分母规范化颜色节奏序列。",
         "en": "Normalize timing divisions to supported color sequence set.",
+        "ja": "対応分母セットに合わせて色リズム分割を正規化します。",
     },
     "action_confirm": {
         "zh": "将对当前谱面的音符颜色节奏进行格式化处理，是否继续？",
         "en": "This will format note color timing divisions in current chart. Continue?",
+        "ja": "現在の譜面のノート色リズム分割を整形します。続行しますか？",
     },
 }
 
@@ -38,6 +43,8 @@ def normalize_lang(value, default="zh"):
         return "zh"
     if lower.startswith("en"):
         return "en"
+    if lower.startswith("ja"):
+        return "ja"
     return default
 
 
@@ -47,6 +54,8 @@ def detect_lang(default="zh"):
         return "zh"
     if sys_locale and sys_locale.lower().startswith("en"):
         return "en"
+    if sys_locale and sys_locale.lower().startswith("ja"):
+        return "ja"
     return default
 
 

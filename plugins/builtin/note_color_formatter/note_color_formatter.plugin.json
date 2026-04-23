@@ -13,9 +13,11 @@
     "tool_actions"
   ],
   "localizedDisplayName": {
-    "zh_CN": "音符颜色格式化"
+    "zh_CN": "音符颜色格式化",
+    "ja_JP": "ノート色整形"
   },
   "localizedDescription": {
-    "zh_CN": "按支持分母整理颜色节奏序列，不改谱面格式"
+    "zh_CN": "按支持分母整理颜色节奏序列，不改谱面格式",
+    "ja_JP": "対応分母に合わせて色リズム列を整理し、譜面形式は変更しません"
   }
 }
