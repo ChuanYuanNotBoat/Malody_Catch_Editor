@@ -207,7 +207,7 @@ def _chart_to_canvas(context, lane_x, beat):
     return x, y
 
 
-def _snap_chart_point(context, lane_x, beat):
+def _snap_chart_point(context, lane_x, beat, snap_beat=True):
     lane_w = max(1.0, float(context.get("lane_width", 512.0)))
     grid_snap = bool(context.get("grid_snap", False))
     grid_div = max(1, int(context.get("grid_division", 8)))
@@ -217,7 +217,8 @@ def _snap_chart_point(context, lane_x, beat):
     if grid_snap and grid_div > 0:
         lane_x = round((lane_x / lane_w) * grid_div) * (lane_w / float(grid_div))
 
-    beat = round(float(beat) * time_div) / float(time_div)
+    if snap_beat:
+        beat = round(float(beat) * time_div) / float(time_div)
     return lane_x, beat
 
 
@@ -611,7 +612,8 @@ def _float_beat_to_triplet(beat, den):
 
 def _chart_to_note(context, lane_x, beat, den):
     lane_w = max(1.0, float(context.get("lane_width", 512.0)))
-    lane_x, beat = _snap_chart_point(context, lane_x, beat)
+    # Keep beat precision in the selected denominator space; only snap X to grid.
+    lane_x, beat = _snap_chart_point(context, lane_x, beat, snap_beat=False)
     lane_x = _clamp(lane_x, 0.0, lane_w)
 
     b, n, d = _float_beat_to_triplet(beat, den)
@@ -626,7 +628,9 @@ def _build_batch_from_curve(context):
     if not sampled:
         return {"add": [], "remove": [], "move": []}
 
-    dens = _sanitize_denominators(STATE.get("style", {}).get("denominators", [4]), context)
+    # Default behavior: follow the editor's current time division directly.
+    current_den = max(1, int(context.get("time_division", 4)))
+    dens = [current_den]
     out = []
     seen = set()
     for i, (lane_x, beat) in enumerate(sampled[::2]):

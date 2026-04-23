@@ -396,7 +396,9 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const bool canQuery = nowMs >= m_overlayQueryBlockedUntilMs;
     const bool dueForQuery =
-        (m_lastOverlayQueryMs == 0) || (nowMs - m_lastOverlayQueryMs >= kOverlayQueryIntervalMs);
+        m_pluginToolModeActive ||
+        (m_lastOverlayQueryMs == 0) ||
+        (nowMs - m_lastOverlayQueryMs >= kOverlayQueryIntervalMs);
 
     if (canQuery && dueForQuery)
     {
@@ -423,15 +425,7 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
         }
     }
 
-    QList<PluginInterface::CanvasOverlayItem> drawItems;
-    if (m_pluginToolModeActive)
-    {
-        drawItems = m_eventOverlayCache.isEmpty() ? m_overlayCache : m_eventOverlayCache;
-    }
-    else
-    {
-        drawItems = m_overlayCache;
-    }
+    QList<PluginInterface::CanvasOverlayItem> drawItems = m_overlayCache;
 
     for (const auto &item : drawItems)
     {
