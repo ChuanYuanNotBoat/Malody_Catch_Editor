@@ -22,6 +22,17 @@ QJsonObject toJsonObject(const QVariantMap &map)
     return QJsonObject::fromVariantMap(map);
 }
 
+void applyUtf8ProcessEnv(QProcessEnvironment *env)
+{
+    if (!env)
+        return;
+    // Force UTF-8 stdio for cross-locale plugin protocol I/O on Windows.
+    env->insert("PYTHONUTF8", "1");
+    env->insert("PYTHONIOENCODING", "utf-8");
+    if (!env->contains("LC_ALL") || env->value("LC_ALL").trimmed().isEmpty())
+        env->insert("LC_ALL", "C.UTF-8");
+}
+
 int requestTimeoutMsForMethod(const QString &method)
 {
     if (method == "runToolAction")
@@ -514,6 +525,7 @@ bool ExternalProcessPlugin::runToolActionOneShot(const QString &actionId, const 
     oneShot.setProgram(executable);
     oneShot.setArguments(args);
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    applyUtf8ProcessEnv(&env);
     const QString locale = context.value("locale").toString().trimmed();
     const QString language = context.value("language").toString().trimmed();
     if (!locale.isEmpty())
@@ -594,6 +606,9 @@ bool ExternalProcessPlugin::ensureProcessRunning()
     m_process.setProgram(executable);
     m_process.setArguments(resolvedArgs);
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    applyUtf8ProcessEnv(&env);
+    m_process.setProcessEnvironment(env);
 #ifdef Q_OS_WIN
     m_process.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args)
                                                 { args->flags |= CREATE_NO_WINDOW; });
