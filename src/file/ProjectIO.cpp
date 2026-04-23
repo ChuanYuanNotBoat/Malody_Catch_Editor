@@ -167,16 +167,27 @@ bool ProjectIO::exportToMcz(const QString &outputMczPath, const QString &sourceC
     QProcess process;
 
 #ifdef Q_OS_WIN
-    // 固定命令 + 位置参数，避免命令拼接带来的 PowerShell 注入问题。
+    // 固定命令 + 环境变量传参，避免位置参数在某些 PowerShell 场景下丢失为 null。
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("MALODY_MCZ_PACK_DIR", QDir::toNativeSeparators(packDir));
+    env.insert("MALODY_MCZ_TEMP_ZIP", QDir::toNativeSeparators(tempZipPath));
+    process.setProcessEnvironment(env);
+
     QStringList args;
     args << "-NoProfile"
          << "-NonInteractive"
          << "-Command"
          << "$ErrorActionPreference='Stop'; "
-            "$items = Get-ChildItem -LiteralPath $args[0] -Force; "
-            "$items | Compress-Archive -DestinationPath $args[1] -CompressionLevel Optimal -Force"
-         << QDir::toNativeSeparators(packDir)
-         << QDir::toNativeSeparators(tempZipPath);
+            "$src = $env:MALODY_MCZ_PACK_DIR; "
+            "$dst = $env:MALODY_MCZ_TEMP_ZIP; "
+            "if ([string]::IsNullOrWhiteSpace($src) -or [string]::IsNullOrWhiteSpace($dst)) "
+            "{ throw 'Missing export paths in environment.' }; "
+            "if (-not (Test-Path -LiteralPath $src)) "
+            "{ throw ('Pack directory not found: ' + $src) }; "
+            "$items = Get-ChildItem -LiteralPath $src -Force; "
+            "if ($null -eq $items -or $items.Count -eq 0) "
+            "{ throw ('Pack directory is empty: ' + $src) }; "
+            "$items | Compress-Archive -DestinationPath $dst -CompressionLevel Optimal -Force";
     process.start("powershell.exe", args);
 #else
     process.setWorkingDirectory(packDir);

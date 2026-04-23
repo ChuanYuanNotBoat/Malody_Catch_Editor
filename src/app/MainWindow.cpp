@@ -262,6 +262,19 @@ QString normalizedPrefixLabel(const QString &prefix)
     return lower.left(1).toUpper() + lower.mid(1);
 }
 
+QString sanitizeFileStem(QString stem)
+{
+    stem = stem.trimmed();
+    if (stem.isEmpty())
+        return QString();
+
+    stem.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+    stem.replace(QRegularExpression("\\s+"), " ");
+    while (stem.endsWith(' ') || stem.endsWith('.'))
+        stem.chop(1);
+    return stem.trimmed();
+}
+
 QList<HistoryPrefixGroup> groupHistorySectionsByPrefix(const QList<HistorySection> &sections)
 {
     QList<HistoryPrefixGroup> groups;
@@ -2205,7 +2218,29 @@ void MainWindow::exportMcz()
         return;
     }
 
-    QString fileName = QFileDialog::getSaveFileName(this, tr("Export .mcz"), Settings::instance().lastOpenPath(),
+    QString suggestedStem;
+    if (d->chartController && d->chartController->chart())
+        suggestedStem = sanitizeFileStem(d->chartController->chart()->meta().title);
+    if (suggestedStem.isEmpty())
+        suggestedStem = sanitizeFileStem(QFileInfo(d->currentChartPath).completeBaseName());
+    if (suggestedStem.isEmpty())
+        suggestedStem = "chart";
+
+    QString initialDir;
+    const QString lastPath = Settings::instance().lastOpenPath();
+    if (!lastPath.isEmpty())
+    {
+        const QFileInfo lastInfo(lastPath);
+        if (lastInfo.exists() && lastInfo.isDir())
+            initialDir = lastInfo.absoluteFilePath();
+        else if (!lastInfo.absolutePath().isEmpty())
+            initialDir = lastInfo.absolutePath();
+    }
+    if (initialDir.isEmpty())
+        initialDir = QFileInfo(d->currentChartPath).absolutePath();
+
+    const QString initialPath = QDir(initialDir).filePath(suggestedStem + ".mcz");
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Export .mcz"), initialPath,
                                                     tr("Malody Catch Pack (*.mcz);;All Files (*.*)"));
     if (fileName.isEmpty())
     {
