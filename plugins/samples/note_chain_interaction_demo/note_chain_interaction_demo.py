@@ -1,11 +1,77 @@
 ﻿import json
 import math
+import locale
 import os
 import sys
 import time
 
 LEFT_BUTTON = 1
 RIGHT_BUTTON = 2
+
+TRANSLATIONS = {
+    "anchor_deleted": {"en": "Anchor A{index} deleted", "zh": "已删除锚点 A{index}", "ja": "アンカー A{index} を削除しました"},
+    "dragging_handle": {"en": "Dragging {kind} handle A{index}", "zh": "正在拖动 A{index} 的{kind}控制柄", "ja": "A{index} の{kind}ハンドルをドラッグ中"},
+    "handle_in": {"en": "in", "zh": "入侧", "ja": "内側"},
+    "handle_out": {"en": "out", "zh": "出侧", "ja": "外側"},
+    "anchor_mode_changed": {"en": "Anchor A{index} -> {mode}", "zh": "锚点 A{index} 已切换为{mode}", "ja": "アンカー A{index} を{mode}に切り替えました"},
+    "mode_smooth": {"en": "smooth", "zh": "平滑", "ja": "スムーズ"},
+    "mode_corner": {"en": "corner", "zh": "折角", "ja": "コーナー"},
+    "dragging_anchor": {"en": "Dragging anchor A{index}", "zh": "正在拖动锚点 A{index}", "ja": "アンカー A{index} をドラッグ中"},
+    "anchor_added": {"en": "Anchor A{index} added", "zh": "已添加锚点 A{index}", "ja": "アンカー A{index} を追加しました"},
+    "editing_anchor": {"en": "Editing A{index}", "zh": "正在编辑 A{index}", "ja": "A{index} を編集中"},
+    "curve_edit_applied": {"en": "Curve edit applied", "zh": "曲线编辑已应用", "ja": "曲線編集を適用しました"},
+    "interaction_cancelled": {"en": "Interaction cancelled", "zh": "交互已取消", "ja": "操作をキャンセルしました"},
+    "action_reset": {"en": "Reset Curve", "zh": "重置曲线", "ja": "曲線をリセット"},
+    "action_reset_desc": {"en": "Reset pen anchors/handles", "zh": "重置钢笔锚点与控制柄", "ja": "ペンのアンカーとハンドルをリセットします"},
+    "action_commit": {"en": "Commit Curve -> Notes", "zh": "提交曲线 -> 音符", "ja": "曲線を確定 -> ノート"},
+    "action_commit_desc": {"en": "Generate normal notes from current pen curve", "zh": "根据当前钢笔曲线生成普通音符", "ja": "現在のペン曲線から通常ノートを生成します"},
+    "action_export": {"en": "Export Style Preset", "zh": "导出样式预设", "ja": "スタイルプリセットを書き出す"},
+    "action_export_desc": {"en": "Export denominators style to shared style file", "zh": "将分母样式导出到共享样式文件", "ja": "分母スタイルを共有スタイルファイルへ書き出します"},
+    "action_import": {"en": "Import Style Preset", "zh": "导入样式预设", "ja": "スタイルプリセットを読み込む"},
+    "action_import_desc": {"en": "Import denominators style from shared style file", "zh": "从共享样式文件导入分母样式", "ja": "共有スタイルファイルから分母スタイルを読み込みます"},
+}
+
+
+def _normalize_lang(value, default="en"):
+    if not isinstance(value, str) or not value.strip():
+        return default
+    lower = value.strip().lower()
+    if lower.startswith("zh"):
+        return "zh"
+    if lower.startswith("ja"):
+        return "ja"
+    if lower.startswith("en"):
+        return "en"
+    return default
+
+
+def _detect_lang(context=None, default="en"):
+    if isinstance(context, dict):
+        locale_value = context.get("locale")
+        language_value = context.get("language")
+        if isinstance(locale_value, str) and locale_value.strip():
+            return _normalize_lang(locale_value, default)
+        if isinstance(language_value, str) and language_value.strip():
+            return _normalize_lang(language_value, default)
+
+    locale_env = os.environ.get("MALODY_LOCALE", "")
+    language_env = os.environ.get("MALODY_LANGUAGE", "")
+    if locale_env:
+        return _normalize_lang(locale_env, default)
+    if language_env:
+        return _normalize_lang(language_env, default)
+
+    sys_locale = locale.getlocale()[0]
+    if sys_locale:
+        return _normalize_lang(sys_locale, default)
+    return default
+
+
+def tr(context, key, **kwargs):
+    lang = _detect_lang(context=context)
+    table = TRANSLATIONS.get(key, {})
+    text = table.get(lang, table.get("en", key))
+    return text.format(**kwargs)
 
 STATE = {
     "anchors": [
@@ -513,13 +579,13 @@ def _handle_canvas_input(payload):
                 STATE["drag"] = {"mode": "", "index": -1}
                 _mark_dirty(STATE["last_context"])
                 consumed = True
-                status = f"Anchor A{aidx} deleted"
+                status = tr(STATE["last_context"], "anchor_deleted", index=aidx)
         elif button == LEFT_BUTTON:
             if hidx >= 0:
                 STATE["drag"] = {"mode": hkind, "index": hidx}
                 consumed = True
                 cursor = "crosshair"
-                status = f"Dragging {hkind} handle A{hidx}"
+                status = tr(STATE["last_context"], "dragging_handle", kind=tr(STATE["last_context"], f"handle_{hkind}"), index=hidx)
             elif aidx >= 0:
                 is_double = (STATE["last_click_anchor"] == aidx and ts - STATE["last_click_ms"] <= 280)
                 STATE["last_click_anchor"] = aidx
@@ -528,20 +594,20 @@ def _handle_canvas_input(payload):
                     STATE["anchors"][aidx]["smooth"] = not bool(STATE["anchors"][aidx].get("smooth", True))
                     _mark_dirty(STATE["last_context"])
                     consumed = True
-                    mode = "smooth" if STATE["anchors"][aidx]["smooth"] else "corner"
-                    status = f"Anchor A{aidx} -> {mode}"
+                    mode = tr(STATE["last_context"], "mode_smooth") if STATE["anchors"][aidx]["smooth"] else tr(STATE["last_context"], "mode_corner")
+                    status = tr(STATE["last_context"], "anchor_mode_changed", index=aidx, mode=mode)
                 else:
                     STATE["drag"] = {"mode": "anchor", "index": aidx}
                     consumed = True
                     cursor = "size_all"
-                    status = f"Dragging anchor A{aidx}"
+                    status = tr(STATE["last_context"], "dragging_anchor", index=aidx)
             else:
                 new_idx = _append_anchor(x, y)
                 STATE["drag"] = {"mode": "anchor", "index": new_idx}
                 _mark_dirty(STATE["last_context"])
                 consumed = True
                 cursor = "size_all"
-                status = f"Anchor A{new_idx} added"
+                status = tr(STATE["last_context"], "anchor_added", index=new_idx)
 
     elif et == "mouse_move":
         mode = STATE["drag"]["mode"]
@@ -566,7 +632,7 @@ def _handle_canvas_input(payload):
                 cursor = "crosshair"
             _mark_dirty(STATE["last_context"])
             consumed = True
-            status = f"Editing A{idx}"
+            status = tr(STATE["last_context"], "editing_anchor", index=idx)
         else:
             hkind, hidx = _find_handle_hit(x, y)
             if hidx >= 0:
@@ -576,14 +642,14 @@ def _handle_canvas_input(payload):
 
     elif et == "mouse_up":
         if STATE["drag"]["mode"]:
-            status = "Curve edit applied"
+            status = tr(STATE["last_context"], "curve_edit_applied")
             consumed = True
         STATE["drag"] = {"mode": "", "index": -1}
 
     elif et == "cancel":
         STATE["drag"] = {"mode": "", "index": -1}
         consumed = True
-        status = "Interaction cancelled"
+        status = tr(STATE["last_context"], "interaction_cancelled")
 
     return {
         "consumed": consumed,
@@ -598,29 +664,29 @@ def _list_tool_actions():
     return [
         {
             "action_id": "reset_demo_points",
-            "title": "Reset Curve",
-            "description": "Reset pen anchors/handles",
+            "title": tr(STATE.get("last_context", {}), "action_reset"),
+            "description": tr(STATE.get("last_context", {}), "action_reset_desc"),
             "placement": "tools_menu",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "commit_curve_to_notes",
-            "title": "Commit Curve -> Notes",
-            "description": "Generate normal notes from current pen curve",
+            "title": tr(STATE.get("last_context", {}), "action_commit"),
+            "description": tr(STATE.get("last_context", {}), "action_commit_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": True,
         },
         {
             "action_id": "export_style_preset",
-            "title": "Export Style Preset",
-            "description": "Export denominators style to shared style file",
+            "title": tr(STATE.get("last_context", {}), "action_export"),
+            "description": tr(STATE.get("last_context", {}), "action_export_desc"),
             "placement": "tools_menu",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "import_style_preset",
-            "title": "Import Style Preset",
-            "description": "Import denominators style from shared style file",
+            "title": tr(STATE.get("last_context", {}), "action_import"),
+            "description": tr(STATE.get("last_context", {}), "action_import_desc"),
             "placement": "tools_menu",
             "requires_undo_snapshot": False,
         },

@@ -62,6 +62,12 @@ bool shouldPreferPlugin(PluginInterface *currentWinner, PluginInterface *candida
     // Keep deterministic ordering for same tier.
     return false;
 }
+
+bool isLegacyNativeNoteChainPluginId(const QString &pluginId)
+{
+    const QString id = pluginId.trimmed().toLower();
+    return id == "tool.note_chain_assist.cpp" || id == "tool.note_chain_assist";
+}
 }
 
 PluginManager::PluginManager(QObject *parent) : QObject(parent)
@@ -90,11 +96,14 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
         // Resolve same-display-name conflicts first: keep one canonical plugin
         // per display name and prefer builtin.* variants.
         QHash<QString, int> winnerByDisplayName;
+        bool hasBuiltinNoteChainAssist = false;
         for (int i = 0; i < loaded.size(); ++i)
         {
             PluginInterface *p = loaded[i];
             if (!p)
                 continue;
+            if (p->pluginId().trimmed().compare("builtin.note_chain_assist", Qt::CaseInsensitive) == 0)
+                hasBuiltinNoteChainAssist = true;
             const QString key = normalizedPluginDisplayName(p, locale);
             if (key.isEmpty())
                 continue;
@@ -112,6 +121,14 @@ void PluginManager::loadPlugins(const QString &pluginsDir, QWidget *parent)
             if (!p)
             {
                 Logger::warn(QString("Plugin %1 is null!").arg(i));
+                continue;
+            }
+
+            if (hasBuiltinNoteChainAssist && isLegacyNativeNoteChainPluginId(p->pluginId()))
+            {
+                Logger::info(QString("Plugin '%1' skipped: replaced by builtin.note_chain_assist.")
+                                 .arg(p->pluginId()));
+                rejected.append(p);
                 continue;
             }
 

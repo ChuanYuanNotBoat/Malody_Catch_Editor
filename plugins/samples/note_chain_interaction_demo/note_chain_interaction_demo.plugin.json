@@ -15,9 +15,11 @@
     "host_batch_edit"
   ],
   "localizedDisplayName": {
-    "zh_CN": "Note 串交互演示插件"
+    "zh_CN": "Note 串交互演示插件",
+    "ja_JP": "ノートチェーン操作デモ"
   },
   "localizedDescription": {
-    "zh_CN": "演示钢笔曲线编辑、画布交互、叠加绘制与批量生成 note"
+    "zh_CN": "演示钢笔曲线编辑、画布交互、叠加绘制与批量生成 note",
+    "ja_JP": "ペン曲線編集、キャンバス操作、オーバーレイ描画、ノート一括生成をデモします"
   }
 }
