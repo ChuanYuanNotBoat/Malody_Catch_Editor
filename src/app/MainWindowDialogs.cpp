@@ -90,6 +90,16 @@ QString firstCanvasInteractionPluginId(PluginManager *pm)
     {
         if (!p)
             continue;
+        if (p->pluginId().trimmed() == "builtin.note_chain_assist" &&
+            p->hasCapability(PluginInterface::kCapabilityCanvasInteraction))
+        {
+            return p->pluginId();
+        }
+    }
+    for (PluginInterface *p : plugins)
+    {
+        if (!p)
+            continue;
         if (!p->hasCapability(PluginInterface::kCapabilityCanvasInteraction))
             continue;
         return p->pluginId();
@@ -147,6 +157,12 @@ void MainWindow::populatePluginToolsMenu()
     bool added = false;
     for (const PluginManager::ToolActionEntry &entry : entries)
     {
+        if (entry.pluginId.trimmed() == "tool.note_chain_assist.cpp" &&
+            entry.action.actionId.trimmed() == "open_note_chain_assist")
+        {
+            continue;
+        }
+
         const QString text = QString("%1  [%2]").arg(entry.action.title, entry.pluginDisplayName);
         QAction *act = d->pluginToolsMenu->addAction(text);
         if (!entry.action.description.isEmpty())
@@ -233,6 +249,14 @@ void MainWindow::refreshPluginUiExtensions()
     Logger::info(QString("refreshPluginUiExtensions: discovered %1 plugin tool actions.").arg(entries.size()));
     for (const PluginManager::ToolActionEntry &entry : entries)
     {
+        // Hide legacy note-chain bootstrap action when old plugin variants coexist.
+        if (entry.pluginId.trimmed() == "tool.note_chain_assist.cpp" &&
+            entry.action.actionId.trimmed() == "open_note_chain_assist")
+        {
+            Logger::info("Skipping legacy action tool.note_chain_assist.cpp::open_note_chain_assist");
+            continue;
+        }
+
         QVariantMap meta;
         meta.insert("plugin_id", entry.pluginId);
         meta.insert("action_id", entry.action.actionId);
