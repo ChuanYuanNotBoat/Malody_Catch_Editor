@@ -23,6 +23,8 @@ public:
         QString actionId;
         QString title;
         QString tooltip;
+        bool checkable = false;
+        bool checked = false;
     };
 
     explicit LeftPanel(QWidget *parent = nullptr);

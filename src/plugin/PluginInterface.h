@@ -22,6 +22,8 @@ public:
         QString confirmMessage;
         QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar
         bool requiresUndoSnapshot = true;
+        bool checkable = false;
+        bool checked = false;
     };
     struct FloatingPanelDescriptor
     {

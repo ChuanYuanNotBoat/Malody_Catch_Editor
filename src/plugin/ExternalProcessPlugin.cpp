@@ -217,6 +217,8 @@ QList<PluginInterface::ToolAction> ExternalProcessPlugin::toolActions() const
         if (action.placement.isEmpty())
             action.placement = PluginInterface::kPlacementToolsMenu;
         action.requiresUndoSnapshot = obj.value("requires_undo_snapshot").toBool(true);
+        action.checkable = obj.value("checkable").toBool(false);
+        action.checked = obj.value("checked").toBool(false);
         if (action.actionId.isEmpty() || action.title.isEmpty())
             continue;
         actions.append(action);

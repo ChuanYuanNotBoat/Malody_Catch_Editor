@@ -141,7 +141,32 @@ QString firstCanvasInteractionPluginId(PluginManager *pm)
     return QString();
 }
 
-void enrichContextWithSidecarPaths(QVariantMap *context, const QString &chartPath)
+void seedCurveSidecarFromSourceIfMissing(const QString &workingChartPath, const QString &sourceChartPath)
+{
+    if (workingChartPath.trimmed().isEmpty() || sourceChartPath.trimmed().isEmpty())
+        return;
+
+    const QFileInfo workingInfo(workingChartPath);
+    const QFileInfo sourceInfo(sourceChartPath);
+    if (!workingInfo.exists() || !sourceInfo.exists())
+        return;
+
+    const QString workingCurve = QDir(workingInfo.absoluteDir().filePath(".mcce-plugin"))
+                                     .filePath(workingInfo.completeBaseName() + ".curve_tbd.json");
+    if (QFileInfo::exists(workingCurve))
+        return;
+
+    const QString sourceCurve = QDir(sourceInfo.absoluteDir().filePath(".mcce-plugin"))
+                                    .filePath(sourceInfo.completeBaseName() + ".curve_tbd.json");
+    if (!QFileInfo::exists(sourceCurve))
+        return;
+
+    QDir().mkpath(QFileInfo(workingCurve).absolutePath());
+    QFile::remove(workingCurve);
+    QFile::copy(sourceCurve, workingCurve);
+}
+
+void enrichContextWithSidecarPaths(QVariantMap *context, const QString &chartPath, const QString &sourceChartPath = QString())
 {
     if (!context)
         return;
@@ -151,6 +176,8 @@ void enrichContextWithSidecarPaths(QVariantMap *context, const QString &chartPat
     const QFileInfo fi(chartPath);
     if (!fi.exists())
         return;
+
+    seedCurveSidecarFromSourceIfMissing(chartPath, sourceChartPath);
 
     const QString sidecarDir = fi.absoluteDir().filePath(".mcce-plugin");
     const QString chartStem = fi.completeBaseName();
@@ -210,6 +237,8 @@ void MainWindow::populatePluginToolsMenu()
         payload.insert("confirm_message", entry.action.confirmMessage);
         payload.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
         payload.insert("placement", entry.action.placement);
+        payload.insert("checkable", entry.action.checkable);
+        payload.insert("checked", entry.action.checked);
         act->setData(payload);
         connect(act, &QAction::triggered, this, &MainWindow::triggerPluginToolAction);
         added = true;
@@ -300,6 +329,8 @@ void MainWindow::refreshPluginUiExtensions()
         meta.insert("confirm_message", entry.action.confirmMessage);
         meta.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
         meta.insert("placement", entry.action.placement);
+        meta.insert("checkable", entry.action.checkable);
+        meta.insert("checked", entry.action.checked);
 
         const QString key = entry.pluginId + "::" + entry.action.actionId;
         d->pluginActionMeta.insert(key, meta);
@@ -310,6 +341,9 @@ void MainWindow::refreshPluginUiExtensions()
             QAction *act = d->pluginToolBar->addAction(title);
             if (!entry.action.description.isEmpty())
                 act->setToolTip(entry.action.description);
+            act->setCheckable(entry.action.checkable);
+            if (entry.action.checkable)
+                act->setChecked(entry.action.checked);
             act->setData(meta);
             connect(act, &QAction::triggered, this, &MainWindow::triggerPluginToolAction);
             d->pluginToolbarActions.append(act);
@@ -321,6 +355,8 @@ void MainWindow::refreshPluginUiExtensions()
             qa.actionId = entry.action.actionId;
             qa.title = title;
             qa.tooltip = entry.action.description;
+            qa.checkable = entry.action.checkable;
+            qa.checked = entry.action.checked;
             sidebarActions.append(qa);
         }
     }
@@ -466,7 +502,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     context.insert("chart_path_canonical", QFileInfo(chartPath).canonicalFilePath());
     if (!sourceChartPath.isEmpty())
         context.insert("chart_path_source", sourceChartPath);
-    enrichContextWithSidecarPaths(&context, chartPath);
+    enrichContextWithSidecarPaths(&context, chartPath, sourceChartPath);
     if (d->canvas)
     {
         const QVariantMap canvasContext = d->canvas->pluginCanvasActionContext();
@@ -498,6 +534,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
             return false;
         }
         statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
+        refreshPluginUiExtensions();
         return true;
     }
     else if (batchEditAvailable)
@@ -530,6 +567,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
         d->chartController->loadChart(chartPath);
 
     statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
+    refreshPluginUiExtensions();
     return true;
 }
 
@@ -588,7 +626,7 @@ void MainWindow::triggerPluginPanelAction()
     }
     if (!d->sourceChartPath.isEmpty())
         context.insert("chart_path_source", d->sourceChartPath);
-    enrichContextWithSidecarPaths(&context, chartPath);
+    enrichContextWithSidecarPaths(&context, chartPath, d->sourceChartPath);
     const QVariantMap workspaceConfig = app->pluginManager()->panelWorkspaceConfig(pluginId, context);
     if (!workspaceConfig.isEmpty())
         context.insert("workspace", workspaceConfig);

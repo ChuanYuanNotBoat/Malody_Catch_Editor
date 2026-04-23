@@ -81,6 +81,7 @@ public:
     bool flipSelectedNotes();
     bool flipSelectedNotesAroundCenter();
     void setPluginToolMode(bool enabled, const QString &pluginId = QString());
+    void setSourceChartPath(const QString &sourceChartPath);
     bool isPluginToolModeActive() const { return m_pluginToolModeActive; }
     QString pluginToolPluginId() const { return m_pluginToolPluginId; }
     void setPluginOverlayToggles(const QVariantMap &toggles);
@@ -311,6 +312,7 @@ private:
     qint64 m_overlayQueryBlockedUntilMs;
     bool m_pluginToolModeActive;
     QString m_pluginToolPluginId;
+    QString m_sourceChartPath;
     QVariantMap m_pluginOverlayToggles;
     int m_pluginPlacementDensityOverride;
 

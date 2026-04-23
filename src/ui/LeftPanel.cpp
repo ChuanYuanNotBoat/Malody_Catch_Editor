@@ -156,6 +156,9 @@ void LeftPanel::setPluginQuickActions(const QList<PluginQuickAction> &actions)
         QPushButton *btn = new QPushButton(a.title, m_pluginSectionContainer);
         if (!a.tooltip.isEmpty())
             btn->setToolTip(a.tooltip);
+        btn->setCheckable(a.checkable);
+        if (a.checkable)
+            btn->setChecked(a.checked);
         btn->setMinimumWidth(0);
         btn->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         connect(btn, &QPushButton::clicked, this, [this, a]()

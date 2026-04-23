@@ -304,6 +304,11 @@ void ChartCanvas::setPluginToolMode(bool enabled, const QString &pluginId)
     update();
 }
 
+void ChartCanvas::setSourceChartPath(const QString &sourceChartPath)
+{
+    m_sourceChartPath = sourceChartPath.trimmed();
+}
+
 void ChartCanvas::setPluginOverlayToggles(const QVariantMap &toggles)
 {
     if (toggles.isEmpty())
@@ -367,6 +372,8 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
     if (!chartPath.isEmpty())
         overlayContext.insert("chart_path", chartPath);
+    if (!m_sourceChartPath.isEmpty())
+        overlayContext.insert("chart_path_source", m_sourceChartPath);
     const QString sidecarDir = sidecarDirForChart(chartPath);
     if (!sidecarDir.isEmpty())
     {

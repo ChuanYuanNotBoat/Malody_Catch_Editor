@@ -732,6 +732,31 @@ void copyReferencedExternalResources(const QString &sourceChartPath, const QStri
     }
 }
 
+void syncSidecarDirectoryForChart(const QString &sourceChartPath, const QString &targetChartPath)
+{
+    if (sourceChartPath.isEmpty() || targetChartPath.isEmpty())
+        return;
+
+    const QString sourceDir = QFileInfo(sourceChartPath).absoluteDir().absolutePath();
+    const QString targetDir = QFileInfo(targetChartPath).absoluteDir().absolutePath();
+    if (sourceDir.isEmpty() || targetDir.isEmpty())
+        return;
+    if (QDir::cleanPath(sourceDir) == QDir::cleanPath(targetDir))
+        return;
+
+    const QString sourceSidecar = QDir(sourceDir).filePath(".mcce-plugin");
+    if (!QDir(sourceSidecar).exists())
+        return;
+
+    const QString targetSidecar = QDir(targetDir).filePath(".mcce-plugin");
+    QString copyError;
+    if (!copyDirectoryRecursively(sourceSidecar, targetSidecar, &copyError))
+    {
+        Logger::warn(QString("Failed to sync sidecar directory: %1 -> %2 (%3)")
+                         .arg(sourceSidecar, targetSidecar, copyError));
+    }
+}
+
 void cleanupSessionWorkingCopies(const QString &preserveWorkingPath)
 {
     QDir dir(sessionWorkingCopyRootDir());
@@ -817,6 +842,7 @@ bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPath
     }
 
     copyReferencedExternalResources(sourcePath, workingPath);
+    syncSidecarDirectoryForChart(sourcePath, workingPath);
 
     if (workingPathOut)
         *workingPathOut = workingPath;
@@ -1512,6 +1538,8 @@ void MainWindow::clearWorkingCopySession(bool removeWorkingFile)
         removePathRecursively(workingSessionDirFromWorkingPath(d->workingChartPath));
     d->workingChartPath.clear();
     d->sourceChartPath.clear();
+    if (d->canvas)
+        d->canvas->setSourceChartPath(QString());
     removeRecoveryState();
     cleanupSessionWorkingCopies(QString());
 }
@@ -1553,7 +1581,10 @@ void MainWindow::performAutoSaveTick()
 
     d->sourceChartPath = sourcePath;
     d->currentChartPath = sourcePath;
+    if (d->canvas)
+        d->canvas->setSourceChartPath(sourcePath);
     d->isModified = false;
+    syncSidecarDirectoryForChart(d->workingChartPath, sourcePath);
     if (!d->workingChartPath.isEmpty())
         d->chartController->saveChart(d->workingChartPath);
     persistRecoveryState();
@@ -1609,6 +1640,8 @@ void MainWindow::tryRecoverPreviousSession()
     d->sourceChartPath = state.sourcePath;
     d->workingChartPath = state.workingPath;
     d->currentChartPath = state.sourcePath;
+    if (d->canvas)
+        d->canvas->setSourceChartPath(state.sourcePath);
     d->isModified = true;
     d->canvas->update();
     statusBar()->showMessage(tr("Recovered unsaved session"), 3000);
@@ -1669,8 +1702,11 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
 
     d->sourceChartPath = savePath;
     d->currentChartPath = savePath;
+    if (d->canvas)
+        d->canvas->setSourceChartPath(savePath);
     Settings::instance().setLastOpenPath(QFileInfo(savePath).absolutePath());
     d->isModified = false;
+    syncSidecarDirectoryForChart(d->workingChartPath, savePath);
     if (!d->workingChartPath.isEmpty())
         d->chartController->saveChart(d->workingChartPath);
     else
@@ -1843,6 +1879,8 @@ void MainWindow::loadChartFile(const QString &filePath)
     d->sourceChartPath = actualChartPath;
     d->workingChartPath = workingChartPath;
     d->currentChartPath = actualChartPath;
+    if (d->canvas)
+        d->canvas->setSourceChartPath(actualChartPath);
     Settings::instance().setLastOpenPath(QFileInfo(actualChartPath).absolutePath());
 
     if (QFileInfo(filePath).suffix().toLower() != "mcz")
@@ -2157,8 +2195,11 @@ void MainWindow::saveChart()
     {
         d->sourceChartPath = currentPath;
         d->currentChartPath = currentPath;
+        if (d->canvas)
+            d->canvas->setSourceChartPath(currentPath);
         Settings::instance().setLastOpenPath(QFileInfo(currentPath).absolutePath());
         d->isModified = false;
+        syncSidecarDirectoryForChart(d->workingChartPath, currentPath);
         if (!d->workingChartPath.isEmpty())
             d->chartController->saveChart(d->workingChartPath);
         else
@@ -2190,7 +2231,10 @@ void MainWindow::saveChartAs()
     {
         d->sourceChartPath = fileName;
         d->currentChartPath = fileName;
+        if (d->canvas)
+            d->canvas->setSourceChartPath(fileName);
         d->isModified = false;
+        syncSidecarDirectoryForChart(d->workingChartPath, fileName);
         if (!d->workingChartPath.isEmpty())
             d->chartController->saveChart(d->workingChartPath);
         else

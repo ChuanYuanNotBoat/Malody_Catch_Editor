@@ -2,6 +2,7 @@ import json
 import locale
 import math
 import os
+import shutil
 import sys
 import time
 
@@ -709,12 +710,40 @@ def _ensure_project_context(context):
         if STATE["project_path"] and STATE["project_dirty"]:
             _save_project(STATE["project_path"], context)
         STATE["project_path"] = path
+        _try_seed_curve_project_from_source(context, path)
         if not _load_project(path, context):
             STATE["anchors"] = _default_anchors()
             STATE["project_dirty"] = True
         STATE["history"] = []
         STATE["history_index"] = -1
         _push_history()
+
+
+def _try_seed_curve_project_from_source(context, target_curve_path):
+    if not isinstance(context, dict):
+        return False
+    if not isinstance(target_curve_path, str) or not target_curve_path.strip():
+        return False
+    if os.path.exists(target_curve_path):
+        return True
+
+    source_chart = str(context.get("chart_path_source", "") or "").strip()
+    if not source_chart:
+        return False
+    if not os.path.exists(source_chart):
+        return False
+
+    source_stem = os.path.splitext(os.path.basename(source_chart))[0]
+    source_curve = os.path.join(os.path.dirname(source_chart), ".mcce-plugin", source_stem + ".curve_tbd.json")
+    if not os.path.exists(source_curve):
+        return False
+
+    try:
+        os.makedirs(os.path.dirname(target_curve_path), exist_ok=True)
+        shutil.copy2(source_curve, target_curve_path)
+        return True
+    except Exception:
+        return False
 
 
 def _mark_dirty(context):
@@ -1053,6 +1082,8 @@ def _list_tool_actions():
             "description": tr(STATE.get("last_context", {}), "action_anchor_place_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": bool(STATE.get("anchor_placement_enabled", False)),
         },
         {
             "action_id": "undo_curve_edit",
