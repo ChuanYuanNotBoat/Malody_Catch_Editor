@@ -1,4 +1,4 @@
-﻿import json
+import json
 import math
 import locale
 import os
@@ -73,6 +73,14 @@ def tr(context, key, **kwargs):
     text = table.get(lang, table.get("en", key))
     return text.format(**kwargs)
 
+
+def _configure_stdio_utf8():
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 STATE = {
     "anchors": [
         {"x": 220.0, "y": 220.0, "in": [-40.0, 0.0], "out": [40.0, 0.0], "smooth": True},
@@ -91,8 +99,12 @@ STATE = {
 
 def _write(msg):
     line = json.dumps(msg, ensure_ascii=False) + "\n"
-    sys.stdout.write(line)
-    sys.stdout.flush()
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout.buffer.write(line.encode("utf-8"))
+        sys.stdout.buffer.flush()
+    else:
+        sys.stdout.write(line)
+        sys.stdout.flush()
 
 
 def _respond(req_id, result):
@@ -781,6 +793,7 @@ def run_plugin_loop():
 
 
 def main():
+    _configure_stdio_utf8()
     args = sys.argv[1:]
     if "--run-tool-action" in args:
         i = args.index("--run-tool-action")

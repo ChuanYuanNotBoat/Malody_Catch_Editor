@@ -177,6 +177,22 @@
         <source>AutoScroll: OFF</source>
         <translation>自动滚动: 关</translation>
     </message>
+    <message>
+        <source>Commit Curve -> Notes</source>
+        <translation>???????</translation>
+    </message>
+    <message>
+        <source>Curve Placement Density</source>
+        <translation>??????</translation>
+    </message>
+    <message>
+        <source>Curve density: follow editor</source>
+        <translation>??????????</translation>
+    </message>
+    <message>
+        <source>Curve density set to 1/%1</source>
+        <translation>??????? 1/%1</translation>
+    </message>
 </context>
 <context>
     <name>LeftPanel</name>
@@ -1706,6 +1722,22 @@ Open the **History** tab for collapsible long update notes.</source>
         <location filename="../../src/app/MainWindowDialogs.cpp" line="535"/>
         <source>Session settings updated</source>
         <translation>会话设置已更新</translation>
+    </message>
+    <message>
+        <source>Curve Tool</source>
+        <translation>????</translation>
+    </message>
+    <message>
+        <source>No plugin supports canvas interaction.</source>
+        <translation>????????????</translation>
+    </message>
+    <message>
+        <source>Plugin enhanced tool mode ON</source>
+        <translation>???????????</translation>
+    </message>
+    <message>
+        <source>Plugin enhanced tool mode OFF</source>
+        <translation>???????????</translation>
     </message>
 </context>
 <context>

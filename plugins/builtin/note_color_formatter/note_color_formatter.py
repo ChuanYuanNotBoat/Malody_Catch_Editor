@@ -149,7 +149,16 @@ def _send_response(req_id, result):
         sys.stdout.flush()
 
 
+def _configure_stdio_utf8():
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def run_process_plugin():
+    _configure_stdio_utf8()
     lang = normalize_lang(os.environ.get("MALODY_LOCALE", "zh_CN"), "zh")
 
     for raw in sys.stdin:
@@ -232,6 +241,7 @@ def run_process_plugin():
 
 
 def run_standalone():
+    _configure_stdio_utf8()
     lang = detect_lang("zh")
     cwd = os.getcwd()
     targets = [os.path.join(cwd, n) for n in os.listdir(cwd) if n.lower().endswith((".mc", ".mcz"))]
