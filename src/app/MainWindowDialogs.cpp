@@ -81,6 +81,40 @@ QString themedDialogCss(const QColor &baseBg)
         .arg(panelBg.name(), fg.name(), inputBg.name(), border.name(), buttonBg.name(), disabledText.name());
 }
 
+QString humanizeActionId(const QString &actionId)
+{
+    QStringList parts = actionId.split('_', Qt::SkipEmptyParts);
+    for (QString &p : parts)
+    {
+        if (p.isEmpty())
+            continue;
+        p[0] = p[0].toUpper();
+    }
+    return parts.join(' ');
+}
+
+bool hasReadableGlyph(const QString &text)
+{
+    for (const QChar ch : text)
+    {
+        if (ch.isLetterOrNumber())
+            return true;
+    }
+    return false;
+}
+
+QString safeActionTitle(const PluginInterface::ToolAction &action)
+{
+    const QString raw = action.title.trimmed();
+    if (!raw.isEmpty() && raw != "?" && hasReadableGlyph(raw))
+        return raw;
+
+    const QString fallback = humanizeActionId(action.actionId.trimmed());
+    if (!fallback.isEmpty())
+        return fallback;
+    return QObject::tr("Plugin Action");
+}
+
 QString firstCanvasInteractionPluginId(PluginManager *pm)
 {
     if (!pm)
@@ -163,7 +197,8 @@ void MainWindow::populatePluginToolsMenu()
             continue;
         }
 
-        const QString text = QString("%1  [%2]").arg(entry.action.title, entry.pluginDisplayName);
+        const QString title = safeActionTitle(entry.action);
+        const QString text = QString("%1  [%2]").arg(title, entry.pluginDisplayName);
         QAction *act = d->pluginToolsMenu->addAction(text);
         if (!entry.action.description.isEmpty())
             act->setToolTip(entry.action.description);
@@ -171,7 +206,7 @@ void MainWindow::populatePluginToolsMenu()
         QVariantMap payload;
         payload.insert("plugin_id", entry.pluginId);
         payload.insert("action_id", entry.action.actionId);
-        payload.insert("title", entry.action.title);
+        payload.insert("title", title);
         payload.insert("confirm_message", entry.action.confirmMessage);
         payload.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
         payload.insert("placement", entry.action.placement);
@@ -260,7 +295,8 @@ void MainWindow::refreshPluginUiExtensions()
         QVariantMap meta;
         meta.insert("plugin_id", entry.pluginId);
         meta.insert("action_id", entry.action.actionId);
-        meta.insert("title", entry.action.title);
+        const QString title = safeActionTitle(entry.action);
+        meta.insert("title", title);
         meta.insert("confirm_message", entry.action.confirmMessage);
         meta.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
         meta.insert("placement", entry.action.placement);
@@ -271,7 +307,7 @@ void MainWindow::refreshPluginUiExtensions()
         const QString placement = entry.action.placement.toLower();
         if (placement == QString(PluginInterface::kPlacementTopToolbar) && d->pluginToolBar)
         {
-            QAction *act = d->pluginToolBar->addAction(entry.action.title);
+            QAction *act = d->pluginToolBar->addAction(title);
             if (!entry.action.description.isEmpty())
                 act->setToolTip(entry.action.description);
             act->setData(meta);
@@ -283,7 +319,7 @@ void MainWindow::refreshPluginUiExtensions()
             LeftPanel::PluginQuickAction qa;
             qa.pluginId = entry.pluginId;
             qa.actionId = entry.action.actionId;
-            qa.title = entry.action.title;
+            qa.title = title;
             qa.tooltip = entry.action.description;
             sidebarActions.append(qa);
         }
@@ -560,6 +596,7 @@ void MainWindow::triggerPluginPanelAction()
     QDialog *dialog = new QDialog(this, Qt::Tool);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setWindowTitle(title.isEmpty() ? tr("Plugin Panel") : title);
+    dialog->setStyleSheet(themedDialogCss(Settings::instance().backgroundColor()));
     if (workspaceConfig.value("default_layout").toString().toLower() == "advanced")
         dialog->resize(680, 520);
     else if (workspaceConfig.value("default_layout").toString().toLower() == "dual")
