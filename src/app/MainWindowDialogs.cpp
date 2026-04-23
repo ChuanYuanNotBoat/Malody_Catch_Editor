@@ -431,6 +431,12 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     if (!sourceChartPath.isEmpty())
         context.insert("chart_path_source", sourceChartPath);
     enrichContextWithSidecarPaths(&context, chartPath);
+    if (d->canvas)
+    {
+        const QVariantMap canvasContext = d->canvas->pluginCanvasActionContext();
+        for (auto it = canvasContext.constBegin(); it != canvasContext.constEnd(); ++it)
+            context.insert(it.key(), it.value());
+    }
     context.insert("action_title", actionTitle);
     Logger::info(QString("Running plugin action: plugin=%1 action=%2 path=%3")
                      .arg(pluginId)

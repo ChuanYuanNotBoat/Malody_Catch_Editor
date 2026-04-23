@@ -85,6 +85,7 @@ public:
     QString pluginToolPluginId() const { return m_pluginToolPluginId; }
     void setPluginOverlayToggles(const QVariantMap &toggles);
     QVariantMap pluginOverlayToggles() const { return m_pluginOverlayToggles; }
+    QVariantMap pluginCanvasActionContext() const;
 
 public slots:
     void showGridSettings();

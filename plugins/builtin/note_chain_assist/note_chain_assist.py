@@ -7,8 +7,10 @@ import time
 LEFT_BUTTON = 1
 RIGHT_BUTTON = 2
 CTRL_MODIFIER_MASK = 0x04000000
+SHIFT_MODIFIER_MASK = 0x02000000
 KEY_Z = 0x5A
 KEY_Y = 0x59
+KEY_A = 0x41
 MAX_HISTORY = 128
 SERIALIZE_DEN = 288
 
@@ -28,10 +30,13 @@ STATE = {
     "last_click_anchor": -1,
     "last_click_ms": 0,
     "style": {"denominators": [4, 8, 12, 16], "style_name": "balanced"},
+    "anchor_placement_enabled": False,
     "project_path": "",
     "project_dirty": False,
     "history": [],
     "history_index": -1,
+    "last_shortcut_key": 0,
+    "last_shortcut_ms": 0,
 }
 
 
@@ -636,7 +641,10 @@ def _build_overlay(context):
 
     if show_labels:
         dens = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
-        label = "Dens: " + "/".join(str(d) for d in dens)
+        override_den = int(context.get("plugin_time_division_override", 0) or 0) if isinstance(context, dict) else 0
+        effective_den = override_den if override_den > 0 else max(1, int(context.get("time_division", 4))) if isinstance(context, dict) else 4
+        anchor_mode = "ON" if bool(STATE.get("anchor_placement_enabled", False)) else "OFF"
+        label = "Dens: " + "/".join(str(d) for d in dens) + f" | Place: 1/{effective_den} | Anchor: {anchor_mode}"
         items.append({"kind": "text", "x1": 16, "y1": 18, "text": label, "color": "#DDEEFF", "font_px": 12})
 
     return items
@@ -786,13 +794,16 @@ def _handle_canvas_input(payload):
                     cursor = "size_all"
                     status = f"Dragging anchor A{aidx}"
             else:
-                _push_history()
-                new_idx = _append_anchor(STATE["last_context"], x, y)
-                STATE["drag"] = {"mode": "anchor", "index": new_idx}
-                _mark_dirty(STATE["last_context"])
                 consumed = True
-                cursor = "size_all"
-                status = f"Anchor A{new_idx} added"
+                if not bool(STATE.get("anchor_placement_enabled", False)):
+                    status = "Anchor placement is OFF (toggle Anchor Place first)"
+                else:
+                    _push_history()
+                    new_idx = _append_anchor(STATE["last_context"], x, y)
+                    STATE["drag"] = {"mode": "anchor", "index": new_idx}
+                    _mark_dirty(STATE["last_context"])
+                    cursor = "size_all"
+                    status = f"Anchor A{new_idx} added"
 
     elif et == "mouse_move":
         mode = STATE["drag"]["mode"]
@@ -841,8 +852,32 @@ def _handle_canvas_input(payload):
         status = "Interaction cancelled"
 
     elif et == "key_down":
-        # Do not consume host undo/redo shortcuts here.
-        pass
+        key = int(event.get("key", 0))
+        mods = int(event.get("modifiers", 0))
+        ctrl = (mods & CTRL_MODIFIER_MASK) != 0
+        shift = (mods & SHIFT_MODIFIER_MASK) != 0
+        if not ctrl and key == KEY_A:
+            STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
+            consumed = True
+            status = "Anchor placement enabled" if STATE["anchor_placement_enabled"] else "Anchor placement disabled"
+            _mark_dirty(STATE["last_context"])
+
+        is_undo = ctrl and key == KEY_Z and not shift
+        is_redo = ctrl and (key == KEY_Y or (key == KEY_Z and shift))
+        if is_undo or is_redo:
+            last_key = int(STATE.get("last_shortcut_key", 0))
+            last_ts = int(STATE.get("last_shortcut_ms", 0))
+            if key == last_key and ts - last_ts < 70:
+                consumed = True
+            else:
+                STATE["last_shortcut_key"] = key
+                STATE["last_shortcut_ms"] = ts
+                if is_undo and _undo_history(STATE["last_context"]):
+                    consumed = True
+                    status = "Curve undo"
+                elif is_redo and _redo_history(STATE["last_context"]):
+                    consumed = True
+                    status = "Curve redo"
 
     # In tool mode, left-button canvas operations belong to plugin.
     if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON:
@@ -867,6 +902,27 @@ def _list_tool_actions():
             "description": "Generate normal notes from current pen curve",
             "placement": "top_toolbar",
             "requires_undo_snapshot": True,
+        },
+        {
+            "action_id": "toggle_anchor_placement",
+            "title": "Anchor Place",
+            "description": "Toggle anchor placement mode to prevent misclick additions",
+            "placement": "top_toolbar",
+            "requires_undo_snapshot": False,
+        },
+        {
+            "action_id": "undo_curve_edit",
+            "title": "Undo Curve",
+            "description": "Undo latest curve anchor/handle edit",
+            "placement": "top_toolbar",
+            "requires_undo_snapshot": False,
+        },
+        {
+            "action_id": "redo_curve_edit",
+            "title": "Redo Curve",
+            "description": "Redo latest curve anchor/handle edit",
+            "placement": "top_toolbar",
+            "requires_undo_snapshot": False,
         },
         {
             "action_id": "commit_curve_to_notes_sidebar",
@@ -918,9 +974,17 @@ def _run_tool_action(payload):
         if STATE["project_path"] and STATE["project_dirty"]:
             _save_project(STATE["project_path"], context)
         return True
+    if action_id == "toggle_anchor_placement":
+        STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
+        _mark_dirty(context)
+        return True
     if action_id == "cycle_density_style":
         _cycle_density_style(context)
         return True
+    if action_id == "undo_curve_edit":
+        return _undo_history(context)
+    if action_id == "redo_curve_edit":
+        return _redo_history(context)
     if action_id == "export_style_preset":
         return _save_style(context)
     if action_id == "import_style_preset":
@@ -956,6 +1020,9 @@ def run_one_shot(action_id):
         "reset_curve",
         "commit_curve_to_notes",
         "commit_curve_to_notes_sidebar",
+        "toggle_anchor_placement",
+        "undo_curve_edit",
+        "redo_curve_edit",
         "cycle_density_style",
         "export_style_preset",
         "import_style_preset",

@@ -403,6 +403,11 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     return overlayContext;
 }
 
+QVariantMap ChartCanvas::pluginCanvasActionContext() const
+{
+    return buildPluginCanvasContext();
+}
+
 void ChartCanvas::applyPluginCursor(const QString &cursorName)
 {
     const QString key = cursorName.trimmed().toLower();
