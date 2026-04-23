@@ -362,6 +362,7 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     overlayContext.insert("tool_mode_active", m_pluginToolModeActive);
     overlayContext.insert("note_type_scope", "normal_only");
     overlayContext.insert("overlay_toggles", m_pluginOverlayToggles);
+    overlayContext.insert("plugin_time_division_override", m_pluginPlacementDensityOverride);
 
     const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
     if (!chartPath.isEmpty())

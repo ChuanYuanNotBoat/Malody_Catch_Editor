@@ -311,6 +311,7 @@ private:
     bool m_pluginToolModeActive;
     QString m_pluginToolPluginId;
     QVariantMap m_pluginOverlayToggles;
+    int m_pluginPlacementDensityOverride;
 
     QSet<int> m_cachedHyperSet;
     bool m_hyperCacheValid;

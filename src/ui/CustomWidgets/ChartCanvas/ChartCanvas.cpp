@@ -82,6 +82,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_overlayQueryBlockedUntilMs(0),
       m_pluginToolModeActive(false),
       m_pluginToolPluginId(QString()),
+      m_pluginPlacementDensityOverride(0),
       m_hyperCacheValid(false),
       m_backgroundCacheDirty(true),
       m_noteDataDirty(true),

@@ -570,6 +570,59 @@ void ChartCanvas::populateColorMenu(QMenu *colorMenu, const QVector<int> &target
 
 void ChartCanvas::showRightClickMenu(QMouseEvent *event)
 {
+    if (m_pluginToolModeActive)
+    {
+        QMenu pluginMenu(this);
+        QAction *commitCurveAction = pluginMenu.addAction(tr("Commit Curve -> Notes"));
+        pluginMenu.addSeparator();
+
+        QMenu *densityMenu = pluginMenu.addMenu(tr("Curve Placement Density"));
+        struct DensityOption
+        {
+            int denominator;
+            const char *label;
+        };
+        const DensityOption densityOptions[] = {
+            {0, "Follow Editor"},
+            {1, "1/1"},
+            {2, "1/2"},
+            {3, "1/3"},
+            {4, "1/4"},
+            {6, "1/6"},
+            {8, "1/8"},
+            {12, "1/12"},
+            {16, "1/16"},
+            {24, "1/24"},
+            {32, "1/32"},
+            {48, "1/48"},
+            {64, "1/64"},
+            {96, "1/96"},
+            {192, "1/192"},
+            {288, "1/288"}};
+
+        for (const DensityOption &opt : densityOptions)
+        {
+            QAction *act = densityMenu->addAction(tr(opt.label));
+            act->setCheckable(true);
+            act->setChecked(m_pluginPlacementDensityOverride == opt.denominator);
+            connect(act, &QAction::triggered, this, [this, opt]() {
+                m_pluginPlacementDensityOverride = opt.denominator;
+                if (opt.denominator <= 0)
+                    emit statusMessage(tr("Curve density: follow editor"));
+                else
+                    emit statusMessage(tr("Curve density set to 1/%1").arg(opt.denominator));
+                update();
+            });
+        }
+
+        QAction *selected = pluginMenu.exec(event->globalPos());
+        if (selected == commitCurveAction)
+        {
+            triggerPluginBatchAction("commit_curve_to_notes", tr("Commit Curve -> Notes"));
+        }
+        return;
+    }
+
     QMenu menu(this);
     QAction *playFromRefAction = menu.addAction(tr("Play from Reference Time"));
     QAction *pasteAction = menu.addAction(tr("Paste"));

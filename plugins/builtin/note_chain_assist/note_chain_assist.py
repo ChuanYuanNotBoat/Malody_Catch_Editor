@@ -660,10 +660,9 @@ def _append_anchor(context, cx, cy):
     prev = STATE["anchors"][-1]
     dl = lane_x - prev["lane_x"]
     db = beat - prev["beat"]
-    length = max(0.25, min(8.0, math.hypot(dl, db) * 0.25))
-    angle = math.atan2(db, dl)
-    ol = math.cos(angle) * length
-    ob = math.sin(angle) * length
+    # Split axis scaling to avoid overly weak handles on lane axis.
+    ol = _clamp(dl * 0.25, -96.0, 96.0)
+    ob = _clamp(db * 0.25, -2.0, 2.0)
     STATE["anchors"].append({"lane_x": lane_x, "beat": beat, "in": [-ol, -ob], "out": [ol, ob], "smooth": True})
     idx = len(STATE["anchors"]) - 1
     _enforce_anchor_time_order(idx, context)
@@ -703,7 +702,8 @@ def _build_batch_from_curve(context):
     if len(sampled) < 2:
         return {"add": [], "remove": [], "move": []}
 
-    current_den = max(1, int(context.get("time_division", 4)))
+    override_den = int(context.get("plugin_time_division_override", 0) or 0)
+    current_den = max(1, override_den if override_den > 0 else int(context.get("time_division", 4)))
     samples_by_beat = _normalize_samples_by_beat(sampled)
     if len(samples_by_beat) < 2:
         return {"add": [], "remove": [], "move": []}
@@ -760,8 +760,7 @@ def _handle_canvas_input(payload):
         aidx = _find_anchor_hit(STATE["last_context"], x, y)
 
         if button == RIGHT_BUTTON:
-            consumed = True
-            status = "Right click uses host behavior"
+            consumed = False
         elif button == LEFT_BUTTON:
             if hidx >= 0:
                 _push_history()
@@ -842,17 +841,8 @@ def _handle_canvas_input(payload):
         status = "Interaction cancelled"
 
     elif et == "key_down":
-        key = int(event.get("key", 0))
-        mods = int(event.get("modifiers", 0))
-        ctrl = (mods & CTRL_MODIFIER_MASK) != 0
-        if ctrl and key == KEY_Z:
-            if _undo_history(STATE["last_context"]):
-                consumed = True
-                status = "Undo curve edit"
-        elif ctrl and key == KEY_Y:
-            if _redo_history(STATE["last_context"]):
-                consumed = True
-                status = "Redo curve edit"
+        # Do not consume host undo/redo shortcuts here.
+        pass
 
     # In tool mode, left-button canvas operations belong to plugin.
     if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON:
