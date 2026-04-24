@@ -916,8 +916,10 @@ MainWindow::MainWindow(ChartController *chartCtrl,
             {
         d->isModified = true;
         d->canvas->update();
-        d->undoAction->setEnabled(d->chartController->canUndo());
-        d->redoAction->setEnabled(d->chartController->canRedo());
+        if (d->undoAction)
+            d->undoAction->setEnabled(true);
+        if (d->redoAction)
+            d->redoAction->setEnabled(true);
         if (d->selectionController) {
             d->selectionController->setNotes(&(d->chartController->chart()->notes()));
             d->selectionController->updateSelectionFromNotes();
@@ -1019,8 +1021,10 @@ void MainWindow::createMenus()
     QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
     d->undoAction = editMenu->addAction(tr("&Undo"), this, &MainWindow::undo);
     registerShortcutAction(d->undoAction, "edit.undo", QKeySequence::Undo);
+    d->undoAction->setEnabled(true);
     d->redoAction = editMenu->addAction(tr("&Redo"), this, &MainWindow::redo);
     registerShortcutAction(d->redoAction, "edit.redo", QKeySequence::Redo);
+    d->redoAction->setEnabled(true);
     editMenu->addSeparator();
     QAction *copyAction = editMenu->addAction(tr("&Copy"));
     connect(copyAction, &QAction::triggered, d->canvas, &ChartCanvas::handleCopy);
@@ -2326,7 +2330,10 @@ void MainWindow::undo()
     if (d->chartController)
     {
         Logger::debug("Undo triggered");
+        const QString actionText = d->chartController->nextUndoActionText();
         d->chartController->undo();
+        if (PluginManager *pm = activePluginManager())
+            pm->notifyHostUndo(actionText);
     }
 }
 
@@ -2335,7 +2342,10 @@ void MainWindow::redo()
     if (d->chartController)
     {
         Logger::debug("Redo triggered");
+        const QString actionText = d->chartController->nextRedoActionText();
         d->chartController->redo();
+        if (PluginManager *pm = activePluginManager())
+            pm->notifyHostRedo(actionText);
     }
 }
 

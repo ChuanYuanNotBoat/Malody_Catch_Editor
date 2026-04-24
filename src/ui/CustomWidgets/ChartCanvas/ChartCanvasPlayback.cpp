@@ -4,10 +4,25 @@
 #include "controller/PlaybackController.h"
 #include "audio/NoteSoundPlayer.h"
 #include "utils/MathUtils.h"
+#include "app/Application.h"
+#include "plugin/PluginManager.h"
 #include <QDateTime>
 #include <QKeyEvent>
+#include <QKeySequence>
+#include <QCoreApplication>
 #include <algorithm>
 #include <cmath>
+
+namespace
+{
+PluginManager *activePluginManager()
+{
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginSystemReady())
+        return nullptr;
+    return app->pluginManager();
+}
+}
 
 void ChartCanvas::playbackPositionChanged(double timeMs)
 {
@@ -175,6 +190,41 @@ void ChartCanvas::keyPressEvent(QKeyEvent *event)
     {
         event->accept();
         return;
+    }
+
+    if (m_pluginToolModeActive && event->matches(QKeySequence::Undo))
+    {
+        bool handled = false;
+        if (m_chartController && m_chartController->canUndo())
+        {
+            const QString actionText = m_chartController->nextUndoActionText();
+            m_chartController->undo();
+            if (PluginManager *pm = activePluginManager())
+                pm->notifyHostUndo(actionText);
+            handled = true;
+        }
+        if (handled)
+        {
+            event->accept();
+            return;
+        }
+    }
+    if (m_pluginToolModeActive && event->matches(QKeySequence::Redo))
+    {
+        bool handled = false;
+        if (m_chartController && m_chartController->canRedo())
+        {
+            const QString actionText = m_chartController->nextRedoActionText();
+            m_chartController->redo();
+            if (PluginManager *pm = activePluginManager())
+                pm->notifyHostRedo(actionText);
+            handled = true;
+        }
+        if (handled)
+        {
+            event->accept();
+            return;
+        }
     }
 
     if (event->key() == Qt::Key_Escape)

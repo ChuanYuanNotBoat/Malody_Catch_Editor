@@ -9,12 +9,10 @@ import time
 LEFT_BUTTON = 1
 RIGHT_BUTTON = 2
 CTRL_MODIFIER_MASK = 0x04000000
-SHIFT_MODIFIER_MASK = 0x02000000
-KEY_Z = 0x5A
-KEY_Y = 0x59
 KEY_A = 0x41
 MAX_HISTORY = 128
 SERIALIZE_DEN = 288
+CURVE_CHECKPOINT_PREFIX = "Plugin Curve Edit"
 
 STYLE_PRESETS = [
     [4, 8, 12, 16],
@@ -121,8 +119,6 @@ STATE = {
     "project_dirty": False,
     "history": [],
     "history_index": -1,
-    "last_shortcut_key": 0,
-    "last_shortcut_ms": 0,
     "lang": "en",
 }
 
@@ -208,7 +204,11 @@ def _configure_stdio_utf8():
 
 
 def _capture_snapshot():
-    return {"anchors": _clone(STATE.get("anchors", [])), "style": _clone(STATE.get("style", {}))}
+    return {
+        "anchors": _clone(STATE.get("anchors", [])),
+        "style": _clone(STATE.get("style", {})),
+        "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
+    }
 
 
 def _restore_snapshot(snapshot):
@@ -217,6 +217,8 @@ def _restore_snapshot(snapshot):
     STATE["anchors"] = _clone(snapshot.get("anchors", [])) if isinstance(snapshot.get("anchors"), list) else []
     style = snapshot.get("style")
     STATE["style"] = _clone(style) if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
+    STATE["anchor_placement_enabled"] = bool(snapshot.get("anchor_placement_enabled", False))
+    STATE["drag"] = {"mode": "", "index": -1}
 
 
 def _push_history():
@@ -236,9 +238,17 @@ def _push_history():
         hist = hist[-MAX_HISTORY:]
     STATE["history"] = hist
     STATE["history_index"] = len(hist) - 1
+    return True
 
 
-def _undo_history(context):
+def _record_history_state(context):
+    changed = _push_history()
+    if changed:
+        _mark_dirty(context)
+    return changed
+
+
+def _undo_history_from_host(context):
     hist = STATE.get("history", [])
     idx = int(STATE.get("history_index", -1))
     if not hist or idx <= 0:
@@ -250,7 +260,7 @@ def _undo_history(context):
     return True
 
 
-def _redo_history(context):
+def _redo_history_from_host(context):
     hist = STATE.get("history", [])
     idx = int(STATE.get("history_index", -1))
     if not hist or idx >= len(hist) - 1:
@@ -260,6 +270,12 @@ def _redo_history(context):
     _restore_snapshot(hist[idx])
     _mark_dirty(context)
     return True
+
+
+def _is_curve_checkpoint_action(action_text):
+    if not isinstance(action_text, str):
+        return False
+    return action_text.strip().startswith(CURVE_CHECKPOINT_PREFIX)
 
 
 def _safe_denominator_set(context):
@@ -824,10 +840,9 @@ def _build_overlay(context):
 
 
 def _reset_anchors(context):
-    _push_history()
     STATE["anchors"] = _default_anchors()
     STATE["drag"] = {"mode": "", "index": -1}
-    _mark_dirty(context)
+    _record_history_state(context)
 
 
 def _append_anchor(context, cx, cy):
@@ -906,7 +921,6 @@ def _build_batch_from_curve(context):
 
 
 def _cycle_density_style(context):
-    _push_history()
     current = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
     normalized = tuple(_sanitize_denominators(current, context))
     target_index = 0
@@ -916,7 +930,7 @@ def _cycle_density_style(context):
             break
     next_values = _sanitize_denominators(STYLE_PRESETS[target_index], context)
     STATE["style"] = {"style_name": f"preset_{target_index + 1}", "denominators": next_values}
-    _mark_dirty(context)
+    _record_history_state(context)
 
 
 def _handle_canvas_input(payload):
@@ -934,6 +948,7 @@ def _handle_canvas_input(payload):
     consumed = False
     status = ""
     cursor = "arrow"
+    request_checkpoint = False
 
     if et == "mouse_down":
         hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
@@ -943,7 +958,6 @@ def _handle_canvas_input(payload):
             consumed = False
         elif button == LEFT_BUTTON:
             if hidx >= 0:
-                _push_history()
                 STATE["drag"] = {"mode": hkind, "index": hidx}
                 consumed = True
                 cursor = "crosshair"
@@ -953,14 +967,13 @@ def _handle_canvas_input(payload):
                 STATE["last_click_anchor"] = aidx
                 STATE["last_click_ms"] = ts
                 if is_double:
-                    _push_history()
                     STATE["anchors"][aidx]["smooth"] = not bool(STATE["anchors"][aidx].get("smooth", True))
-                    _mark_dirty(STATE["last_context"])
+                    _record_history_state(STATE["last_context"])
+                    request_checkpoint = True
                     consumed = True
                     mode = tr(STATE["last_context"], "mode_smooth") if STATE["anchors"][aidx]["smooth"] else tr(STATE["last_context"], "mode_corner")
                     status = tr(STATE["last_context"], "anchor_mode_changed", index=aidx, mode=mode)
                 else:
-                    _push_history()
                     STATE["drag"] = {"mode": "anchor", "index": aidx}
                     consumed = True
                     cursor = "size_all"
@@ -970,7 +983,6 @@ def _handle_canvas_input(payload):
                 if not bool(STATE.get("anchor_placement_enabled", False)):
                     status = tr(STATE["last_context"], "anchor_place_off_hint")
                 else:
-                    _push_history()
                     new_idx = _append_anchor(STATE["last_context"], x, y)
                     STATE["drag"] = {"mode": "anchor", "index": new_idx}
                     _mark_dirty(STATE["last_context"])
@@ -1017,7 +1029,11 @@ def _handle_canvas_input(payload):
         if STATE["drag"]["mode"]:
             status = tr(STATE["last_context"], "curve_edit_applied")
             consumed = True
-        STATE["drag"] = {"mode": "", "index": -1}
+            STATE["drag"] = {"mode": "", "index": -1}
+            _record_history_state(STATE["last_context"])
+            request_checkpoint = True
+        else:
+            STATE["drag"] = {"mode": "", "index": -1}
 
     elif et == "cancel":
         STATE["drag"] = {"mode": "", "index": -1}
@@ -1028,29 +1044,12 @@ def _handle_canvas_input(payload):
         key = int(event.get("key", 0))
         mods = int(event.get("modifiers", 0))
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
-        shift = (mods & SHIFT_MODIFIER_MASK) != 0
         if not ctrl and key == KEY_A:
             STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
             consumed = True
             status = tr(STATE["last_context"], "anchor_enabled") if STATE["anchor_placement_enabled"] else tr(STATE["last_context"], "anchor_disabled")
-            _mark_dirty(STATE["last_context"])
-
-        is_undo = ctrl and key == KEY_Z and not shift
-        is_redo = ctrl and (key == KEY_Y or (key == KEY_Z and shift))
-        if is_undo or is_redo:
-            last_key = int(STATE.get("last_shortcut_key", 0))
-            last_ts = int(STATE.get("last_shortcut_ms", 0))
-            if key == last_key and ts - last_ts < 70:
-                consumed = True
-            else:
-                STATE["last_shortcut_key"] = key
-                STATE["last_shortcut_ms"] = ts
-                if is_undo and _undo_history(STATE["last_context"]):
-                    consumed = True
-                    status = tr(STATE["last_context"], "curve_undo")
-                elif is_redo and _redo_history(STATE["last_context"]):
-                    consumed = True
-                    status = tr(STATE["last_context"], "curve_redo")
+            _record_history_state(STATE["last_context"])
+            request_checkpoint = True
 
     # In tool mode, left-button canvas operations belong to plugin.
     if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON:
@@ -1064,6 +1063,8 @@ def _handle_canvas_input(payload):
         "cursor": cursor,
         "status_text": status,
         "preview_batch_edit": {"add": [], "remove": [], "move": []},
+        "request_undo_checkpoint": request_checkpoint,
+        "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
     }
 
 
@@ -1091,6 +1092,7 @@ def _list_tool_actions():
             "description": tr(STATE.get("last_context", {}), "action_undo_curve_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
+            "host_action": "undo",
         },
         {
             "action_id": "redo_curve_edit",
@@ -1098,6 +1100,7 @@ def _list_tool_actions():
             "description": tr(STATE.get("last_context", {}), "action_redo_curve_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
+            "host_action": "redo",
         },
         {
             "action_id": "commit_curve_to_notes_sidebar",
@@ -1151,22 +1154,21 @@ def _run_tool_action(payload):
         return True
     if action_id == "toggle_anchor_placement":
         STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
-        _mark_dirty(context)
+        _record_history_state(context)
         return True
     if action_id == "cycle_density_style":
         _cycle_density_style(context)
         return True
     if action_id == "undo_curve_edit":
-        return _undo_history(context)
+        return True
     if action_id == "redo_curve_edit":
-        return _redo_history(context)
+        return True
     if action_id == "export_style_preset":
         return _save_style(context)
     if action_id == "import_style_preset":
-        _push_history()
         ok = _load_style(context)
         if ok:
-            _mark_dirty(context)
+            _record_history_state(context)
         return ok
     return False
 
@@ -1230,6 +1232,14 @@ def run_plugin_loop():
                 if STATE["project_path"] and STATE["project_dirty"]:
                     _save_project(STATE["project_path"], STATE.get("last_context", {}))
                 break
+            elif event == "onHostUndo":
+                action_text = str(payload.get("action_text", "") or "")
+                if _is_curve_checkpoint_action(action_text):
+                    _undo_history_from_host(STATE.get("last_context", {}))
+            elif event == "onHostRedo":
+                action_text = str(payload.get("action_text", "") or "")
+                if _is_curve_checkpoint_action(action_text):
+                    _redo_history_from_host(STATE.get("last_context", {}))
             continue
 
         if mtype != "request":

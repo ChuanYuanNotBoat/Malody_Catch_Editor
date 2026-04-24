@@ -622,6 +622,16 @@ bool ChartController::canRedo() const
     return m_undoStack->canRedo();
 }
 
+QString ChartController::nextUndoActionText() const
+{
+    return m_undoStack ? m_undoStack->undoText() : QString();
+}
+
+QString ChartController::nextRedoActionText() const
+{
+    return m_undoStack ? m_undoStack->redoText() : QString();
+}
+
 bool ChartController::loadChart(const QString &path)
 {
     PerformanceTimer loadTimer("ChartController::loadChart", "ui_operations");

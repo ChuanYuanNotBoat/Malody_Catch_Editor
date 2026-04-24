@@ -43,6 +43,8 @@ public:
     void redo();
     bool canUndo() const;
     bool canRedo() const;
+    QString nextUndoActionText() const;
+    QString nextRedoActionText() const;
 
     // 保存/加载
     bool loadChart(const QString &path);

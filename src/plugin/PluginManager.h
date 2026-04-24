@@ -72,6 +72,8 @@ public:
     void notifyChartChanged();
     void notifyChartLoaded(const QString &chartPath);
     void notifyChartSaved(const QString &chartPath);
+    void notifyHostUndo(const QString &actionText);
+    void notifyHostRedo(const QString &actionText);
     bool tryOpenAdvancedColorEditor(const QVariantMap &context);
 
 signals:

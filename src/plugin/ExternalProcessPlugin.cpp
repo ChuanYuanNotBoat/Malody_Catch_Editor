@@ -186,6 +186,16 @@ void ExternalProcessPlugin::onChartSaved(const QString &chartPath)
     sendNotification("onChartSaved", QJsonObject{{"chart_path", chartPath}});
 }
 
+void ExternalProcessPlugin::onHostUndo(const QString &actionText)
+{
+    sendNotification("onHostUndo", QJsonObject{{"action_text", actionText}});
+}
+
+void ExternalProcessPlugin::onHostRedo(const QString &actionText)
+{
+    sendNotification("onHostRedo", QJsonObject{{"action_text", actionText}});
+}
+
 bool ExternalProcessPlugin::openAdvancedColorEditor(const QVariantMap &context)
 {
     if (!hasCapability(kCapabilityAdvancedColorEditor))
@@ -213,6 +223,7 @@ QList<PluginInterface::ToolAction> ExternalProcessPlugin::toolActions() const
         action.title = obj.value("title").toString().trimmed();
         action.description = obj.value("description").toString().trimmed();
         action.confirmMessage = obj.value("confirm_message").toString().trimmed();
+        action.hostAction = obj.value("host_action").toString().trimmed().toLower();
         action.placement = obj.value("placement").toString().trimmed();
         if (action.placement.isEmpty())
             action.placement = PluginInterface::kPlacementToolsMenu;
@@ -363,6 +374,8 @@ bool ExternalProcessPlugin::handleCanvasInput(const QVariantMap &context,
     outResult->consumed = obj.value("consumed").toBool(false);
     outResult->cursor = obj.value("cursor").toString();
     outResult->statusText = obj.value("status_text").toString();
+    outResult->requestUndoCheckpoint = obj.value("request_undo_checkpoint").toBool(false);
+    outResult->undoCheckpointLabel = obj.value("undo_checkpoint_label").toString().trimmed();
     if (obj.value("overlay").isArray())
         outResult->overlay = parseOverlayItems(obj.value("overlay").toArray());
     if (obj.value("preview_batch_edit").isObject())

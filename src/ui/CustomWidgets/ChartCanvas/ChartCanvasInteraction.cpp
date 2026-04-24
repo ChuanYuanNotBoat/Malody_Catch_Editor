@@ -480,6 +480,13 @@ bool ChartCanvas::dispatchPluginCanvasInput(const PluginInterface::CanvasInputEv
         applyPluginCursor(result.cursor);
     if (!result.statusText.trimmed().isEmpty())
         emit statusMessage(result.statusText);
+    if (result.requestUndoCheckpoint && m_chartController && m_chartController->chart())
+    {
+        const QString label = result.undoCheckpointLabel.trimmed().isEmpty()
+                                  ? tr("Plugin Curve Edit")
+                                  : result.undoCheckpointLabel.trimmed();
+        m_chartController->applyExternalChartMutation(label, *m_chartController->chart());
+    }
 
     if (outConsumed)
         *outConsumed = result.consumed;

@@ -45,6 +45,8 @@ public:
     void onChartChanged() override;
     void onChartLoaded(const QString &chartPath) override;
     void onChartSaved(const QString &chartPath) override;
+    void onHostUndo(const QString &actionText) override;
+    void onHostRedo(const QString &actionText) override;
     bool openAdvancedColorEditor(const QVariantMap &context) override;
     QList<ToolAction> toolActions() const override;
     bool runToolAction(const QString &actionId, const QVariantMap &context) override;

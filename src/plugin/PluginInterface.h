@@ -20,6 +20,7 @@ public:
         QString title;
         QString description;
         QString confirmMessage;
+        QString hostAction; // "" | undo | redo
         QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar
         bool requiresUndoSnapshot = true;
         bool checkable = false;
@@ -76,6 +77,8 @@ public:
         BatchEdit previewEdit;
         QString cursor;
         QString statusText;
+        bool requestUndoCheckpoint = false;
+        QString undoCheckpointLabel;
     };
 
     // Host ABI/API version for runtime compatibility checks.
@@ -133,6 +136,14 @@ public:
     virtual void onChartSaved(const QString &chartPath)
     {
         (void)chartPath;
+    }
+    virtual void onHostUndo(const QString &actionText)
+    {
+        (void)actionText;
+    }
+    virtual void onHostRedo(const QString &actionText)
+    {
+        (void)actionText;
     }
 
     // Optional UI extension point.

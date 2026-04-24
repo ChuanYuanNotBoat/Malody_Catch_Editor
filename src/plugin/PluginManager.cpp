@@ -605,6 +605,40 @@ void PluginManager::notifyChartSaved(const QString &chartPath)
     }
 }
 
+void PluginManager::notifyHostUndo(const QString &actionText)
+{
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        try
+        {
+            p->onHostUndo(actionText);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' onHostUndo").arg(localizedNameForLog(p)));
+        }
+    }
+}
+
+void PluginManager::notifyHostRedo(const QString &actionText)
+{
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        try
+        {
+            p->onHostRedo(actionText);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' onHostRedo").arg(localizedNameForLog(p)));
+        }
+    }
+}
+
 bool PluginManager::tryOpenAdvancedColorEditor(const QVariantMap &context)
 {
     const QVariantMap enrichedContext = enrichContextWithLocale(context);

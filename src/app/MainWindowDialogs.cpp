@@ -235,6 +235,7 @@ void MainWindow::populatePluginToolsMenu()
         payload.insert("action_id", entry.action.actionId);
         payload.insert("title", title);
         payload.insert("confirm_message", entry.action.confirmMessage);
+        payload.insert("host_action", entry.action.hostAction);
         payload.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
         payload.insert("placement", entry.action.placement);
         payload.insert("checkable", entry.action.checkable);
@@ -327,6 +328,7 @@ void MainWindow::refreshPluginUiExtensions()
         const QString title = safeActionTitle(entry.action);
         meta.insert("title", title);
         meta.insert("confirm_message", entry.action.confirmMessage);
+        meta.insert("host_action", entry.action.hostAction);
         meta.insert("requires_undo_snapshot", entry.action.requiresUndoSnapshot);
         meta.insert("placement", entry.action.placement);
         meta.insert("checkable", entry.action.checkable);
@@ -460,6 +462,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     const QString actionId = meta.value("action_id").toString();
     const QString actionTitle = meta.value("title").toString();
     const QString confirmMessage = meta.value("confirm_message").toString();
+    const QString hostAction = meta.value("host_action").toString().trimmed().toLower();
     const bool requiresUndo = meta.value("requires_undo_snapshot", true).toBool();
     if (pluginId.isEmpty() || actionId.isEmpty())
         return false;
@@ -479,6 +482,21 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     auto *app = qobject_cast<Application *>(QCoreApplication::instance());
     if (!app || !app->pluginManager() || !d->chartController)
         return false;
+
+    if (hostAction == "undo")
+    {
+        undo();
+        statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
+        refreshPluginUiExtensions();
+        return true;
+    }
+    if (hostAction == "redo")
+    {
+        redo();
+        statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
+        refreshPluginUiExtensions();
+        return true;
+    }
 
     const QString chartPath = d->workingChartPath.isEmpty() ? d->chartController->chartFilePath() : d->workingChartPath;
     const QString sourceChartPath = d->sourceChartPath.isEmpty() ? d->currentChartPath : d->sourceChartPath;
