@@ -137,6 +137,7 @@ STATE = {
     "curve_samples_cache": {},
     "suppress_persist_once": False,
     "link_drag": {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0},
+    "shift_down": False,
 }
 
 TRANSLATIONS.update(
@@ -286,6 +287,7 @@ def _restore_snapshot(snapshot):
     STATE["selected_links"] = []
     STATE["box_select"] = {"active": False, "start": [0.0, 0.0], "end": [0.0, 0.0], "append": False}
     STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
+    STATE["shift_down"] = False
     STATE["pending_connect_anchor_id"] = int(snapshot.get("pending_connect_anchor_id", -1))
     STATE["next_anchor_id"] = max(1, int(snapshot.get("next_anchor_id", 1)))
     _ensure_anchor_ids()
@@ -1588,7 +1590,7 @@ def _handle_canvas_input(payload):
         seg_hit = _find_segment_hit(STATE["last_context"], x, y) if _selection_enabled("segments") else None
         mods = int(event.get("modifiers", 0))
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
-        shift = (mods & SHIFT_MODIFIER_MASK) != 0
+        shift = ((mods & SHIFT_MODIFIER_MASK) != 0) or bool(STATE.get("shift_down", False))
         host_sel = STATE["last_context"].get("host_selection_tool", {}) if isinstance(STATE["last_context"], dict) else {}
         is_select_mode = bool(host_sel.get("is_select_mode", False)) if isinstance(host_sel, dict) else False
 
@@ -1852,6 +1854,8 @@ def _handle_canvas_input(payload):
         key = int(event.get("key", 0))
         mods = int(event.get("modifiers", 0))
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
+        if key == 0x01000020 or (mods & SHIFT_MODIFIER_MASK) != 0:  # Qt::Key_Shift
+            STATE["shift_down"] = True
         if not ctrl and key == KEY_A:
             STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
             consumed = True
@@ -1873,6 +1877,12 @@ def _handle_canvas_input(payload):
                 status = tr(STATE["last_context"], "status_selection_cleared")
 
     # In tool mode, left-button canvas operations belong to plugin.
+    if et == "key_up":
+        key = int(event.get("key", 0))
+        mods = int(event.get("modifiers", 0))
+        if key == 0x01000020 or (mods & SHIFT_MODIFIER_MASK) == 0:
+            STATE["shift_down"] = False
+
     notes_selectable = _selection_enabled("notes")
     if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON and not notes_selectable:
         consumed = True
