@@ -21,7 +21,7 @@ public:
         QString description;
         QString confirmMessage;
         QString hostAction; // "" | undo | redo
-        QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar | right_note_panel
+        QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar | right_note_panel | plugin_context_menu
         bool requiresUndoSnapshot = true;
         bool checkable = false;
         bool checked = false;
@@ -103,6 +103,7 @@ public:
     static constexpr const char *kPlacementTopToolbar = "top_toolbar";
     static constexpr const char *kPlacementLeftSidebar = "left_sidebar";
     static constexpr const char *kPlacementRightNotePanel = "right_note_panel";
+    static constexpr const char *kPlacementPluginContextMenu = "plugin_context_menu";
 
     virtual ~PluginInterface() = default;
 

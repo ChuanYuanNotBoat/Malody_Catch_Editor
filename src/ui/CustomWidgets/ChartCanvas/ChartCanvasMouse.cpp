@@ -4,6 +4,8 @@
 #include "controller/PlaybackController.h"
 #include "render/NoteRenderer.h"
 #include "utils/MathUtils.h"
+#include "app/Application.h"
+#include "plugin/PluginManager.h"
 #include "model/Chart.h"
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -11,6 +13,8 @@
 #include <QAction>
 #include <QMessageBox>
 #include <QDateTime>
+#include <QCoreApplication>
+#include <QHash>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -143,6 +147,14 @@ Note mirroredNote(const Note &note, int axisX, int laneWidth)
     Note mirrored = note;
     mirrored.x = qBound(0, axisX * 2 - note.x, laneWidth);
     return mirrored;
+}
+
+PluginManager *activePluginManager()
+{
+    auto *app = qobject_cast<Application *>(QCoreApplication::instance());
+    if (!app || !app->pluginSystemReady())
+        return nullptr;
+    return app->pluginManager();
 }
 } // namespace
 
@@ -615,10 +627,43 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
             });
         }
 
+        QAction *contextSeparator = nullptr;
+        QHash<QAction *, QPair<QString, QString>> pluginContextActions;
+        if (PluginManager *pm = activePluginManager())
+        {
+            const QString pluginId = resolvePluginCanvasToolId();
+            if (!pluginId.trimmed().isEmpty())
+            {
+                const QList<PluginManager::ToolActionEntry> entries = pm->toolActions();
+                for (const PluginManager::ToolActionEntry &entry : entries)
+                {
+                    if (entry.pluginId.trimmed() != pluginId)
+                        continue;
+                    const QString placement = entry.action.placement.trimmed().toLower();
+                    if (placement != QString(PluginInterface::kPlacementPluginContextMenu))
+                        continue;
+                    if (contextSeparator == nullptr)
+                        contextSeparator = pluginMenu.addSeparator();
+                    QAction *act = pluginMenu.addAction(entry.action.title);
+                    if (!entry.action.description.isEmpty())
+                        act->setToolTip(entry.action.description);
+                    act->setCheckable(entry.action.checkable);
+                    if (entry.action.checkable)
+                        act->setChecked(entry.action.checked);
+                    pluginContextActions.insert(act, qMakePair(entry.action.actionId, entry.action.title));
+                }
+            }
+        }
+
         QAction *selected = pluginMenu.exec(event->globalPos());
         if (selected == commitCurveAction)
         {
             triggerPluginBatchAction("commit_curve_to_notes", tr("Commit Curve -> Notes"));
+        }
+        else if (pluginContextActions.contains(selected))
+        {
+            const auto pair = pluginContextActions.value(selected);
+            triggerPluginToolAction(pair.first, pair.second);
         }
         return;
     }

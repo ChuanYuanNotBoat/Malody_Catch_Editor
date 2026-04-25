@@ -523,5 +523,43 @@ bool ChartCanvas::triggerPluginBatchAction(const QString &actionId, const QStrin
     return ok;
 }
 
+bool ChartCanvas::triggerPluginToolAction(const QString &actionId, const QString &actionTitle)
+{
+    if (!m_pluginToolModeActive || !m_chartController)
+        return false;
+    PluginManager *pm = activePluginManager();
+    if (!pm)
+        return false;
+
+    const QString pluginId = resolvePluginCanvasToolId();
+    if (pluginId.isEmpty())
+        return false;
+
+    const QVariantMap context = buildPluginCanvasContext();
+    const QString title = actionTitle.trimmed().isEmpty() ? tr("Plugin Action") : actionTitle.trimmed();
+
+    PluginInterface::BatchEdit edit;
+    if (pm->supportsHostBatchEdit(pluginId) &&
+        pm->buildToolActionBatchEdit(pluginId, actionId, context, &edit))
+    {
+        const bool ok = m_chartController->applyBatchEdit(
+            tr("Plugin Action: %1").arg(title),
+            edit.notesToAdd,
+            edit.notesToRemove,
+            edit.notesToMove);
+        if (ok)
+            emit statusMessage(tr("Plugin batch action completed: %1").arg(title));
+        return ok;
+    }
+
+    if (!pm->runToolAction(pluginId, actionId, context))
+        return false;
+
+    m_overlayCache = pm->canvasOverlays(context);
+    m_eventOverlayCache = m_overlayCache;
+    update();
+    emit statusMessage(tr("Plugin action completed: %1").arg(title));
+    return true;
+}
 
 

@@ -115,6 +115,7 @@
 - `top_toolbar`
 - `left_sidebar`
 - `right_note_panel`
+- `plugin_context_menu`
 
 ### 4.4 Optional Request: Host Batch Edit
 

@@ -187,6 +187,7 @@ private:
     QString resolvePluginCanvasToolId() const;
     void applyPluginCursor(const QString &cursorName);
     bool triggerPluginBatchAction(const QString &actionId, const QString &actionTitle);
+    bool triggerPluginToolAction(const QString &actionId, const QString &actionTitle);
 
     double getNoteTimeMs(const Note &note) const;
     void confirmPaste();
