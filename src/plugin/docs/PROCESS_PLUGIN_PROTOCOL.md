@@ -164,6 +164,21 @@ Plugin response `result` is an array. Item schema:
 }
 ```
 
+Optional chart-space coordinates (for note-like scrolling stability):
+
+```json
+{
+  "kind":"line|rect|text",
+  "coord_space":"chart",
+  "lane_x1":256, "beat1":32.0,
+  "lane_x2":300, "beat2":33.0,
+  "lane_x":256, "beat":32.0,
+  "rect_anchor":"center|top_left"
+}
+```
+
+When `coord_space` is `chart`, host converts `(lane_x, beat)` to canvas each frame using current scroll/playback state.
+
 ### 4.6 Optional Request: Floating Panel (process plugin)
 
 Process plugins cannot return embedded QWidget directly.  

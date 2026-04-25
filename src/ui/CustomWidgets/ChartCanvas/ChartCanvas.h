@@ -119,7 +119,8 @@ private:
     static constexpr int kScrollSignalIntervalMs = 33;
     static constexpr double kWheelScrollBeatStepRatio = 0.1;
     static constexpr int kSideMarginDivisor = 20;
-    static constexpr int kOverlayQueryIntervalMsToolMode = 120;
+    static constexpr int kOverlayQueryIntervalMsToolMode = 33;
+    static constexpr int kOverlayQueryIntervalMsToolModePlaying = 16;
     static constexpr int kOverlayQueryIntervalMsIdle = 800;
     static constexpr int kOverlaySlowCallThresholdMs = 40;
     static constexpr int kOverlaySlowCallBackoffMs = 1000;

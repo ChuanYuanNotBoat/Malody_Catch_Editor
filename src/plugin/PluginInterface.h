@@ -52,6 +52,10 @@ public:
         QColor fillColor = QColor(255, 0, 0, 40);
         double width = 1.5;
         int fontPx = 12;
+        bool chartSpace = false; // When true, use chart-space coordinates (lane_x, beat).
+        QPointF chartFrom;       // x=lane_x, y=beat.
+        QPointF chartTo;         // x=lane_x, y=beat (for line end).
+        bool rectCenterOnChartPoint = true;
     };
     struct BatchEdit
     {

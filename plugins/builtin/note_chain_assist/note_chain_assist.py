@@ -120,6 +120,8 @@ STATE = {
     "history": [],
     "history_index": -1,
     "lang": "en",
+    "curve_revision": 0,
+    "curve_samples_cache": {},
 }
 
 
@@ -219,6 +221,12 @@ def _restore_snapshot(snapshot):
     STATE["style"] = _clone(style) if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
     STATE["anchor_placement_enabled"] = bool(snapshot.get("anchor_placement_enabled", False))
     STATE["drag"] = {"mode": "", "index": -1}
+    _invalidate_curve_cache()
+
+
+def _invalidate_curve_cache():
+    STATE["curve_revision"] = int(STATE.get("curve_revision", 0)) + 1
+    STATE["curve_samples_cache"] = {}
 
 
 def _push_history():
@@ -522,6 +530,37 @@ def _sample_curve_chart(samples_per_segment=24):
     return pts
 
 
+def _sample_curve_chart_cached(samples_per_segment=24):
+    cache = STATE.get("curve_samples_cache")
+    if not isinstance(cache, dict):
+        cache = {}
+        STATE["curve_samples_cache"] = cache
+    key = f"{int(STATE.get('curve_revision', 0))}:{int(samples_per_segment)}"
+    cached = cache.get(key)
+    if isinstance(cached, list):
+        return cached
+    sampled = _sample_curve_chart(samples_per_segment)
+    cache[key] = sampled
+    return sampled
+
+
+def _visible_beat_window(context, ratio_margin=0.6, min_margin=2.0):
+    if not isinstance(context, dict):
+        return -1e9, 1e9
+    scroll = float(context.get("scroll_beat", 0.0))
+    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
+    margin = max(float(min_margin), vr * float(ratio_margin))
+    return scroll - margin, scroll + vr + margin
+
+
+def _segment_intersects_beat_window(p0, p1, lo, hi):
+    b0 = float(p0[1])
+    b1 = float(p1[1])
+    mn = min(b0, b1)
+    mx = max(b0, b1)
+    return not (mx < lo or mn > hi)
+
+
 def _normalize_samples_by_beat(samples):
     if not samples:
         return []
@@ -709,6 +748,7 @@ def _load_project(path, context):
                 "denominators": _sanitize_denominators(style.get("denominators"), context),
             }
 
+        _invalidate_curve_cache()
         STATE["project_dirty"] = False
         return True
     except Exception:
@@ -730,6 +770,7 @@ def _ensure_project_context(context):
         if not _load_project(path, context):
             STATE["anchors"] = _default_anchors()
             STATE["project_dirty"] = True
+            _invalidate_curve_cache()
         STATE["history"] = []
         STATE["history_index"] = -1
         _push_history()
@@ -784,41 +825,95 @@ def _build_overlay(context):
 
     items = []
     anchors = STATE["anchors"]
-
     if show_preview and len(anchors) >= 2:
-        sampled = _sample_curve_chart(24)
+        sampled = _sample_curve_chart_cached(24)
         for i in range(len(sampled) - 1):
-            a = _chart_to_canvas(context, sampled[i][0], sampled[i][1])
-            b = _chart_to_canvas(context, sampled[i + 1][0], sampled[i + 1][1])
-            items.append({"kind": "line", "x1": a[0], "y1": a[1], "x2": b[0], "y2": b[1], "color": "#33CCFF", "width": 2.0})
+            items.append({
+                "kind": "line",
+                "coord_space": "chart",
+                "lane_x1": sampled[i][0],
+                "beat1": sampled[i][1],
+                "lane_x2": sampled[i + 1][0],
+                "beat2": sampled[i + 1][1],
+                "color": "#33CCFF",
+                "width": 2.0,
+            })
 
         if show_samples:
             for lane_x, beat in sampled[::4]:
-                sx, sy = _chart_to_canvas(context, lane_x, beat)
-                items.append({"kind": "rect", "x": sx - 2, "y": sy - 2, "w": 4, "h": 4, "color": "#88FFFFFF", "fill_color": "#88FFFFFF", "width": 1.0})
+                items.append({
+                    "kind": "rect",
+                    "coord_space": "chart",
+                    "lane_x": lane_x,
+                    "beat": beat,
+                    "w": 4,
+                    "h": 4,
+                    "rect_anchor": "center",
+                    "color": "#88FFFFFF",
+                    "fill_color": "#88FFFFFF",
+                    "width": 1.0,
+                })
 
     for i, a in enumerate(anchors):
         is_drag_anchor = STATE["drag"]["mode"] == "anchor" and STATE["drag"]["index"] == i
-        ax, ay = _chart_to_canvas(context, a["lane_x"], a["beat"])
 
         if show_handles:
             ilx, ib = _anchor_in_abs_chart(a)
             olx, ob = _anchor_out_abs_chart(a)
-            ix, iy = _chart_to_canvas(context, ilx, ib)
-            ox, oy = _chart_to_canvas(context, olx, ob)
-
-            items.append({"kind": "line", "x1": ax, "y1": ay, "x2": ix, "y2": iy, "color": "#66A0A0A0", "width": 1.0})
-            items.append({"kind": "line", "x1": ax, "y1": ay, "x2": ox, "y2": oy, "color": "#66A0A0A0", "width": 1.0})
-            items.append({"kind": "rect", "x": ix - 4, "y": iy - 4, "w": 8, "h": 8, "color": "#FFFFFFFF", "fill_color": "#AAEEAA55", "width": 1.0})
-            items.append({"kind": "rect", "x": ox - 4, "y": oy - 4, "w": 8, "h": 8, "color": "#FFFFFFFF", "fill_color": "#AAEEAA55", "width": 1.0})
+            items.append({
+                "kind": "line",
+                "coord_space": "chart",
+                "lane_x1": a["lane_x"],
+                "beat1": a["beat"],
+                "lane_x2": ilx,
+                "beat2": ib,
+                "color": "#66A0A0A0",
+                "width": 1.0,
+            })
+            items.append({
+                "kind": "line",
+                "coord_space": "chart",
+                "lane_x1": a["lane_x"],
+                "beat1": a["beat"],
+                "lane_x2": olx,
+                "beat2": ob,
+                "color": "#66A0A0A0",
+                "width": 1.0,
+            })
+            items.append({
+                "kind": "rect",
+                "coord_space": "chart",
+                "lane_x": ilx,
+                "beat": ib,
+                "w": 8,
+                "h": 8,
+                "rect_anchor": "center",
+                "color": "#FFFFFFFF",
+                "fill_color": "#AAEEAA55",
+                "width": 1.0,
+            })
+            items.append({
+                "kind": "rect",
+                "coord_space": "chart",
+                "lane_x": olx,
+                "beat": ob,
+                "w": 8,
+                "h": 8,
+                "rect_anchor": "center",
+                "color": "#FFFFFFFF",
+                "fill_color": "#AAEEAA55",
+                "width": 1.0,
+            })
 
         if show_points:
             items.append({
                 "kind": "rect",
-                "x": ax - 6,
-                "y": ay - 6,
+                "coord_space": "chart",
+                "lane_x": a["lane_x"],
+                "beat": a["beat"],
                 "w": 12,
                 "h": 12,
+                "rect_anchor": "center",
                 "color": "#FFFFFF",
                 "fill_color": "#AA0077FF" if is_drag_anchor else "#AA00A3FF",
                 "width": 1.5,
@@ -826,7 +921,15 @@ def _build_overlay(context):
 
         if show_labels:
             mode = tr(context, "anchor_mode_smooth") if a.get("smooth", True) else tr(context, "anchor_mode_corner")
-            items.append({"kind": "text", "x1": ax + 8, "y1": ay - 8, "text": f"A{i}({mode})", "color": "#FFFFFF", "font_px": 12})
+            items.append({
+                "kind": "text",
+                "coord_space": "chart",
+                "lane_x": a["lane_x"] + 8.0,
+                "beat": a["beat"],
+                "text": f"A{i}({mode})",
+                "color": "#FFFFFF",
+                "font_px": 12,
+            })
 
     if show_labels:
         dens = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
@@ -842,6 +945,7 @@ def _build_overlay(context):
 def _reset_anchors(context):
     STATE["anchors"] = _default_anchors()
     STATE["drag"] = {"mode": "", "index": -1}
+    _invalidate_curve_cache()
     _record_history_state(context)
 
 
@@ -864,6 +968,7 @@ def _append_anchor(context, cx, cy):
     _enforce_anchor_time_order(idx, context)
     _enforce_handle_time_constraints(idx, context)
     _enforce_handle_time_constraints(idx - 1, context)
+    _invalidate_curve_cache()
     return idx
 
 
@@ -893,7 +998,7 @@ def _build_batch_from_curve(context):
     if not isinstance(context, dict):
         return {"add": [], "remove": [], "move": []}
 
-    sampled = _sample_curve_chart(32)
+    sampled = _sample_curve_chart_cached(32)
     if len(sampled) < 2:
         return {"add": [], "remove": [], "move": []}
 
@@ -968,6 +1073,7 @@ def _handle_canvas_input(payload):
                 STATE["last_click_ms"] = ts
                 if is_double:
                     STATE["anchors"][aidx]["smooth"] = not bool(STATE["anchors"][aidx].get("smooth", True))
+                    _invalidate_curve_cache()
                     _record_history_state(STATE["last_context"])
                     request_checkpoint = True
                     consumed = True
@@ -1015,6 +1121,7 @@ def _handle_canvas_input(payload):
                 _set_anchor_out_abs_chart(a, lane_x, beat, mirror=True)
                 _enforce_handle_time_constraints(idx, STATE["last_context"])
                 cursor = "crosshair"
+            _invalidate_curve_cache()
             _mark_dirty(STATE["last_context"])
             consumed = True
             status = tr(STATE["last_context"], "editing_anchor", index=idx)

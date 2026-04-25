@@ -791,6 +791,20 @@ QList<PluginInterface::CanvasOverlayItem> ExternalProcessPlugin::parseOverlayIte
             item.width = obj.value("width").toDouble(item.width);
         if (obj.contains("font_px"))
             item.fontPx = obj.value("font_px").toInt(item.fontPx);
+
+        const QString coordSpace = obj.value("coord_space").toString().trimmed().toLower();
+        if (coordSpace == "chart")
+        {
+            item.chartSpace = true;
+            item.chartFrom = QPointF(
+                obj.contains("lane_x1") ? obj.value("lane_x1").toDouble() : obj.value("lane_x").toDouble(),
+                obj.contains("beat1") ? obj.value("beat1").toDouble() : obj.value("beat").toDouble());
+            item.chartTo = QPointF(
+                obj.contains("lane_x2") ? obj.value("lane_x2").toDouble() : item.chartFrom.x(),
+                obj.contains("beat2") ? obj.value("beat2").toDouble() : item.chartFrom.y());
+            item.rectCenterOnChartPoint =
+                obj.value("rect_anchor").toString().trimmed().toLower() != "top_left";
+        }
         items.append(item);
     }
     return items;
