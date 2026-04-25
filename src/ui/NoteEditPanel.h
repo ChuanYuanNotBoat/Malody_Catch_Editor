@@ -2,6 +2,8 @@
 
 #include "CustomWidgets/RightPanel.h"
 #include <QButtonGroup>
+#include <QList>
+#include <QString>
 
 class QComboBox;
 class QCheckBox;
@@ -11,16 +13,39 @@ class QVBoxLayout;
 class QLabel;
 class QRadioButton;
 class QGroupBox;
+class QToolButton;
 
 class NoteEditPanel : public RightPanel
 {
     Q_OBJECT
 public:
+    enum EditorMode
+    {
+        PlaceNoteMode = 0,
+        PlaceRainMode = 1,
+        DeleteMode = 2,
+        SelectMode = 3,
+        PlaceAnchorMode = 4,
+    };
+
+    struct PluginPlacementAction
+    {
+        QString pluginId;
+        QString actionId;
+        QString title;
+        QString tooltip;
+        bool checkable = false;
+        bool checked = false;
+    };
+
     explicit NoteEditPanel(QWidget *parent = nullptr);
     void setChartController(ChartController *controller) override;
     void setSelectionController(SelectionController *controller) override;
+    void setPluginPlacementActions(const QList<PluginPlacementAction> &actions);
     void retranslateUi();
     void setMirrorAxisValue(int axisX);
+    void setModeFromHost(int mode);
+    int currentMode() const { return m_currentMode; }
 
 signals:
     void modeChanged(int mode);
@@ -32,6 +57,7 @@ signals:
     void mirrorGuideVisibilityChanged(bool visible);
     void mirrorPreviewVisibilityChanged(bool visible);
     void mirrorFlipRequested();
+    void pluginPlacementActionTriggered(const QString &pluginId, const QString &actionId);
 
 private slots:
     void onNoteModeClicked();
@@ -47,6 +73,7 @@ private slots:
 private:
     void setupUi();
     void setMode(int mode);
+    void refreshPluginToolsUi();
 
     ChartController *m_chartController;
     SelectionController *m_selectionController;
@@ -56,6 +83,11 @@ private:
     QRadioButton *m_rainRadio;
     QRadioButton *m_deleteRadio;
     QRadioButton *m_selectRadio;
+    QRadioButton *m_anchorRadio;
+    QToolButton *m_pluginToolsToggleBtn;
+    QLabel *m_pluginToolsLabel;
+    QWidget *m_pluginToolsContainer;
+    QVBoxLayout *m_pluginToolsLayout;
     QLabel *m_timeDivisionLabel;
     QComboBox *m_timeDivisionCombo;
     QCheckBox *m_gridSnapCheck;
@@ -69,4 +101,5 @@ private:
     QPushButton *m_mirrorFlipButton;
     int m_currentMode;
     int m_gridDivision;
+    bool m_pluginToolsExpanded;
 };

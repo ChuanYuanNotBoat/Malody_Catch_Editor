@@ -57,6 +57,16 @@ QString sidecarDirForChart(const QString &chartPath)
         return QString();
     return fi.absoluteDir().filePath(".mcce-plugin");
 }
+
+QVariantMap serializeSelectedNoteForPlugin(const Note &note)
+{
+    QVariantMap noteObj;
+    noteObj.insert("id", note.id);
+    noteObj.insert("x", note.x);
+    noteObj.insert("lane_x", note.x);
+    noteObj.insert("beat", MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator));
+    return noteObj;
+}
 }
 
 
@@ -298,7 +308,10 @@ void ChartCanvas::setPluginToolMode(bool enabled, const QString &pluginId)
         m_pluginToolPluginId = pluginId.trimmed();
     if (!enabled)
     {
+        m_overlayCache.clear();
         m_eventOverlayCache.clear();
+        m_lastOverlayQueryMs = 0;
+        m_overlayQueryBlockedUntilMs = 0;
         applyPluginCursor(QString());
     }
     update();
@@ -369,6 +382,34 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     overlayContext.insert("overlay_toggles", m_pluginOverlayToggles);
     overlayContext.insert("plugin_time_division_override", m_pluginPlacementDensityOverride);
 
+    QVariantMap hostSelectionTool;
+    QString modeName = "place_note";
+    if (m_currentMode == PlaceRain)
+        modeName = "place_rain";
+    else if (m_currentMode == Delete)
+        modeName = "delete";
+    else if (m_currentMode == Select)
+        modeName = "select";
+    else if (m_currentMode == AnchorPlace)
+        modeName = "anchor_place";
+    hostSelectionTool.insert("mode", modeName);
+    hostSelectionTool.insert("is_select_mode", m_currentMode == Select);
+    hostSelectionTool.insert("is_selecting_rect", m_isSelecting);
+    if (m_isSelecting)
+    {
+        const QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
+        QVariantMap rectObj;
+        rectObj.insert("x", rect.x());
+        rectObj.insert("y", rect.y());
+        rectObj.insert("w", rect.width());
+        rectObj.insert("h", rect.height());
+        hostSelectionTool.insert("selection_rect", rectObj);
+    }
+    hostSelectionTool.insert("ctrl_toggle_select", true);
+    hostSelectionTool.insert("empty_click_clears_selection", true);
+    hostSelectionTool.insert("escape_clears_selection", true);
+    overlayContext.insert("host_selection_tool", hostSelectionTool);
+
     const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
     if (!chartPath.isEmpty())
         overlayContext.insert("chart_path", chartPath);
@@ -391,6 +432,7 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     overlayContext.insert("style_library_paths", styleLibraryPaths);
 
     QVariantList selectedIds;
+    QVariantList selectedNotes;
     if (m_selectionController && chart())
     {
         const auto &notes = chart()->notes();
@@ -401,12 +443,16 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
         {
             if (idx < 0 || idx >= notes.size())
                 continue;
-            if (notes[idx].id.isEmpty())
+            const auto &note = notes[idx];
+            if (note.id.isEmpty())
                 continue;
-            selectedIds.append(notes[idx].id);
+            selectedIds.append(note.id);
+
+            selectedNotes.append(serializeSelectedNoteForPlugin(note));
         }
     }
     overlayContext.insert("selected_note_ids", selectedIds);
+    overlayContext.insert("selected_notes", selectedNotes);
     return overlayContext;
 }
 
@@ -523,5 +569,58 @@ bool ChartCanvas::triggerPluginBatchAction(const QString &actionId, const QStrin
     return ok;
 }
 
+bool ChartCanvas::triggerPluginToolAction(const QString &actionId, const QString &actionTitle)
+{
+    if (!m_pluginToolModeActive || !m_chartController)
+        return false;
+    PluginManager *pm = activePluginManager();
+    if (!pm)
+        return false;
 
+    const QString pluginId = resolvePluginCanvasToolId();
+    if (pluginId.isEmpty())
+        return false;
 
+    const QVariantMap context = buildPluginCanvasContext();
+    const QString title = actionTitle.trimmed().isEmpty() ? tr("Plugin Action") : actionTitle.trimmed();
+
+    PluginInterface::BatchEdit edit;
+    if (pm->supportsHostBatchEdit(pluginId) &&
+        pm->buildToolActionBatchEdit(pluginId, actionId, context, &edit))
+    {
+        const bool ok = m_chartController->applyBatchEdit(
+            tr("Plugin Action: %1").arg(title),
+            edit.notesToAdd,
+            edit.notesToRemove,
+            edit.notesToMove);
+        if (ok)
+            emit statusMessage(tr("Plugin batch action completed: %1").arg(title));
+        return ok;
+    }
+
+    if (!pm->runToolAction(pluginId, actionId, context))
+        return false;
+
+    m_overlayCache = pm->canvasOverlays(context);
+    m_eventOverlayCache = m_overlayCache;
+    update();
+    emit statusMessage(tr("Plugin action completed: %1").arg(title));
+    return true;
+}
+
+bool ChartCanvas::triggerPluginDeleteSelection()
+{
+    if (!m_pluginToolModeActive)
+        return false;
+
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "key_down";
+    pluginEvent.key = static_cast<int>(Qt::Key_Delete);
+    pluginEvent.modifiers = static_cast<int>(Qt::NoModifier);
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+
+    bool consumed = false;
+    if (!dispatchPluginCanvasInput(pluginEvent, &consumed))
+        return false;
+    return consumed;
+}

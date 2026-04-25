@@ -12,6 +12,8 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QToolButton>
+#include <QWidget>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -21,7 +23,7 @@
 #include <QSignalBlocker>
 
 NoteEditPanel::NoteEditPanel(QWidget *parent)
-    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20)
+    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20), m_pluginToolsExpanded(false)
 {
     setupUi();
 }
@@ -38,11 +40,13 @@ void NoteEditPanel::setupUi()
     m_rainRadio = new QRadioButton(tr("Place Rain"), this);
     m_deleteRadio = new QRadioButton(tr("Delete Mode"), this);
     m_selectRadio = new QRadioButton(tr("Select Mode"), this);
+    m_anchorRadio = new QRadioButton(tr("Place Anchor"), this);
     m_noteRadio->setChecked(true);
-    m_modeGroup->addButton(m_noteRadio, 0);
-    m_modeGroup->addButton(m_rainRadio, 1);
-    m_modeGroup->addButton(m_deleteRadio, 2);
-    m_modeGroup->addButton(m_selectRadio, 3);
+    m_modeGroup->addButton(m_noteRadio, PlaceNoteMode);
+    m_modeGroup->addButton(m_rainRadio, PlaceRainMode);
+    m_modeGroup->addButton(m_deleteRadio, DeleteMode);
+    m_modeGroup->addButton(m_selectRadio, SelectMode);
+    m_modeGroup->addButton(m_anchorRadio, PlaceAnchorMode);
     connect(m_modeGroup, &QButtonGroup::buttonClicked, this, [this](QAbstractButton *button)
             { setMode(m_modeGroup->id(button)); });
 
@@ -50,6 +54,29 @@ void NoteEditPanel::setupUi()
     mainLayout->addWidget(m_rainRadio);
     mainLayout->addWidget(m_deleteRadio);
     mainLayout->addWidget(m_selectRadio);
+    mainLayout->addWidget(m_anchorRadio);
+
+    m_pluginToolsToggleBtn = new QToolButton(this);
+    m_pluginToolsToggleBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_pluginToolsToggleBtn->setCheckable(true);
+    m_pluginToolsToggleBtn->setChecked(false);
+    connect(m_pluginToolsToggleBtn, &QToolButton::clicked, this, [this](bool checked)
+            {
+                m_pluginToolsExpanded = checked;
+                refreshPluginToolsUi();
+            });
+    mainLayout->addWidget(m_pluginToolsToggleBtn);
+
+    m_pluginToolsLabel = new QLabel(tr("Note Placement Tools:"), this);
+    m_pluginToolsContainer = new QWidget(this);
+    m_pluginToolsLayout = new QVBoxLayout(m_pluginToolsContainer);
+    m_pluginToolsLayout->setContentsMargins(0, 0, 0, 0);
+    m_pluginToolsLayout->setSpacing(6);
+    m_pluginToolsToggleBtn->setVisible(false);
+    m_pluginToolsLabel->setVisible(false);
+    m_pluginToolsContainer->setVisible(false);
+    mainLayout->addWidget(m_pluginToolsLabel);
+    mainLayout->addWidget(m_pluginToolsContainer);
 
     // Copy button.
     m_copyButton = new QPushButton(tr("Copy"), this);
@@ -109,6 +136,8 @@ void NoteEditPanel::setupUi()
 
 void NoteEditPanel::setMode(int mode)
 {
+    if (m_currentMode == mode)
+        return;
     m_currentMode = mode;
     emit modeChanged(mode);
 }
@@ -182,6 +211,72 @@ void NoteEditPanel::setSelectionController(SelectionController *controller)
     m_selectionController = controller;
 }
 
+void NoteEditPanel::setModeFromHost(int mode)
+{
+    QAbstractButton *button = m_modeGroup ? m_modeGroup->button(mode) : nullptr;
+    if (!button)
+        return;
+    const QSignalBlocker blocker(m_modeGroup);
+    button->setChecked(true);
+    m_currentMode = mode;
+}
+
+void NoteEditPanel::setPluginPlacementActions(const QList<PluginPlacementAction> &actions)
+{
+    if (!m_pluginToolsLayout)
+        return;
+
+    while (QLayoutItem *item = m_pluginToolsLayout->takeAt(0))
+    {
+        if (item->widget())
+            item->widget()->deleteLater();
+        delete item;
+    }
+
+    for (const PluginPlacementAction &a : actions)
+    {
+        if (a.pluginId.isEmpty() || a.actionId.isEmpty() || a.title.isEmpty())
+            continue;
+
+        if (a.checkable)
+        {
+            QCheckBox *cb = new QCheckBox(a.title, m_pluginToolsContainer);
+            cb->setChecked(a.checked);
+            if (!a.tooltip.isEmpty())
+                cb->setToolTip(a.tooltip);
+            connect(cb, &QCheckBox::clicked, this, [this, a](bool)
+                    { emit pluginPlacementActionTriggered(a.pluginId, a.actionId); });
+            m_pluginToolsLayout->addWidget(cb);
+            continue;
+        }
+
+        QPushButton *btn = new QPushButton(a.title, m_pluginToolsContainer);
+        if (!a.tooltip.isEmpty())
+            btn->setToolTip(a.tooltip);
+        connect(btn, &QPushButton::clicked, this, [this, a](bool)
+                { emit pluginPlacementActionTriggered(a.pluginId, a.actionId); });
+        m_pluginToolsLayout->addWidget(btn);
+    }
+
+    refreshPluginToolsUi();
+}
+
+void NoteEditPanel::refreshPluginToolsUi()
+{
+    const bool hasActions = (m_pluginToolsLayout && m_pluginToolsLayout->count() > 0);
+    if (m_pluginToolsToggleBtn)
+    {
+        m_pluginToolsToggleBtn->setVisible(hasActions);
+        m_pluginToolsToggleBtn->setChecked(m_pluginToolsExpanded);
+        const QString arrow = m_pluginToolsExpanded ? QStringLiteral("▼ ") : QStringLiteral("▶ ");
+        m_pluginToolsToggleBtn->setText(arrow + tr("Curve Plugin Options"));
+    }
+    if (m_pluginToolsLabel)
+        m_pluginToolsLabel->setVisible(hasActions);
+    if (m_pluginToolsContainer)
+        m_pluginToolsContainer->setVisible(hasActions && m_pluginToolsExpanded);
+}
+
 void NoteEditPanel::setMirrorAxisValue(int axisX)
 {
     if (!m_mirrorAxisSpin)
@@ -203,6 +298,11 @@ void NoteEditPanel::retranslateUi()
         m_deleteRadio->setText(tr("Delete Mode"));
     if (m_selectRadio)
         m_selectRadio->setText(tr("Select Mode"));
+    if (m_anchorRadio)
+        m_anchorRadio->setText(tr("Place Anchor"));
+    if (m_pluginToolsLabel)
+        m_pluginToolsLabel->setText(tr("Note Placement Tools:"));
+    refreshPluginToolsUi();
     if (m_copyButton)
         m_copyButton->setText(tr("Copy"));
     if (m_timeDivisionLabel)

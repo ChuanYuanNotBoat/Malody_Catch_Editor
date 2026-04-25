@@ -442,14 +442,18 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
     PluginManager *pm = activePluginManager();
     if (!pm)
         return;
+    if (!m_pluginToolModeActive)
+        return;
     if (!m_pluginOverlayToggles.value("overlay_enabled", true).toBool())
         return;
 
     const bool isPlaying = m_playbackController &&
                            m_playbackController->state() == PlaybackController::Playing;
-    const bool allowQueryInCurrentState = m_pluginToolModeActive || !isPlaying;
-    const int queryIntervalMs = m_pluginToolModeActive ? kOverlayQueryIntervalMsToolMode
-                                                       : kOverlayQueryIntervalMsIdle;
+    const bool allowQueryInCurrentState = true;
+    const int queryIntervalMs = m_pluginToolModeActive
+                                    ? (isPlaying ? kOverlayQueryIntervalMsToolModePlaying
+                                                 : kOverlayQueryIntervalMsToolMode)
+                                    : kOverlayQueryIntervalMsIdle;
 
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const bool canQuery = nowMs >= m_overlayQueryBlockedUntilMs;
@@ -488,21 +492,43 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
     {
         QPen pen(item.color, item.width);
         painter.setPen(pen);
+        QPointF from = item.from;
+        QPointF to = item.to;
+        QRectF rect = item.rect;
+        if (item.chartSpace)
+        {
+            from = QPointF(laneXToCanvasX(item.chartFrom.x()), beatToY(item.chartFrom.y()));
+            to = QPointF(laneXToCanvasX(item.chartTo.x()), beatToY(item.chartTo.y()));
+            if (item.kind == PluginInterface::CanvasOverlayItem::Rect)
+            {
+                if (item.rectCenterOnChartPoint)
+                {
+                    rect = QRectF(from.x() - item.rect.width() * 0.5,
+                                  from.y() - item.rect.height() * 0.5,
+                                  item.rect.width(),
+                                  item.rect.height());
+                }
+                else
+                {
+                    rect = QRectF(from.x(), from.y(), item.rect.width(), item.rect.height());
+                }
+            }
+        }
         if (item.kind == PluginInterface::CanvasOverlayItem::Rect)
         {
-            painter.fillRect(item.rect, item.fillColor);
-            painter.drawRect(item.rect);
+            painter.fillRect(rect, item.fillColor);
+            painter.drawRect(rect);
         }
         else if (item.kind == PluginInterface::CanvasOverlayItem::Text)
         {
             QFont f = painter.font();
             f.setPixelSize(qMax(8, item.fontPx));
             painter.setFont(f);
-            painter.drawText(item.from, item.text);
+            painter.drawText(from, item.text);
         }
         else
         {
-            painter.drawLine(item.from, item.to);
+            painter.drawLine(from, to);
         }
     }
 }

@@ -17,6 +17,9 @@
 
 namespace
 {
+constexpr int kShiftModifierMask = 0x02000000;
+constexpr int kCtrlModifierMask = 0x04000000;
+
 QJsonObject toJsonObject(const QVariantMap &map)
 {
     return QJsonObject::fromVariantMap(map);
@@ -196,6 +199,11 @@ void ExternalProcessPlugin::onHostRedo(const QString &actionText)
     sendNotification("onHostRedo", QJsonObject{{"action_text", actionText}});
 }
 
+void ExternalProcessPlugin::onHostDiscardChanges(const QString &reasonText)
+{
+    sendNotification("onHostDiscardChanges", QJsonObject{{"reason_text", reasonText}});
+}
+
 bool ExternalProcessPlugin::openAdvancedColorEditor(const QVariantMap &context)
 {
     if (!hasCapability(kCapabilityAdvancedColorEditor))
@@ -230,6 +238,7 @@ QList<PluginInterface::ToolAction> ExternalProcessPlugin::toolActions() const
         action.requiresUndoSnapshot = obj.value("requires_undo_snapshot").toBool(true);
         action.checkable = obj.value("checkable").toBool(false);
         action.checked = obj.value("checked").toBool(false);
+        action.syncPluginToolModeWithChecked = obj.value("sync_plugin_tool_mode_with_checked").toBool(false);
         if (action.actionId.isEmpty() || action.title.isEmpty())
             continue;
         actions.append(action);
@@ -350,6 +359,8 @@ bool ExternalProcessPlugin::handleCanvasInput(const QVariantMap &context,
     if (!outResult || !hasCapability(kCapabilityCanvasInteraction))
         return false;
 
+    const bool shiftDown = event.shiftDown || (event.modifiers & kShiftModifierMask) != 0;
+    const bool ctrlDown = event.ctrlDown || (event.modifiers & kCtrlModifierMask) != 0;
     QJsonObject eventObj{
         {"type", event.type},
         {"x", event.x},
@@ -357,6 +368,8 @@ bool ExternalProcessPlugin::handleCanvasInput(const QVariantMap &context,
         {"button", event.button},
         {"buttons", event.buttons},
         {"modifiers", event.modifiers},
+        {"shift_down", shiftDown},
+        {"ctrl_down", ctrlDown},
         {"wheel_delta", event.wheelDelta},
         {"key", event.key},
         {"timestamp_ms", static_cast<qint64>(event.timestampMs)},
@@ -790,6 +803,20 @@ QList<PluginInterface::CanvasOverlayItem> ExternalProcessPlugin::parseOverlayIte
             item.width = obj.value("width").toDouble(item.width);
         if (obj.contains("font_px"))
             item.fontPx = obj.value("font_px").toInt(item.fontPx);
+
+        const QString coordSpace = obj.value("coord_space").toString().trimmed().toLower();
+        if (coordSpace == "chart")
+        {
+            item.chartSpace = true;
+            item.chartFrom = QPointF(
+                obj.contains("lane_x1") ? obj.value("lane_x1").toDouble() : obj.value("lane_x").toDouble(),
+                obj.contains("beat1") ? obj.value("beat1").toDouble() : obj.value("beat").toDouble());
+            item.chartTo = QPointF(
+                obj.contains("lane_x2") ? obj.value("lane_x2").toDouble() : item.chartFrom.x(),
+                obj.contains("beat2") ? obj.value("beat2").toDouble() : item.chartFrom.y());
+            item.rectCenterOnChartPoint =
+                obj.value("rect_anchor").toString().trimmed().toLower() != "top_left";
+        }
         items.append(item);
     }
     return items;

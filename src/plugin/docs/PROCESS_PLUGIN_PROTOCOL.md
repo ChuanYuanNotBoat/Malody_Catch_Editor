@@ -99,14 +99,23 @@
   "description": "可选描述",
   "confirm_message": "执行前确认文案",
   "placement": "left_sidebar",
-  "requires_undo_snapshot": true
+  "requires_undo_snapshot": true,
+  "checkable": false,
+  "checked": false,
+  "sync_plugin_tool_mode_with_checked": false
 }
 ```
+
+当 `sync_plugin_tool_mode_with_checked=true` 且该 action 为 `checkable` 时，Host 会在动作执行后按最新 `checked` 状态自动切换插件增强工具模式：
+- `checked=true`：启用插件工具模式
+- `checked=false`：退出插件工具模式（回归原始编辑状态）
 
 `placement` 可选值：
 - `tools_menu`
 - `top_toolbar`
 - `left_sidebar`
+- `right_note_panel`
+- `plugin_context_menu`
 
 ### 4.4 Optional Request: Host Batch Edit
 
@@ -155,6 +164,21 @@ Plugin response `result` is an array. Item schema:
   "font_px":12
 }
 ```
+
+Optional chart-space coordinates (for note-like scrolling stability):
+
+```json
+{
+  "kind":"line|rect|text",
+  "coord_space":"chart",
+  "lane_x1":256, "beat1":32.0,
+  "lane_x2":300, "beat2":33.0,
+  "lane_x":256, "beat":32.0,
+  "rect_anchor":"center|top_left"
+}
+```
+
+When `coord_space` is `chart`, host converts `(lane_x, beat)` to canvas each frame using current scroll/playback state.
 
 ### 4.6 Optional Request: Floating Panel (process plugin)
 

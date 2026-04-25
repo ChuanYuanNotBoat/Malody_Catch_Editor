@@ -36,7 +36,8 @@ public:
         PlaceNote,
         PlaceRain,
         Delete,
-        Select
+        Select,
+        AnchorPlace
     };
     explicit ChartCanvas(QWidget *parent = nullptr);
     ~ChartCanvas();
@@ -87,6 +88,7 @@ public:
     void setPluginOverlayToggles(const QVariantMap &toggles);
     QVariantMap pluginOverlayToggles() const { return m_pluginOverlayToggles; }
     QVariantMap pluginCanvasActionContext() const;
+    bool triggerPluginDeleteSelection();
 
 public slots:
     void showGridSettings();
@@ -119,7 +121,8 @@ private:
     static constexpr int kScrollSignalIntervalMs = 33;
     static constexpr double kWheelScrollBeatStepRatio = 0.1;
     static constexpr int kSideMarginDivisor = 20;
-    static constexpr int kOverlayQueryIntervalMsToolMode = 120;
+    static constexpr int kOverlayQueryIntervalMsToolMode = 33;
+    static constexpr int kOverlayQueryIntervalMsToolModePlaying = 16;
     static constexpr int kOverlayQueryIntervalMsIdle = 800;
     static constexpr int kOverlaySlowCallThresholdMs = 40;
     static constexpr int kOverlaySlowCallBackoffMs = 1000;
@@ -186,6 +189,7 @@ private:
     QString resolvePluginCanvasToolId() const;
     void applyPluginCursor(const QString &cursorName);
     bool triggerPluginBatchAction(const QString &actionId, const QString &actionTitle);
+    bool triggerPluginToolAction(const QString &actionId, const QString &actionTitle);
 
     double getNoteTimeMs(const Note &note) const;
     void confirmPaste();

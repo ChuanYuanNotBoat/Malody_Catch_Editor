@@ -1846,6 +1846,10 @@ Open the **History** tab for collapsible long update notes.</source>
         <translation>Select Mode</translation>
     </message>
     <message>
+        <source>Place Anchor</source>
+        <translation>Place Anchor</translation>
+    </message>
+    <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="52"/>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="162"/>
         <source>Copy</source>

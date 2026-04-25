@@ -80,6 +80,19 @@ Host sends:
       "lane_width": 512,
       "note_type_scope": "normal_only",
       "selected_note_ids": ["n1", "n2"],
+      "selected_notes": [
+        {"id":"n1","x":256,"lane_x":256,"beat":32.5},
+        {"id":"n2","x":300,"lane_x":300,"beat":33.0}
+      ],
+      "host_selection_tool": {
+        "mode": "select|place_note|place_rain|delete",
+        "is_select_mode": true,
+        "is_selecting_rect": false,
+        "selection_rect": {"x": 0, "y": 0, "w": 0, "h": 0},
+        "ctrl_toggle_select": true,
+        "empty_click_clears_selection": true,
+        "escape_clears_selection": true
+      },
       "safe_denominators": [1,2,3,4,6,8,12,16,24,32,48,64,96,192,288]
     },
     "event": {
@@ -89,6 +102,8 @@ Host sends:
       "button": 0,
       "buttons": 1,
       "modifiers": 0,
+      "shift_down": false,
+      "ctrl_down": false,
       "wheel_delta": 0.0,
       "key": 0,
       "timestamp_ms": 1713512345684
@@ -128,6 +143,8 @@ Fields:
 - `preview_batch_edit` (object, optional): temporary, non-committed edits for host preview pipeline.
 - `cursor` (string, optional): e.g. `arrow`, `crosshair`, `size_all`, `size_hor`.
 - `status_text` (string, optional): status bar hint.
+- `event.shift_down` (bool, optional but recommended): explicit Shift state from host.
+- `event.ctrl_down` (bool, optional but recommended): explicit Ctrl state from host.
 
 If plugin cannot handle the event, it should return:
 
@@ -171,6 +188,8 @@ struct CanvasInputEvent
     int button = 0;
     int buttons = 0;
     int modifiers = 0;
+    bool shiftDown = false;
+    bool ctrlDown = false;
     double wheelDelta = 0.0;
     int key = 0;
     qint64 timestampMs = 0;

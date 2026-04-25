@@ -1037,6 +1037,10 @@ void MainWindow::createMenus()
     registerShortcutAction(deleteAction, "edit.delete", QKeySequence::Delete);
     connect(deleteAction, &QAction::triggered, this, [this]()
             {
+        if (d->canvas && d->canvas->triggerPluginDeleteSelection()) {
+            Logger::debug("Deleted plugin selection via menu");
+            return;
+        }
         if (d->selectionController && !d->selectionController->selectedIndices().isEmpty()) {
             QSet<int> selected = d->selectionController->selectedIndices();
             const auto& notes = d->chartController->chart()->notes();
@@ -1493,12 +1497,28 @@ void MainWindow::createCentralArea()
         Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));
         d->canvas->setGridSnap(on); });
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode)
-            { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
+            {
+        if (mode == NoteEditPanel::PlaceAnchorMode)
+        {
+            d->canvas->setMode(ChartCanvas::AnchorPlace);
+            togglePluginEnhancedToolMode(true);
+            if (!d->canvas->isPluginToolModeActive())
+            {
+                d->notePanel->setModeFromHost(NoteEditPanel::PlaceNoteMode);
+                d->canvas->setMode(ChartCanvas::PlaceNote);
+            }
+            return;
+        }
+
+        if (d->canvas->isPluginToolModeActive())
+            togglePluginEnhancedToolMode(false);
+        d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
     connect(d->notePanel, &NoteEditPanel::mirrorAxisChanged, d->canvas, &ChartCanvas::setMirrorAxisX);
     connect(d->notePanel, &NoteEditPanel::mirrorGuideVisibilityChanged, d->canvas, &ChartCanvas::setMirrorGuideVisible);
     connect(d->notePanel, &NoteEditPanel::mirrorPreviewVisibilityChanged, d->canvas, &ChartCanvas::setMirrorPreviewVisible);
     connect(d->notePanel, &NoteEditPanel::mirrorFlipRequested, d->canvas, &ChartCanvas::flipSelectedNotes);
+    connect(d->notePanel, &NoteEditPanel::pluginPlacementActionTriggered, this, &MainWindow::triggerPluginQuickAction);
     connect(d->canvas, &ChartCanvas::mirrorAxisChanged, d->notePanel, &NoteEditPanel::setMirrorAxisValue);
 
     if (useCompactMobileLayout())
@@ -1528,7 +1548,7 @@ void MainWindow::createCentralArea()
         addToolBarBreak(Qt::TopToolBarArea);
         d->pluginToolBar = addToolBar(tr("Plugins"));
         d->pluginManagerToolbarAction = d->pluginToolBar->addAction(tr("Plugins"), this, &MainWindow::openPluginManager);
-        d->pluginToolModeToolbarAction = d->pluginToolBar->addAction(tr("Curve Tool"));
+        d->pluginToolModeToolbarAction = d->pluginToolBar->addAction(tr("Launch Curve Tool"));
         d->pluginToolModeToolbarAction->setCheckable(true);
         d->pluginToolModeToolbarAction->setEnabled(false);
         connect(d->pluginToolModeToolbarAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
@@ -1706,7 +1726,11 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
         return false;
 
     if (choice == QMessageBox::Discard)
+    {
+        if (PluginManager *pm = activePluginManager())
+            pm->notifyHostDiscardChanges(reasonText);
         return true;
+    }
 
     QString savePath = d->sourceChartPath;
     if (savePath.isEmpty())
@@ -2613,7 +2637,7 @@ void MainWindow::retranslateUi()
     if (d->pluginManagerToolbarAction)
         d->pluginManagerToolbarAction->setText(tr("Plugins"));
     if (d->pluginToolModeToolbarAction)
-        d->pluginToolModeToolbarAction->setText(tr("Curve Tool"));
+        d->pluginToolModeToolbarAction->setText(tr("Launch Curve Tool"));
     if (d->leftPanel)
         d->leftPanel->retranslateUi();
     if (d->notePanel)
@@ -3064,6 +3088,8 @@ void MainWindow::applySidebarTheme()
         const QString css = QString(
                                 "QWidget#%9 { background-color: %1; color: %2; border: 1px solid %4; }"
                                 "QLabel, QCheckBox, QRadioButton, QGroupBox { color: %2; }"
+                                "QGroupBox { border: 1px solid %4; border-radius: 6px; margin-top: 8px; padding-top: 10px; }"
+                                "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: %2; }"
                                 "QLineEdit, QAbstractSpinBox, QComboBox, QListWidget, QTextEdit, QPlainTextEdit {"
                                 "  background-color: %3; color: %2; border: 1px solid %4; }"
                                 "QAbstractItemView { background-color: %3; color: %2; border: 1px solid %4; selection-background-color: %5; selection-color: %6; }"
@@ -3071,6 +3097,11 @@ void MainWindow::applySidebarTheme()
                                 "QPushButton:hover { background-color: %7; }"
                                 "QPushButton:pressed { background-color: %8; }"
                                 "QPushButton:disabled { color: %6; }"
+                                "QToolButton { background-color: %5; color: %2; border: 1px solid %4; border-radius: 6px; padding: 4px 8px; }"
+                                "QToolButton:hover { background-color: %7; }"
+                                "QToolButton:pressed { background-color: %8; }"
+                                "QToolButton:checked { background-color: %7; }"
+                                "QToolButton:disabled { color: %6; }"
                                 "QScrollBar:vertical, QScrollBar:horizontal { background-color: %1; }")
                                 .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
                                      panelDisabledText.name(), panelButtonHoverBg.name(), panelButtonPressedBg.name(), rootName);

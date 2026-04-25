@@ -21,10 +21,11 @@ public:
         QString description;
         QString confirmMessage;
         QString hostAction; // "" | undo | redo
-        QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar
+        QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar | right_note_panel | plugin_context_menu
         bool requiresUndoSnapshot = true;
         bool checkable = false;
         bool checked = false;
+        bool syncPluginToolModeWithChecked = false;
     };
     struct FloatingPanelDescriptor
     {
@@ -51,6 +52,10 @@ public:
         QColor fillColor = QColor(255, 0, 0, 40);
         double width = 1.5;
         int fontPx = 12;
+        bool chartSpace = false; // When true, use chart-space coordinates (lane_x, beat).
+        QPointF chartFrom;       // x=lane_x, y=beat.
+        QPointF chartTo;         // x=lane_x, y=beat (for line end).
+        bool rectCenterOnChartPoint = true;
     };
     struct BatchEdit
     {
@@ -66,6 +71,8 @@ public:
         int button = 0;
         int buttons = 0;
         int modifiers = 0;
+        bool shiftDown = false;
+        bool ctrlDown = false;
         double wheelDelta = 0.0;
         int key = 0;
         qint64 timestampMs = 0;
@@ -97,6 +104,8 @@ public:
     static constexpr const char *kPlacementToolsMenu = "tools_menu";
     static constexpr const char *kPlacementTopToolbar = "top_toolbar";
     static constexpr const char *kPlacementLeftSidebar = "left_sidebar";
+    static constexpr const char *kPlacementRightNotePanel = "right_note_panel";
+    static constexpr const char *kPlacementPluginContextMenu = "plugin_context_menu";
 
     virtual ~PluginInterface() = default;
 
@@ -144,6 +153,10 @@ public:
     virtual void onHostRedo(const QString &actionText)
     {
         (void)actionText;
+    }
+    virtual void onHostDiscardChanges(const QString &reasonText)
+    {
+        (void)reasonText;
     }
 
     // Optional UI extension point.

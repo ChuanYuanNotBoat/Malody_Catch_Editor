@@ -1724,8 +1724,8 @@ Open the **History** tab for collapsible long update notes.</source>
         <translation>会话设置已更新</translation>
     </message>
     <message>
-        <source>Curve Tool</source>
-        <translation>曲线工具</translation>
+        <source>Launch Curve Tool</source>
+        <translation>启动曲线工具</translation>
     </message>
     <message>
         <source>No plugin supports canvas interaction.</source>
@@ -1916,6 +1916,10 @@ Open the **History** tab for collapsible long update notes.</source>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="160"/>
         <source>Select Mode</source>
         <translation>选择模式</translation>
+    </message>
+    <message>
+        <source>Place Anchor</source>
+        <translation>放置锚点</translation>
     </message>
     <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="52"/>
