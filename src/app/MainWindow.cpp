@@ -3072,6 +3072,11 @@ void MainWindow::applySidebarTheme()
                                 "QPushButton:hover { background-color: %7; }"
                                 "QPushButton:pressed { background-color: %8; }"
                                 "QPushButton:disabled { color: %6; }"
+                                "QToolButton { background-color: %5; color: %2; border: 1px solid %4; border-radius: 6px; padding: 4px 8px; }"
+                                "QToolButton:hover { background-color: %7; }"
+                                "QToolButton:pressed { background-color: %8; }"
+                                "QToolButton:checked { background-color: %7; }"
+                                "QToolButton:disabled { color: %6; }"
                                 "QScrollBar:vertical, QScrollBar:horizontal { background-color: %1; }")
                                 .arg(panelBg.name(), fg.name(), panelInputBg.name(), panelBorder.name(), panelButtonBg.name(),
                                      panelDisabledText.name(), panelButtonHoverBg.name(), panelButtonPressedBg.name(), rootName);

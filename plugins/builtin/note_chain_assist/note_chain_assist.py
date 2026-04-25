@@ -132,6 +132,31 @@ STATE = {
     "curve_samples_cache": {},
 }
 
+TRANSLATIONS.update(
+    {
+        "status_segment_selected": {"en": "Segment selected", "zh": "已选中曲线段", "ja": "セグメントを選択しました"},
+        "status_box_selecting": {"en": "Box selecting", "zh": "正在框选", "ja": "範囲選択中"},
+        "status_selection_cleared": {"en": "Selection cleared", "zh": "已清除选择", "ja": "選択を解除しました"},
+        "status_box_selection_applied": {"en": "Box selection applied", "zh": "框选已应用", "ja": "範囲選択を適用しました"},
+        "status_box_selection_cleared": {"en": "Box selection cleared", "zh": "框选已清除", "ja": "範囲選択をクリアしました"},
+        "status_selection_deleted": {"en": "Selection deleted", "zh": "已删除所选对象", "ja": "選択対象を削除しました"},
+        "action_toggle_select_anchors": {"en": "Selectable: Anchors", "zh": "可选中：节点", "ja": "選択可能: ノード"},
+        "action_toggle_select_anchors_desc": {"en": "Enable/disable anchor selection", "zh": "启用/禁用节点选择", "ja": "ノード選択の有効/無効を切替"},
+        "action_toggle_select_segments": {"en": "Selectable: Segments", "zh": "可选中：曲线段", "ja": "選択可能: セグメント"},
+        "action_toggle_select_segments_desc": {"en": "Enable/disable segment selection", "zh": "启用/禁用曲线段选择", "ja": "セグメント選択の有効/無効を切替"},
+        "action_toggle_select_notes": {"en": "Selectable: Notes", "zh": "可选中：音符", "ja": "選択可能: ノーツ"},
+        "action_toggle_select_notes_desc": {
+            "en": "Allow selecting host notes (disable for curve-only selection)",
+            "zh": "允许选择主程序音符（关闭后为仅曲线选择）",
+            "ja": "ホストノーツ選択を許可（無効でカーブのみ選択）",
+        },
+        "action_connect_selected": {"en": "Connect Selected", "zh": "连接选中节点", "ja": "選択ノードを接続"},
+        "action_connect_selected_desc": {"en": "Connect selected anchors by time order", "zh": "按时间顺序连接选中节点", "ja": "時間順に選択ノードを接続"},
+        "action_disconnect_selected_segments": {"en": "Delete Selected Segment", "zh": "删除选中曲线段", "ja": "選択セグメントを削除"},
+        "action_disconnect_selected_segments_desc": {"en": "Disconnect selected curve segments", "zh": "断开选中的曲线段连接", "ja": "選択セグメントの接続を解除"},
+    }
+)
+
 
 def _clone(v):
     return json.loads(json.dumps(v))
@@ -1540,18 +1565,18 @@ def _handle_canvas_input(payload):
                     STATE["selected_anchor_ids"] = []
                 consumed = True
                 cursor = "pointing_hand"
-                status = "Segment selected"
+                status = tr(STATE["last_context"], "status_segment_selected")
             elif ctrl:
                 STATE["box_select"] = {"active": True, "start": [x, y], "end": [x, y], "append": True}
                 consumed = True
-                status = "Box selecting"
+                status = tr(STATE["last_context"], "status_box_selecting")
             else:
                 consumed = True
                 had_selection = bool(STATE.get("selected_anchor_ids")) or bool(STATE.get("selected_links"))
                 if had_selection:
                     STATE["selected_anchor_ids"] = []
                     STATE["selected_links"] = []
-                    status = "Selection cleared"
+                    status = tr(STATE["last_context"], "status_selection_cleared")
                     return {
                         "consumed": consumed,
                         "overlay": _build_overlay(STATE["last_context"]),
@@ -1604,7 +1629,7 @@ def _handle_canvas_input(payload):
             STATE["box_select"] = box
             consumed = True
             cursor = "crosshair"
-            status = "Box selecting"
+            status = tr(STATE["last_context"], "status_box_selecting")
             return {
                 "consumed": consumed,
                 "overlay": _build_overlay(STATE["last_context"]),
@@ -1655,7 +1680,7 @@ def _handle_canvas_input(payload):
         if bool(STATE.get("box_select", {}).get("active", False)):
             changed = _apply_box_selection(STATE["last_context"])
             consumed = True
-            status = "Box selection applied" if changed else "Box selection cleared"
+            status = tr(STATE["last_context"], "status_box_selection_applied") if changed else tr(STATE["last_context"], "status_box_selection_cleared")
             STATE["drag"] = {"mode": "", "index": -1}
             return {
                 "consumed": consumed,
@@ -1697,13 +1722,13 @@ def _handle_canvas_input(payload):
             if changed_segments or changed_anchors:
                 consumed = True
                 request_checkpoint = True
-                status = "Selection deleted"
+                status = tr(STATE["last_context"], "status_selection_deleted")
         elif key == 0x01000000:  # Esc
             if STATE.get("selected_anchor_ids") or STATE.get("selected_links"):
                 STATE["selected_anchor_ids"] = []
                 STATE["selected_links"] = []
                 consumed = True
-                status = "Selection cleared"
+                status = tr(STATE["last_context"], "status_selection_cleared")
 
     # In tool mode, left-button canvas operations belong to plugin.
     notes_selectable = _selection_enabled("notes")
@@ -1744,8 +1769,8 @@ def _list_tool_actions():
         },
         {
             "action_id": "toggle_select_anchors",
-            "title": "Selectable: Anchors",
-            "description": "Enable/disable anchor selection",
+            "title": tr(STATE.get("last_context", {}), "action_toggle_select_anchors"),
+            "description": tr(STATE.get("last_context", {}), "action_toggle_select_anchors_desc"),
             "placement": "right_note_panel",
             "requires_undo_snapshot": False,
             "checkable": True,
@@ -1753,8 +1778,8 @@ def _list_tool_actions():
         },
         {
             "action_id": "toggle_select_segments",
-            "title": "Selectable: Segments",
-            "description": "Enable/disable segment selection",
+            "title": tr(STATE.get("last_context", {}), "action_toggle_select_segments"),
+            "description": tr(STATE.get("last_context", {}), "action_toggle_select_segments_desc"),
             "placement": "right_note_panel",
             "requires_undo_snapshot": False,
             "checkable": True,
@@ -1762,8 +1787,8 @@ def _list_tool_actions():
         },
         {
             "action_id": "toggle_select_notes",
-            "title": "Selectable: Notes",
-            "description": "Allow selecting host notes (disable for curve-only selection)",
+            "title": tr(STATE.get("last_context", {}), "action_toggle_select_notes"),
+            "description": tr(STATE.get("last_context", {}), "action_toggle_select_notes_desc"),
             "placement": "right_note_panel",
             "requires_undo_snapshot": False,
             "checkable": True,
@@ -1808,29 +1833,29 @@ def _list_tool_actions():
         },
         {
             "action_id": "connect_selected_nodes",
-            "title": "Connect Selected",
-            "description": "Connect selected anchors by time order",
+            "title": tr(STATE.get("last_context", {}), "action_connect_selected"),
+            "description": tr(STATE.get("last_context", {}), "action_connect_selected_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "disconnect_selected_segments",
-            "title": "Delete Selected Segment",
-            "description": "Disconnect selected curve segments",
+            "title": tr(STATE.get("last_context", {}), "action_disconnect_selected_segments"),
+            "description": tr(STATE.get("last_context", {}), "action_disconnect_selected_segments_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "connect_selected_nodes_ctx",
-            "title": "Connect Selected",
-            "description": "Connect selected anchors by time order",
+            "title": tr(STATE.get("last_context", {}), "action_connect_selected"),
+            "description": tr(STATE.get("last_context", {}), "action_connect_selected_desc"),
             "placement": "plugin_context_menu",
             "requires_undo_snapshot": False,
         },
         {
             "action_id": "disconnect_selected_segments_ctx",
-            "title": "Delete Selected Segment",
-            "description": "Disconnect selected curve segments",
+            "title": tr(STATE.get("last_context", {}), "action_disconnect_selected_segments"),
+            "description": tr(STATE.get("last_context", {}), "action_disconnect_selected_segments_desc"),
             "placement": "plugin_context_menu",
             "requires_undo_snapshot": False,
         },
