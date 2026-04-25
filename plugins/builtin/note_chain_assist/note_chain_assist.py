@@ -114,7 +114,7 @@ STATE = {
     "drag": {"mode": "", "index": -1},
     "selected_anchor_ids": [],
     "selected_links": [],
-    "selection_targets": {"anchors": True, "segments": True},
+    "selection_targets": {"anchors": True, "segments": True, "notes": False},
     "box_select": {"active": False, "start": [0.0, 0.0], "end": [0.0, 0.0], "append": False},
     "pending_connect_anchor_id": -1,
     "next_anchor_id": 1,
@@ -218,7 +218,7 @@ def _capture_snapshot():
         "anchors": _clone(STATE.get("anchors", [])),
         "links": _clone(STATE.get("links", [])),
         "style": _clone(STATE.get("style", {})),
-        "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True})),
+        "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True, "notes": False})),
         "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
         "next_anchor_id": int(STATE.get("next_anchor_id", 1)),
         "pending_connect_anchor_id": int(STATE.get("pending_connect_anchor_id", -1)),
@@ -237,9 +237,10 @@ def _restore_snapshot(snapshot):
         STATE["selection_targets"] = {
             "anchors": bool(targets.get("anchors", True)),
             "segments": bool(targets.get("segments", True)),
+            "notes": bool(targets.get("notes", False)),
         }
     else:
-        STATE["selection_targets"] = {"anchors": True, "segments": True}
+        STATE["selection_targets"] = {"anchors": True, "segments": True, "notes": False}
     STATE["anchor_placement_enabled"] = bool(snapshot.get("anchor_placement_enabled", False))
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
@@ -1560,8 +1561,13 @@ def _handle_canvas_input(payload):
                         "request_undo_checkpoint": request_checkpoint,
                         "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
                     }
+                notes_selectable = _selection_enabled("notes")
                 if not bool(STATE.get("anchor_placement_enabled", False)):
-                    status = tr(STATE["last_context"], "anchor_place_off_hint")
+                    if notes_selectable:
+                        consumed = False
+                        status = ""
+                    else:
+                        status = tr(STATE["last_context"], "anchor_place_off_hint")
                 else:
                     new_idx = _append_anchor(STATE["last_context"], x, y)
                     new_anchor_id = int(STATE["anchors"][new_idx].get("id", 0))
@@ -1700,9 +1706,10 @@ def _handle_canvas_input(payload):
                 status = "Selection cleared"
 
     # In tool mode, left-button canvas operations belong to plugin.
-    if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON:
+    notes_selectable = _selection_enabled("notes")
+    if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON and not notes_selectable:
         consumed = True
-    if et == "mouse_move" and not consumed and int(event.get("buttons", 0)) != 0:
+    if et == "mouse_move" and not consumed and int(event.get("buttons", 0)) != 0 and not notes_selectable:
         consumed = True
 
     return {
@@ -1752,6 +1759,15 @@ def _list_tool_actions():
             "requires_undo_snapshot": False,
             "checkable": True,
             "checked": bool(STATE.get("selection_targets", {}).get("segments", True)),
+        },
+        {
+            "action_id": "toggle_select_notes",
+            "title": "Selectable: Notes",
+            "description": "Allow selecting host notes (disable for curve-only selection)",
+            "placement": "right_note_panel",
+            "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": bool(STATE.get("selection_targets", {}).get("notes", False)),
         },
         {
             "action_id": "undo_curve_edit",
@@ -1865,6 +1881,11 @@ def _run_tool_action(payload):
             STATE["selected_links"] = []
         _record_history_state(context)
         return True
+    if action_id == "toggle_select_notes":
+        cur = bool(STATE.get("selection_targets", {}).get("notes", False))
+        STATE["selection_targets"]["notes"] = not cur
+        _record_history_state(context)
+        return True
     if action_id == "cycle_density_style":
         _cycle_density_style(context)
         return True
@@ -1913,6 +1934,7 @@ def run_one_shot(action_id):
         "toggle_anchor_placement",
         "toggle_select_anchors",
         "toggle_select_segments",
+        "toggle_select_notes",
         "undo_curve_edit",
         "redo_curve_edit",
         "cycle_density_style",

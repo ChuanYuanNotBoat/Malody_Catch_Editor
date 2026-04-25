@@ -13,6 +13,7 @@ class QVBoxLayout;
 class QLabel;
 class QRadioButton;
 class QGroupBox;
+class QToolButton;
 
 class NoteEditPanel : public RightPanel
 {
@@ -61,6 +62,7 @@ private slots:
 private:
     void setupUi();
     void setMode(int mode);
+    void refreshPluginToolsUi();
 
     ChartController *m_chartController;
     SelectionController *m_selectionController;
@@ -70,6 +72,7 @@ private:
     QRadioButton *m_rainRadio;
     QRadioButton *m_deleteRadio;
     QRadioButton *m_selectRadio;
+    QToolButton *m_pluginToolsToggleBtn;
     QLabel *m_pluginToolsLabel;
     QWidget *m_pluginToolsContainer;
     QVBoxLayout *m_pluginToolsLayout;
@@ -86,4 +89,5 @@ private:
     QPushButton *m_mirrorFlipButton;
     int m_currentMode;
     int m_gridDivision;
+    bool m_pluginToolsExpanded;
 };

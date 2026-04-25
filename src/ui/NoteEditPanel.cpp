@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QToolButton>
 #include <QWidget>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -22,7 +23,7 @@
 #include <QSignalBlocker>
 
 NoteEditPanel::NoteEditPanel(QWidget *parent)
-    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20)
+    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20), m_pluginToolsExpanded(true)
 {
     setupUi();
 }
@@ -52,11 +53,23 @@ void NoteEditPanel::setupUi()
     mainLayout->addWidget(m_deleteRadio);
     mainLayout->addWidget(m_selectRadio);
 
+    m_pluginToolsToggleBtn = new QToolButton(this);
+    m_pluginToolsToggleBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_pluginToolsToggleBtn->setCheckable(true);
+    m_pluginToolsToggleBtn->setChecked(true);
+    connect(m_pluginToolsToggleBtn, &QToolButton::clicked, this, [this](bool checked)
+            {
+                m_pluginToolsExpanded = checked;
+                refreshPluginToolsUi();
+            });
+    mainLayout->addWidget(m_pluginToolsToggleBtn);
+
     m_pluginToolsLabel = new QLabel(tr("Note Placement Tools:"), this);
     m_pluginToolsContainer = new QWidget(this);
     m_pluginToolsLayout = new QVBoxLayout(m_pluginToolsContainer);
     m_pluginToolsLayout->setContentsMargins(0, 0, 0, 0);
     m_pluginToolsLayout->setSpacing(6);
+    m_pluginToolsToggleBtn->setVisible(false);
     m_pluginToolsLabel->setVisible(false);
     m_pluginToolsContainer->setVisible(false);
     mainLayout->addWidget(m_pluginToolsLabel);
@@ -230,11 +243,23 @@ void NoteEditPanel::setPluginPlacementActions(const QList<PluginPlacementAction>
         m_pluginToolsLayout->addWidget(btn);
     }
 
-    const bool hasActions = (m_pluginToolsLayout->count() > 0);
+    refreshPluginToolsUi();
+}
+
+void NoteEditPanel::refreshPluginToolsUi()
+{
+    const bool hasActions = (m_pluginToolsLayout && m_pluginToolsLayout->count() > 0);
+    if (m_pluginToolsToggleBtn)
+    {
+        m_pluginToolsToggleBtn->setVisible(hasActions);
+        m_pluginToolsToggleBtn->setChecked(m_pluginToolsExpanded);
+        const QString arrow = m_pluginToolsExpanded ? QStringLiteral("▼ ") : QStringLiteral("▶ ");
+        m_pluginToolsToggleBtn->setText(arrow + tr("Curve Plugin Options"));
+    }
     if (m_pluginToolsLabel)
         m_pluginToolsLabel->setVisible(hasActions);
     if (m_pluginToolsContainer)
-        m_pluginToolsContainer->setVisible(hasActions);
+        m_pluginToolsContainer->setVisible(hasActions && m_pluginToolsExpanded);
 }
 
 void NoteEditPanel::setMirrorAxisValue(int axisX)
@@ -260,6 +285,7 @@ void NoteEditPanel::retranslateUi()
         m_selectRadio->setText(tr("Select Mode"));
     if (m_pluginToolsLabel)
         m_pluginToolsLabel->setText(tr("Note Placement Tools:"));
+    refreshPluginToolsUi();
     if (m_copyButton)
         m_copyButton->setText(tr("Copy"));
     if (m_timeDivisionLabel)
