@@ -1573,6 +1573,29 @@ def _build_batch_from_curve(context):
     return {"add": out, "remove": [], "move": []}
 
 
+def _sync_anchor_placement_with_host_mode(context):
+    if not isinstance(context, dict):
+        return
+    host_sel = context.get("host_selection_tool", {})
+    if not isinstance(host_sel, dict):
+        return
+    mode = str(host_sel.get("mode", "")).strip().lower()
+    if mode == "anchor_place":
+        STATE["anchor_placement_enabled"] = True
+    elif mode in ("place_note", "place_rain", "delete", "select"):
+        STATE["anchor_placement_enabled"] = False
+
+
+def _host_controls_anchor_mode(context):
+    if not isinstance(context, dict):
+        return False
+    host_sel = context.get("host_selection_tool", {})
+    if not isinstance(host_sel, dict):
+        return False
+    mode = str(host_sel.get("mode", "")).strip().lower()
+    return mode in ("anchor_place", "place_note", "place_rain", "delete", "select")
+
+
 def _cycle_density_style(context):
     current = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
     normalized = tuple(_sanitize_denominators(current, context))
@@ -1591,6 +1614,7 @@ def _handle_canvas_input(payload):
     event = payload.get("event", {}) if isinstance(payload, dict) else {}
     STATE["last_context"] = context if isinstance(context, dict) else {}
     _ensure_project_context(STATE["last_context"])
+    _sync_anchor_placement_with_host_mode(STATE["last_context"])
 
     et = str(event.get("type", ""))
     x = float(event.get("x", 0.0))
@@ -1903,7 +1927,7 @@ def _handle_canvas_input(payload):
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
         if key == 0x01000020 or _event_has_shift(event):  # Qt::Key_Shift
             STATE["shift_down"] = True
-        if not ctrl and key == KEY_A:
+        if not ctrl and key == KEY_A and not _host_controls_anchor_mode(STATE["last_context"]):
             STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
             consumed = True
             status = tr(STATE["last_context"], "anchor_enabled") if STATE["anchor_placement_enabled"] else tr(STATE["last_context"], "anchor_disabled")

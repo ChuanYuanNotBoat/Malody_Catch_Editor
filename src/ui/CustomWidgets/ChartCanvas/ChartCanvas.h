@@ -36,7 +36,8 @@ public:
         PlaceNote,
         PlaceRain,
         Delete,
-        Select
+        Select,
+        AnchorPlace
     };
     explicit ChartCanvas(QWidget *parent = nullptr);
     ~ChartCanvas();

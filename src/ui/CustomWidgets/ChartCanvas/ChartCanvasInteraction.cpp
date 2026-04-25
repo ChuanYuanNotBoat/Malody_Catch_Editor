@@ -380,6 +380,8 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
         modeName = "delete";
     else if (m_currentMode == Select)
         modeName = "select";
+    else if (m_currentMode == AnchorPlace)
+        modeName = "anchor_place";
     hostSelectionTool.insert("mode", modeName);
     hostSelectionTool.insert("is_select_mode", m_currentMode == Select);
     hostSelectionTool.insert("is_selecting_rect", m_isSelecting);

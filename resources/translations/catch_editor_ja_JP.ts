@@ -1908,6 +1908,10 @@ Open the **History** tab for collapsible long update notes.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Place Anchor</source>
+        <translation>アンカー配置</translation>
+    </message>
+    <message>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="52"/>
         <location filename="../../src/ui/NoteEditPanel.cpp" line="162"/>
         <source>Copy</source>
@@ -2160,4 +2164,3 @@ Open the **History** tab for collapsible long update notes.</source>
     </message>
 </context>
 </TS>
-

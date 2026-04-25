@@ -19,6 +19,15 @@ class NoteEditPanel : public RightPanel
 {
     Q_OBJECT
 public:
+    enum EditorMode
+    {
+        PlaceNoteMode = 0,
+        PlaceRainMode = 1,
+        DeleteMode = 2,
+        SelectMode = 3,
+        PlaceAnchorMode = 4,
+    };
+
     struct PluginPlacementAction
     {
         QString pluginId;
@@ -35,6 +44,8 @@ public:
     void setPluginPlacementActions(const QList<PluginPlacementAction> &actions);
     void retranslateUi();
     void setMirrorAxisValue(int axisX);
+    void setModeFromHost(int mode);
+    int currentMode() const { return m_currentMode; }
 
 signals:
     void modeChanged(int mode);
@@ -72,6 +83,7 @@ private:
     QRadioButton *m_rainRadio;
     QRadioButton *m_deleteRadio;
     QRadioButton *m_selectRadio;
+    QRadioButton *m_anchorRadio;
     QToolButton *m_pluginToolsToggleBtn;
     QLabel *m_pluginToolsLabel;
     QWidget *m_pluginToolsContainer;

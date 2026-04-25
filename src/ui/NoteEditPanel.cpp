@@ -40,11 +40,13 @@ void NoteEditPanel::setupUi()
     m_rainRadio = new QRadioButton(tr("Place Rain"), this);
     m_deleteRadio = new QRadioButton(tr("Delete Mode"), this);
     m_selectRadio = new QRadioButton(tr("Select Mode"), this);
+    m_anchorRadio = new QRadioButton(tr("Place Anchor"), this);
     m_noteRadio->setChecked(true);
-    m_modeGroup->addButton(m_noteRadio, 0);
-    m_modeGroup->addButton(m_rainRadio, 1);
-    m_modeGroup->addButton(m_deleteRadio, 2);
-    m_modeGroup->addButton(m_selectRadio, 3);
+    m_modeGroup->addButton(m_noteRadio, PlaceNoteMode);
+    m_modeGroup->addButton(m_rainRadio, PlaceRainMode);
+    m_modeGroup->addButton(m_deleteRadio, DeleteMode);
+    m_modeGroup->addButton(m_selectRadio, SelectMode);
+    m_modeGroup->addButton(m_anchorRadio, PlaceAnchorMode);
     connect(m_modeGroup, &QButtonGroup::buttonClicked, this, [this](QAbstractButton *button)
             { setMode(m_modeGroup->id(button)); });
 
@@ -52,6 +54,7 @@ void NoteEditPanel::setupUi()
     mainLayout->addWidget(m_rainRadio);
     mainLayout->addWidget(m_deleteRadio);
     mainLayout->addWidget(m_selectRadio);
+    mainLayout->addWidget(m_anchorRadio);
 
     m_pluginToolsToggleBtn = new QToolButton(this);
     m_pluginToolsToggleBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -133,6 +136,8 @@ void NoteEditPanel::setupUi()
 
 void NoteEditPanel::setMode(int mode)
 {
+    if (m_currentMode == mode)
+        return;
     m_currentMode = mode;
     emit modeChanged(mode);
 }
@@ -204,6 +209,16 @@ void NoteEditPanel::setChartController(ChartController *controller)
 void NoteEditPanel::setSelectionController(SelectionController *controller)
 {
     m_selectionController = controller;
+}
+
+void NoteEditPanel::setModeFromHost(int mode)
+{
+    QAbstractButton *button = m_modeGroup ? m_modeGroup->button(mode) : nullptr;
+    if (!button)
+        return;
+    const QSignalBlocker blocker(m_modeGroup);
+    button->setChecked(true);
+    m_currentMode = mode;
 }
 
 void NoteEditPanel::setPluginPlacementActions(const QList<PluginPlacementAction> &actions)
@@ -283,6 +298,8 @@ void NoteEditPanel::retranslateUi()
         m_deleteRadio->setText(tr("Delete Mode"));
     if (m_selectRadio)
         m_selectRadio->setText(tr("Select Mode"));
+    if (m_anchorRadio)
+        m_anchorRadio->setText(tr("Place Anchor"));
     if (m_pluginToolsLabel)
         m_pluginToolsLabel->setText(tr("Note Placement Tools:"));
     refreshPluginToolsUi();

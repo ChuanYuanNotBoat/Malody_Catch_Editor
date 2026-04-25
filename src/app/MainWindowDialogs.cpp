@@ -371,6 +371,8 @@ void MainWindow::refreshPluginUiExtensions()
         }
         else if (placement == QString(PluginInterface::kPlacementRightNotePanel))
         {
+            if (entry.action.actionId.trimmed() == "toggle_anchor_placement")
+                continue;
             NoteEditPanel::PluginPlacementAction qa;
             qa.pluginId = entry.pluginId;
             qa.actionId = entry.action.actionId;
@@ -489,6 +491,19 @@ void MainWindow::togglePluginEnhancedToolMode(bool enabled)
 
     d->pluginToolModePluginId = pluginId;
     d->canvas->setPluginToolMode(enabled, pluginId);
+    if (d->notePanel)
+    {
+        if (enabled)
+        {
+            d->notePanel->setModeFromHost(NoteEditPanel::PlaceAnchorMode);
+            d->canvas->setMode(ChartCanvas::AnchorPlace);
+        }
+        else if (d->notePanel->currentMode() == NoteEditPanel::PlaceAnchorMode)
+        {
+            d->notePanel->setModeFromHost(NoteEditPanel::PlaceNoteMode);
+            d->canvas->setMode(ChartCanvas::PlaceNote);
+        }
+    }
     statusBar()->showMessage(
         enabled ? tr("Plugin enhanced tool mode ON")
                 : tr("Plugin enhanced tool mode OFF"),

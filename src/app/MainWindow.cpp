@@ -1497,7 +1497,22 @@ void MainWindow::createCentralArea()
         Logger::info(QString("[Grid] MainWindow::gridSnapChanged signal received: %1").arg(on));
         d->canvas->setGridSnap(on); });
     connect(d->notePanel, &NoteEditPanel::modeChanged, d->canvas, [this](int mode)
-            { d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
+            {
+        if (mode == NoteEditPanel::PlaceAnchorMode)
+        {
+            d->canvas->setMode(ChartCanvas::AnchorPlace);
+            togglePluginEnhancedToolMode(true);
+            if (!d->canvas->isPluginToolModeActive())
+            {
+                d->notePanel->setModeFromHost(NoteEditPanel::PlaceNoteMode);
+                d->canvas->setMode(ChartCanvas::PlaceNote);
+            }
+            return;
+        }
+
+        if (d->canvas->isPluginToolModeActive())
+            togglePluginEnhancedToolMode(false);
+        d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
     connect(d->notePanel, &NoteEditPanel::mirrorAxisChanged, d->canvas, &ChartCanvas::setMirrorAxisX);
     connect(d->notePanel, &NoteEditPanel::mirrorGuideVisibilityChanged, d->canvas, &ChartCanvas::setMirrorGuideVisible);
