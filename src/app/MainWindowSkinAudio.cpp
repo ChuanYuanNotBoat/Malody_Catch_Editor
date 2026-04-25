@@ -1,6 +1,7 @@
-﻿#include "MainWindow.h"
+#include "MainWindow.h"
 #include "MainWindowPrivate.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
+#include "ui/CustomWidgets/RealtimePreviewWidget.h"
 #include "file/SkinIO.h"
 #include "app/mobile/MobileResourcePaths.h"
 #include "model/Skin.h"

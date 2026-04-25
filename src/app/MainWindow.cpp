@@ -4,6 +4,7 @@
 #include "app/Application.h"
 #include "plugin/PluginManager.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
+#include "ui/CustomWidgets/RealtimePreviewWidget.h"
 #include "ui/NoteEditPanel.h"
 #include "ui/BPMTimePanel.h"
 #include "ui/MetaEditPanel.h"
@@ -1379,8 +1380,23 @@ void MainWindow::createCentralArea()
     d->canvas->setNoteSoundFile(noteSoundPath);
     d->canvas->setNoteSoundEnabled(!noteSoundPath.isEmpty());
 
+    d->previewWidget = new RealtimePreviewWidget(this);
+    d->previewWidget->setChartController(d->chartController);
+    d->previewWidget->setPlaybackController(d->playbackController);
+    d->previewWidget->setColorMode(Settings::instance().colorNoteEnabled());
+    d->previewWidget->setHyperfruitEnabled(Settings::instance().hyperfruitOutlineEnabled());
+    d->previewWidget->setNoteSize(Settings::instance().noteSize());
+    d->previewWidget->setCurrentTimeMs(d->canvas->currentPlayTime());
+
     connect(d->canvas, &ChartCanvas::statusMessage, this, [this](const QString &msg)
             { statusBar()->showMessage(msg, 2000); });
+    connect(d->canvas, &ChartCanvas::scrollPositionChanged, this, [this](double) {
+        if (!d->previewWidget || !d->canvas)
+            return;
+        if (d->playbackController && d->playbackController->state() == PlaybackController::Playing)
+            return;
+        d->previewWidget->setCurrentTimeMs(d->canvas->currentPlayTime());
+    });
 
     d->leftPanel->setChartCanvas(d->canvas);
 
@@ -1494,9 +1510,10 @@ void MainWindow::createCentralArea()
     {
         d->splitter = new QSplitter(Qt::Horizontal, this);
         d->splitter->addWidget(d->leftPanel);
+        d->splitter->addWidget(d->previewWidget);
         d->splitter->addWidget(canvasContainer);
         d->splitter->addWidget(d->rightPanelContainer);
-        d->splitter->setSizes({150, 800, 300});
+        d->splitter->setSizes({150, 200, 700, 300});
         setCentralWidget(d->splitter);
         d->mainToolBar = addToolBar(tr("Tools"));
         d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
@@ -2361,6 +2378,8 @@ void MainWindow::toggleColorMode(bool on)
     Logger::info(QString("Color mode toggled to %1").arg(on));
     Settings::instance().setColorNoteEnabled(on);
     d->canvas->setColorMode(on);
+    if (d->previewWidget)
+        d->previewWidget->setColorMode(on);
 }
 
 void MainWindow::toggleTimelineDivisionColorMode(bool on)
@@ -2534,6 +2553,8 @@ void MainWindow::toggleHyperfruitMode(bool on)
     Logger::info(QString("Hyperfruit mode toggled to %1").arg(on));
     Settings::instance().setHyperfruitOutlineEnabled(on);
     d->canvas->setHyperfruitEnabled(on);
+    if (d->previewWidget)
+        d->previewWidget->setHyperfruitEnabled(on);
 }
 
 void MainWindow::toggleVerticalFlip(bool flipped)

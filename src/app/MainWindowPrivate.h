@@ -33,6 +33,7 @@ class QScrollArea;
 class QQuickWidget;
 class QObject;
 class QTimer;
+class RealtimePreviewWidget;
 
 class MainWindow::Private
 {
@@ -42,6 +43,7 @@ public:
     PlaybackController *playbackController = nullptr;
     Skin *skin = nullptr;
     ChartCanvas *canvas = nullptr;
+    RealtimePreviewWidget *previewWidget = nullptr;
     QScrollBar *verticalScrollBar = nullptr;
     QSplitter *splitter = nullptr;
     QWidget *rightPanelContainer = nullptr;

@@ -50,6 +50,7 @@ set(SOURCES
     src/plugin/ExternalProcessPlugin.cpp
     src/plugin/PluginManager.cpp
     src/ui/CustomWidgets/RightPanel.cpp
+    src/ui/CustomWidgets/RealtimePreviewWidget.cpp
     src/ui/NoteEditPanel.cpp
     src/ui/BPMTimePanel.cpp
     src/ui/MetaEditPanel.cpp

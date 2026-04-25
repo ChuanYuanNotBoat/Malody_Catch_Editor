@@ -6,6 +6,7 @@
 #include "ui/dialogs/LogSettingsDialog.h"
 #include "ui/dialogs/PluginManagerDialog.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
+#include "ui/CustomWidgets/RealtimePreviewWidget.h"
 #include "ui/LeftPanel.h"
 #include "file/ChartIO.h"
 #include "utils/Settings.h"
@@ -920,6 +921,8 @@ void MainWindow::adjustNoteSize()
         int newSize = sizeSpin->value();
         Settings::instance().setNoteSize(newSize);
         d->canvas->setNoteSize(newSize);
+        if (d->previewWidget)
+            d->previewWidget->setNoteSize(newSize);
         Logger::info(QString("Note size set to %1").arg(newSize));
     }
 }
