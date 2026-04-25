@@ -14,6 +14,7 @@
 #include <QMessageBox>
 #include <QDateTime>
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QHash>
 #include <algorithm>
 #include <cmath>
@@ -22,6 +23,16 @@
 
 namespace
 {
+void fillPluginEventModifiers(PluginInterface::CanvasInputEvent *outEvent, Qt::KeyboardModifiers eventModifiers)
+{
+    if (!outEvent)
+        return;
+    const Qt::KeyboardModifiers merged = eventModifiers | QGuiApplication::queryKeyboardModifiers();
+    outEvent->modifiers = static_cast<int>(merged);
+    outEvent->shiftDown = merged.testFlag(Qt::ShiftModifier);
+    outEvent->ctrlDown = merged.testFlag(Qt::ControlModifier);
+}
+
 struct ColorDivisionOption
 {
     int denominator;
@@ -859,7 +870,7 @@ void ChartCanvas::mousePressEvent(QMouseEvent *event)
     pluginEvent.y = event->position().y();
     pluginEvent.button = static_cast<int>(event->button());
     pluginEvent.buttons = static_cast<int>(event->buttons());
-    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    fillPluginEventModifiers(&pluginEvent, event->modifiers());
     pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
     bool consumed = false;
     if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
@@ -893,7 +904,7 @@ void ChartCanvas::mouseMoveEvent(QMouseEvent *event)
     pluginEvent.y = event->position().y();
     pluginEvent.button = static_cast<int>(Qt::NoButton);
     pluginEvent.buttons = static_cast<int>(event->buttons());
-    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    fillPluginEventModifiers(&pluginEvent, event->modifiers());
     pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
     bool consumed = false;
     if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
@@ -983,7 +994,7 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
     pluginEvent.y = event->position().y();
     pluginEvent.button = static_cast<int>(event->button());
     pluginEvent.buttons = static_cast<int>(event->buttons());
-    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    fillPluginEventModifiers(&pluginEvent, event->modifiers());
     pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
     bool consumed = false;
     if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
@@ -1011,7 +1022,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
     pluginEvent.y = event->position().y();
     pluginEvent.button = static_cast<int>(Qt::NoButton);
     pluginEvent.buttons = static_cast<int>(event->buttons());
-    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    fillPluginEventModifiers(&pluginEvent, event->modifiers());
     pluginEvent.wheelDelta = static_cast<double>(event->angleDelta().y());
     pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
     bool consumed = false;

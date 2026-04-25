@@ -71,6 +71,8 @@ public:
         int button = 0;
         int buttons = 0;
         int modifiers = 0;
+        bool shiftDown = false;
+        bool ctrlDown = false;
         double wheelDelta = 0.0;
         int key = 0;
         qint64 timestampMs = 0;

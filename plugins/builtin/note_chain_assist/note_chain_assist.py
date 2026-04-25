@@ -193,6 +193,25 @@ def _distance(x1, y1, x2, y2):
     return math.hypot(x1 - x2, y1 - y2)
 
 
+def _mods_has_shift(mods):
+    try:
+        value = int(mods)
+    except Exception:
+        return False
+    # Prefer Qt::ShiftModifier; keep low-bit fallback for host/tooling variance.
+    return (value & SHIFT_MODIFIER_MASK) != 0 or (value & 0x1) != 0
+
+
+def _event_has_shift(event):
+    if isinstance(event, dict):
+        if "shift_down" in event:
+            return bool(event.get("shift_down", False))
+        if "shiftDown" in event:
+            return bool(event.get("shiftDown", False))
+    mods = event.get("modifiers", 0) if isinstance(event, dict) else 0
+    return _mods_has_shift(mods)
+
+
 def _clamp(v, lo, hi):
     return max(lo, min(hi, v))
 
@@ -1590,7 +1609,7 @@ def _handle_canvas_input(payload):
         seg_hit = _find_segment_hit(STATE["last_context"], x, y) if _selection_enabled("segments") else None
         mods = int(event.get("modifiers", 0))
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
-        shift = ((mods & SHIFT_MODIFIER_MASK) != 0) or bool(STATE.get("shift_down", False))
+        shift = _event_has_shift(event) or bool(STATE.get("shift_down", False))
         host_sel = STATE["last_context"].get("host_selection_tool", {}) if isinstance(STATE["last_context"], dict) else {}
         is_select_mode = bool(host_sel.get("is_select_mode", False)) if isinstance(host_sel, dict) else False
 
@@ -1607,6 +1626,7 @@ def _handle_canvas_input(payload):
             elif aidx >= 0:
                 anchor_id = int(STATE["anchors"][aidx].get("id", 0))
                 if shift:
+                    STATE["drag"] = {"mode": "", "index": -1}
                     STATE["link_drag"] = {
                         "active": True,
                         "source_anchor_id": anchor_id,
@@ -1735,6 +1755,33 @@ def _handle_canvas_input(payload):
                 "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
             }
 
+        shift_now = _event_has_shift(event) or bool(STATE.get("shift_down", False))
+        if shift_now and STATE.get("drag", {}).get("mode") == "anchor":
+            drag_idx = int(STATE.get("drag", {}).get("index", -1))
+            if 0 <= drag_idx < len(STATE.get("anchors", [])):
+                source_id = int(STATE["anchors"][drag_idx].get("id", 0))
+                if source_id > 0:
+                    STATE["drag"] = {"mode": "", "index": -1}
+                    STATE["link_drag"] = {
+                        "active": True,
+                        "source_anchor_id": source_id,
+                        "hover_anchor_id": -1,
+                        "x": x,
+                        "y": y,
+                    }
+                    consumed = True
+                    cursor = "pointing_hand"
+                    status = tr(STATE["last_context"], "status_link_dragging")
+                    return {
+                        "consumed": consumed,
+                        "overlay": _build_overlay(STATE["last_context"]),
+                        "cursor": cursor,
+                        "status_text": status,
+                        "preview_batch_edit": {"add": [], "remove": [], "move": []},
+                        "request_undo_checkpoint": request_checkpoint,
+                        "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
+                    }
+
         box = STATE.get("box_select", {})
         if bool(box.get("active", False)):
             box["end"] = [x, y]
@@ -1854,7 +1901,7 @@ def _handle_canvas_input(payload):
         key = int(event.get("key", 0))
         mods = int(event.get("modifiers", 0))
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
-        if key == 0x01000020 or (mods & SHIFT_MODIFIER_MASK) != 0:  # Qt::Key_Shift
+        if key == 0x01000020 or _event_has_shift(event):  # Qt::Key_Shift
             STATE["shift_down"] = True
         if not ctrl and key == KEY_A:
             STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
@@ -1879,8 +1926,7 @@ def _handle_canvas_input(payload):
     # In tool mode, left-button canvas operations belong to plugin.
     if et == "key_up":
         key = int(event.get("key", 0))
-        mods = int(event.get("modifiers", 0))
-        if key == 0x01000020 or (mods & SHIFT_MODIFIER_MASK) == 0:
+        if key == 0x01000020 or not _event_has_shift(event):
             STATE["shift_down"] = False
 
     notes_selectable = _selection_enabled("notes")

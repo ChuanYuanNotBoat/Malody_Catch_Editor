@@ -98,6 +98,8 @@ Host sends:
       "button": 0,
       "buttons": 1,
       "modifiers": 0,
+      "shift_down": false,
+      "ctrl_down": false,
       "wheel_delta": 0.0,
       "key": 0,
       "timestamp_ms": 1713512345684
@@ -137,6 +139,8 @@ Fields:
 - `preview_batch_edit` (object, optional): temporary, non-committed edits for host preview pipeline.
 - `cursor` (string, optional): e.g. `arrow`, `crosshair`, `size_all`, `size_hor`.
 - `status_text` (string, optional): status bar hint.
+- `event.shift_down` (bool, optional but recommended): explicit Shift state from host.
+- `event.ctrl_down` (bool, optional but recommended): explicit Ctrl state from host.
 
 If plugin cannot handle the event, it should return:
 
@@ -180,6 +184,8 @@ struct CanvasInputEvent
     int button = 0;
     int buttons = 0;
     int modifiers = 0;
+    bool shiftDown = false;
+    bool ctrlDown = false;
     double wheelDelta = 0.0;
     int key = 0;
     qint64 timestampMs = 0;

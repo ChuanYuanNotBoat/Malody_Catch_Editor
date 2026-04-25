@@ -7,6 +7,7 @@
 #include "app/Application.h"
 #include "plugin/PluginManager.h"
 #include <QDateTime>
+#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QCoreApplication>
@@ -15,6 +16,16 @@
 
 namespace
 {
+void fillPluginEventModifiers(PluginInterface::CanvasInputEvent *outEvent, Qt::KeyboardModifiers eventModifiers)
+{
+    if (!outEvent)
+        return;
+    const Qt::KeyboardModifiers merged = eventModifiers | QGuiApplication::queryKeyboardModifiers();
+    outEvent->modifiers = static_cast<int>(merged);
+    outEvent->shiftDown = merged.testFlag(Qt::ShiftModifier);
+    outEvent->ctrlDown = merged.testFlag(Qt::ControlModifier);
+}
+
 PluginManager *activePluginManager()
 {
     auto *app = qobject_cast<Application *>(QCoreApplication::instance());
@@ -173,7 +184,7 @@ void ChartCanvas::keyPressEvent(QKeyEvent *event)
     {
         PluginInterface::CanvasInputEvent cancelEvent;
         cancelEvent.type = "cancel";
-        cancelEvent.modifiers = static_cast<int>(event->modifiers());
+        fillPluginEventModifiers(&cancelEvent, event->modifiers());
         cancelEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
         bool consumedCancel = false;
         if (dispatchPluginCanvasInput(cancelEvent, &consumedCancel) && consumedCancel)
@@ -186,7 +197,7 @@ void ChartCanvas::keyPressEvent(QKeyEvent *event)
     PluginInterface::CanvasInputEvent pluginEvent;
     pluginEvent.type = "key_down";
     pluginEvent.key = event->key();
-    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    fillPluginEventModifiers(&pluginEvent, event->modifiers());
     pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
     bool consumed = false;
     if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
@@ -270,7 +281,7 @@ void ChartCanvas::keyReleaseEvent(QKeyEvent *event)
     PluginInterface::CanvasInputEvent pluginEvent;
     pluginEvent.type = "key_up";
     pluginEvent.key = event->key();
-    pluginEvent.modifiers = static_cast<int>(event->modifiers());
+    fillPluginEventModifiers(&pluginEvent, event->modifiers());
     pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
     bool consumed = false;
     if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)

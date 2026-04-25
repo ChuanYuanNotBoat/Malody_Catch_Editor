@@ -17,6 +17,9 @@
 
 namespace
 {
+constexpr int kShiftModifierMask = 0x02000000;
+constexpr int kCtrlModifierMask = 0x04000000;
+
 QJsonObject toJsonObject(const QVariantMap &map)
 {
     return QJsonObject::fromVariantMap(map);
@@ -356,6 +359,8 @@ bool ExternalProcessPlugin::handleCanvasInput(const QVariantMap &context,
     if (!outResult || !hasCapability(kCapabilityCanvasInteraction))
         return false;
 
+    const bool shiftDown = event.shiftDown || (event.modifiers & kShiftModifierMask) != 0;
+    const bool ctrlDown = event.ctrlDown || (event.modifiers & kCtrlModifierMask) != 0;
     QJsonObject eventObj{
         {"type", event.type},
         {"x", event.x},
@@ -363,6 +368,8 @@ bool ExternalProcessPlugin::handleCanvasInput(const QVariantMap &context,
         {"button", event.button},
         {"buttons", event.buttons},
         {"modifiers", event.modifiers},
+        {"shift_down", shiftDown},
+        {"ctrl_down", ctrlDown},
         {"wheel_delta", event.wheelDelta},
         {"key", event.key},
         {"timestamp_ms", static_cast<qint64>(event.timestampMs)},
