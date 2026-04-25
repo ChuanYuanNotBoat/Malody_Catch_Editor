@@ -1702,6 +1702,24 @@ def _handle_canvas_input(payload):
                     status = tr(STATE["last_context"], "anchor_added", index=new_idx)
 
     elif et == "mouse_move":
+        mods = int(event.get("modifiers", 0))
+        shift = (mods & SHIFT_MODIFIER_MASK) != 0
+
+        # If user starts an anchor drag then presses Shift, switch to link-drag
+        # immediately so the anchor is no longer moved accidentally.
+        if shift and STATE.get("drag", {}).get("mode") == "anchor":
+            drag_idx = int(STATE.get("drag", {}).get("index", -1))
+            if 0 <= drag_idx < len(STATE.get("anchors", [])):
+                source_anchor_id = int(STATE["anchors"][drag_idx].get("id", -1))
+                STATE["drag"] = {"mode": "", "index": -1}
+                STATE["link_drag"] = {
+                    "active": True,
+                    "source_anchor_id": source_anchor_id,
+                    "hover_anchor_id": -1,
+                    "x": x,
+                    "y": y,
+                }
+
         link_drag = STATE.get("link_drag", {})
         if bool(link_drag.get("active", False)):
             link_drag["x"] = x
