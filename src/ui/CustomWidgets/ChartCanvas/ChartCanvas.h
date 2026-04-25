@@ -177,6 +177,7 @@ private:
     bool isMirrorGuideHandleHit(const QPointF &pos) const;
 
     void snapPlayheadToGrid();
+    void syncCurrentPlayTimeToReferenceLine();
     void startSnapTimer();
     void stopSnapTimer();
     bool dispatchPluginCanvasInput(const PluginInterface::CanvasInputEvent &event, bool *outConsumed = nullptr);

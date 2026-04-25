@@ -1401,6 +1401,13 @@ void MainWindow::createCentralArea()
     {
         if (d->canvas && d->chartController && d->chartController->chart())
         {
+            if (d->verticalScrollBar && d->verticalScrollBar->isSliderDown() &&
+                d->playbackController && d->playbackController->state() == PlaybackController::Playing)
+            {
+                Logger::debug("Playback paused due to timeline slider interaction");
+                d->playbackController->pause();
+            }
+
             qint64 duration = 300000;
             if (d->playbackController && d->playbackController->audioPlayer())
             {

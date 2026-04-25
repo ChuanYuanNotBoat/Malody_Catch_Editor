@@ -1012,27 +1012,8 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
             emit scrollPositionChanged(m_scrollBeat);
         }
 
-        if (scrollChanged && chart())
-        {
-            const auto &bpmList = chart()->bpmList();
-            int offset = chart()->meta().offset;
-
-            const double baselineRatio = kReferenceLineRatio;
-            double baselineBeat;
-            if (m_verticalFlip)
-            {
-                baselineBeat = m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange();
-            }
-            else
-            {
-                baselineBeat = m_scrollBeat + baselineRatio * effectiveVisibleBeatRange();
-            }
-
-            int beatNum, numerator, denominator;
-            MathUtils::floatToBeat(baselineBeat, beatNum, numerator, denominator);
-            double timeMs = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
-            m_currentPlayTime = timeMs;
-        }
+        if (scrollChanged)
+            syncCurrentPlayTimeToReferenceLine();
     }
 
     startSnapTimer();

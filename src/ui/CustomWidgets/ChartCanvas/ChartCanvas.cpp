@@ -449,8 +449,28 @@ void ChartCanvas::setScrollPos(double timeMs)
         return;
 
     m_scrollBeat = newScrollBeat;
+    syncCurrentPlayTimeToReferenceLine();
     update();
     emit scrollPositionChanged(m_scrollBeat);
+}
+
+void ChartCanvas::syncCurrentPlayTimeToReferenceLine()
+{
+    if (!chart())
+        return;
+
+    const auto &bpmList = chart()->bpmList();
+    const int offset = chart()->meta().offset;
+    const double baselineRatio = kReferenceLineRatio;
+    const double baselineBeat = m_verticalFlip
+                                    ? m_scrollBeat + (1.0 - baselineRatio) * effectiveVisibleBeatRange()
+                                    : m_scrollBeat + baselineRatio * effectiveVisibleBeatRange();
+
+    int beatNum = 0;
+    int numerator = 0;
+    int denominator = 1;
+    MathUtils::floatToBeat(baselineBeat, beatNum, numerator, denominator);
+    m_currentPlayTime = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
 }
 
 void ChartCanvas::setNoteSize(int size)
