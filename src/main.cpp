@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
     {
         // Set application name and version.
         QCoreApplication::setApplicationName("Malody Catch Chart Editor");
-        QCoreApplication::setApplicationVersion("Beta v1.8.1");
+        QCoreApplication::setApplicationVersion("Beta v1.9.0");
 
         Application app(argc, argv);
 

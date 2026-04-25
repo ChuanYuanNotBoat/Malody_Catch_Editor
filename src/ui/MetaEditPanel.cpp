@@ -11,10 +11,18 @@
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QFileDialog>
+#include <QTimer>
 
 MetaEditPanel::MetaEditPanel(QWidget *parent)
-    : RightPanel(parent), m_chartController(nullptr)
+    : RightPanel(parent),
+      m_chartController(nullptr),
+      m_autoSaveTimer(new QTimer(this)),
+      m_isRefreshingUi(false),
+      m_hasPendingMetaSave(false)
 {
+    m_autoSaveTimer->setSingleShot(true);
+    m_autoSaveTimer->setInterval(250);
+    connect(m_autoSaveTimer, &QTimer::timeout, this, &MetaEditPanel::flushPendingMetaSave);
     setupUi();
 }
 
@@ -96,6 +104,22 @@ void MetaEditPanel::setupUi()
     connect(m_saveBtn, &QPushButton::clicked, this, &MetaEditPanel::onSaveClicked);
     mainLayout->addWidget(m_saveBtn);
     mainLayout->addStretch();
+
+    const auto connectLineAutoSave = [this](QLineEdit *edit) {
+        connect(edit, &QLineEdit::textChanged, this, &MetaEditPanel::onMetaFieldChanged);
+    };
+    connectLineAutoSave(m_titleEdit);
+    connectLineAutoSave(m_titleOrgEdit);
+    connectLineAutoSave(m_artistEdit);
+    connectLineAutoSave(m_artistOrgEdit);
+    connectLineAutoSave(m_difficultyEdit);
+    connectLineAutoSave(m_chartAuthorEdit);
+    connectLineAutoSave(m_audioFileEdit);
+    connectLineAutoSave(m_backgroundFileEdit);
+    connect(m_previewTimeSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MetaEditPanel::onMetaFieldChanged);
+    connect(m_firstBpmSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &MetaEditPanel::onMetaFieldChanged);
+    connect(m_offsetSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MetaEditPanel::onMetaFieldChanged);
+    connect(m_speedSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &MetaEditPanel::onMetaFieldChanged);
 }
 
 void MetaEditPanel::refreshMeta()
@@ -103,6 +127,7 @@ void MetaEditPanel::refreshMeta()
     Logger::info("MetaEditPanel::refreshMeta called");
     if (!m_chartController || !m_chartController->chart())
         return;
+    m_isRefreshingUi = true;
     const MetaData &meta = m_chartController->chart()->meta();
     Logger::info(QString("MetaEditPanel::refreshMeta - title='%1', artist='%2', difficulty='%3', speed=%4")
                      .arg(meta.title)
@@ -121,26 +146,30 @@ void MetaEditPanel::refreshMeta()
     m_firstBpmSpin->setValue(meta.firstBpm);
     m_offsetSpin->setValue(meta.offset);
     m_speedSpin->setValue(meta.speed);
+    m_isRefreshingUi = false;
 }
 
 void MetaEditPanel::onSaveClicked()
 {
-    if (!m_chartController)
+    m_hasPendingMetaSave = false;
+    m_autoSaveTimer->stop();
+    applyMetaAndPersist(true);
+}
+
+void MetaEditPanel::onMetaFieldChanged()
+{
+    if (m_isRefreshingUi)
         return;
-    MetaData meta;
-    meta.title = m_titleEdit->text();
-    meta.titleOrg = m_titleOrgEdit->text();
-    meta.artist = m_artistEdit->text();
-    meta.artistOrg = m_artistOrgEdit->text();
-    meta.difficulty = m_difficultyEdit->text();
-    meta.chartAuthor = m_chartAuthorEdit->text();
-    meta.audioFile = m_audioFileEdit->text();
-    meta.backgroundFile = m_backgroundFileEdit->text();
-    meta.previewTime = m_previewTimeSpin->value();
-    meta.firstBpm = m_firstBpmSpin->value();
-    meta.offset = m_offsetSpin->value();
-    meta.speed = m_speedSpin->value();
-    m_chartController->setMetaData(meta);
+    m_hasPendingMetaSave = true;
+    m_autoSaveTimer->start();
+}
+
+void MetaEditPanel::flushPendingMetaSave()
+{
+    if (!m_hasPendingMetaSave)
+        return;
+    m_hasPendingMetaSave = false;
+    applyMetaAndPersist(true);
 }
 
 void MetaEditPanel::setChartController(ChartController *controller)
@@ -203,4 +232,58 @@ void MetaEditPanel::retranslateUi()
         m_previewTimeSpin->setSuffix(tr(" ms"));
     if (m_offsetSpin)
         m_offsetSpin->setSuffix(tr(" ms"));
+}
+
+MetaData MetaEditPanel::collectMetaFromUi() const
+{
+    MetaData meta;
+    meta.title = m_titleEdit->text();
+    meta.titleOrg = m_titleOrgEdit->text();
+    meta.artist = m_artistEdit->text();
+    meta.artistOrg = m_artistOrgEdit->text();
+    meta.difficulty = m_difficultyEdit->text();
+    meta.chartAuthor = m_chartAuthorEdit->text();
+    meta.audioFile = m_audioFileEdit->text();
+    meta.backgroundFile = m_backgroundFileEdit->text();
+    meta.previewTime = m_previewTimeSpin->value();
+    meta.firstBpm = m_firstBpmSpin->value();
+    meta.offset = m_offsetSpin->value();
+    meta.speed = m_speedSpin->value();
+    return meta;
+}
+
+bool MetaEditPanel::isSameMeta(const MetaData &a, const MetaData &b) const
+{
+    return a.title == b.title &&
+           a.titleOrg == b.titleOrg &&
+           a.artist == b.artist &&
+           a.artistOrg == b.artistOrg &&
+           a.difficulty == b.difficulty &&
+           a.chartAuthor == b.chartAuthor &&
+           a.audioFile == b.audioFile &&
+           a.backgroundFile == b.backgroundFile &&
+           a.previewTime == b.previewTime &&
+           qFuzzyCompare(a.firstBpm + 1.0, b.firstBpm + 1.0) &&
+           a.offset == b.offset &&
+           a.speed == b.speed;
+}
+
+bool MetaEditPanel::applyMetaAndPersist(bool persistToDisk)
+{
+    if (!m_chartController || !m_chartController->chart())
+        return false;
+
+    const MetaData next = collectMetaFromUi();
+    const MetaData current = m_chartController->chart()->meta();
+
+    if (!isSameMeta(current, next))
+        m_chartController->setMetaData(next);
+
+    if (!persistToDisk)
+        return true;
+
+    const QString path = m_chartController->chartFilePath();
+    if (path.isEmpty())
+        return false;
+    return m_chartController->saveChart(path);
 }

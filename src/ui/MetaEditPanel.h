@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CustomWidgets/RightPanel.h"
+#include "model/MetaData.h"
 
 class QLineEdit;
 class QSpinBox;
@@ -9,6 +10,7 @@ class QPushButton;
 class QTextEdit;
 class QLabel;
 class QFormLayout;
+class QTimer;
 
 class MetaEditPanel : public RightPanel
 {
@@ -22,11 +24,19 @@ public:
 private slots:
     void refreshMeta();
     void onSaveClicked();
+    void onMetaFieldChanged();
+    void flushPendingMetaSave();
 
 private:
     void setupUi();
+    MetaData collectMetaFromUi() const;
+    bool isSameMeta(const MetaData &a, const MetaData &b) const;
+    bool applyMetaAndPersist(bool persistToDisk);
 
     ChartController *m_chartController;
+    QTimer *m_autoSaveTimer;
+    bool m_isRefreshingUi;
+    bool m_hasPendingMetaSave;
     QFormLayout *m_formLayout;
     QLabel *m_titleLabel;
     QLabel *m_titleOrgLabel;
