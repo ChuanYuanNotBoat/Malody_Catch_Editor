@@ -119,6 +119,7 @@ STATE = {
     "selected_anchor_ids": [],
     "selected_links": [],
     "selection_targets": {"anchors": True, "segments": True, "notes": False},
+    "segment_denominators": {},
     "box_select": {"active": False, "start": [0.0, 0.0], "end": [0.0, 0.0], "append": False},
     "pending_connect_anchor_id": -1,
     "next_anchor_id": 1,
@@ -138,6 +139,7 @@ STATE = {
     "suppress_persist_once": False,
     "link_drag": {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0},
     "shift_down": False,
+    "last_host_selected_note_ids": [],
 }
 
 TRANSLATIONS.update(
@@ -275,6 +277,7 @@ def _capture_snapshot():
         "anchors": _clone(STATE.get("anchors", [])),
         "links": _clone(STATE.get("links", [])),
         "style": _clone(STATE.get("style", {})),
+        "segment_denominators": _clone(STATE.get("segment_denominators", {})),
         "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True, "notes": False})),
         "curve_visible": bool(STATE.get("curve_visible", True)),
         "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
@@ -290,6 +293,8 @@ def _restore_snapshot(snapshot):
     STATE["links"] = _clone(snapshot.get("links", [])) if isinstance(snapshot.get("links"), list) else []
     style = snapshot.get("style")
     STATE["style"] = _clone(style) if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
+    seg_dens = snapshot.get("segment_denominators")
+    STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
     targets = snapshot.get("selection_targets")
     if isinstance(targets, dict):
         STATE["selection_targets"] = {
@@ -311,6 +316,7 @@ def _restore_snapshot(snapshot):
     STATE["next_anchor_id"] = max(1, int(snapshot.get("next_anchor_id", 1)))
     _ensure_anchor_ids()
     _cleanup_links_and_selection()
+    _seed_missing_segment_denominators()
     _invalidate_curve_cache()
 
 
@@ -376,6 +382,98 @@ def _link_exists(id_a, id_b):
     return False
 
 
+def _link_key(id_a, id_b):
+    norm = _normalize_link(id_a, id_b)
+    if norm is None:
+        return ""
+    return f"{norm[0]}:{norm[1]}"
+
+
+def _segment_denominator_for_link(id_a, id_b, fallback_den=4):
+    key = _link_key(id_a, id_b)
+    if not key:
+        return max(1, int(fallback_den))
+    seg_map = STATE.get("segment_denominators", {})
+    if isinstance(seg_map, dict):
+        try:
+            den = int(seg_map.get(key, 0))
+            if den > 0:
+                return den
+        except Exception:
+            pass
+    return max(1, int(fallback_den))
+
+
+def _set_segment_denominator(id_a, id_b, den):
+    key = _link_key(id_a, id_b)
+    if not key:
+        return False
+    try:
+        val = int(den)
+    except Exception:
+        val = 0
+    seg_map = STATE.get("segment_denominators", {})
+    if not isinstance(seg_map, dict):
+        seg_map = {}
+    prev = int(seg_map.get(key, 0) or 0)
+    if val <= 0:
+        if key in seg_map:
+            seg_map.pop(key, None)
+            STATE["segment_denominators"] = seg_map
+            return True
+        return False
+    seg_map[key] = val
+    STATE["segment_denominators"] = seg_map
+    return prev != val
+
+
+def _context_default_segment_denominator(context=None):
+    ctx = context if isinstance(context, dict) else {}
+    if not ctx:
+        ctx = STATE.get("last_context", {}) if isinstance(STATE.get("last_context", {}), dict) else {}
+    override_den = int(ctx.get("plugin_time_division_override", 0) or 0) if isinstance(ctx, dict) else 0
+    if override_den > 0:
+        return max(1, override_den)
+    if isinstance(ctx, dict):
+        try:
+            time_div = int(ctx.get("time_division", 0) or 0)
+            if time_div > 0:
+                return time_div
+        except Exception:
+            pass
+    dens = _sanitize_denominators(STATE.get("style", {}).get("denominators", [4]), ctx)
+    if dens:
+        return max(1, int(dens[0]))
+    return 4
+
+
+def _seed_missing_segment_denominators(context=None):
+    links = STATE.get("links", [])
+    seg_map = STATE.get("segment_denominators", {})
+    if not isinstance(seg_map, dict):
+        seg_map = {}
+    default_den = _context_default_segment_denominator(context)
+    changed = False
+    for raw in links:
+        if not isinstance(raw, list) or len(raw) != 2:
+            continue
+        norm = _normalize_link(raw[0], raw[1])
+        if norm is None:
+            continue
+        key = f"{norm[0]}:{norm[1]}"
+        try:
+            cur = int(seg_map.get(key, 0))
+        except Exception:
+            cur = 0
+        if cur > 0:
+            continue
+        seg_map[key] = default_den
+        changed = True
+    if changed or not isinstance(STATE.get("segment_denominators"), dict):
+        STATE["segment_denominators"] = seg_map
+    return changed
+
+
 def _add_link(id_a, id_b):
     norm = _normalize_link(id_a, id_b)
     if norm is None:
@@ -387,6 +485,7 @@ def _add_link(id_a, id_b):
         links = []
     links.append([norm[0], norm[1]])
     STATE["links"] = links
+    _set_segment_denominator(norm[0], norm[1], _context_default_segment_denominator())
     return True
 
 
@@ -407,6 +506,7 @@ def _remove_link(id_a, id_b):
             kept.append([cur[0], cur[1]])
     if changed:
         STATE["links"] = kept
+        _set_segment_denominator(norm[0], norm[1], 0)
     return changed
 
 
@@ -427,6 +527,20 @@ def _cleanup_links_and_selection():
         dedup.add(norm)
         cleaned_links.append([norm[0], norm[1]])
     STATE["links"] = cleaned_links
+    valid_link_keys = set(f"{a}:{b}" for (a, b) in dedup)
+    seg_map_raw = STATE.get("segment_denominators", {})
+    seg_cleaned = {}
+    if isinstance(seg_map_raw, dict):
+        for key, raw_val in seg_map_raw.items():
+            if key not in valid_link_keys:
+                continue
+            try:
+                den = int(raw_val)
+            except Exception:
+                continue
+            if den > 0:
+                seg_cleaned[key] = den
+    STATE["segment_denominators"] = seg_cleaned
 
     selected_anchor_ids = [int(aid) for aid in STATE.get("selected_anchor_ids", []) if int(aid) in valid_ids]
     if not _selection_enabled("anchors"):
@@ -518,7 +632,7 @@ def _distance_point_to_segment(px, py, x1, y1, x2, y2):
     return _distance(px, py, qx, qy)
 
 
-def _find_segment_hit(context, cx, cy, threshold=10.0):
+def _find_segment_hit(context, cx, cy, threshold=14.0):
     best = None
     best_d = 1e9
     for _i0, _i1, id0, id1, a0, a1 in _connected_anchor_segments():
@@ -1165,6 +1279,7 @@ def _save_project(path, context=None):
             "coordinate_space": "chart",
             "anchors": [_serialize_anchor(a) for a in STATE.get("anchors", [])],
             "links": _clone(STATE.get("links", [])),
+            "segment_denominators": _clone(STATE.get("segment_denominators", {})),
             "style": STATE.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"}),
         }
         with open(path, "w", encoding="utf-8") as f:
@@ -1197,7 +1312,10 @@ def _load_project(path, context):
             STATE["links"] = _clone(links_raw)
         else:
             STATE["links"] = _default_links_for_anchors()
+        seg_dens = payload.get("segment_denominators")
+        STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
         _cleanup_links_and_selection()
+        _seed_missing_segment_denominators(context)
 
         style = payload.get("style")
         if isinstance(style, dict):
@@ -1487,6 +1605,7 @@ def _build_overlay(context):
 def _reset_anchors(context):
     STATE["anchors"] = _default_anchors()
     STATE["links"] = []
+    STATE["segment_denominators"] = {}
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
     STATE["selected_links"] = []
@@ -1499,22 +1618,48 @@ def _reset_anchors(context):
 def _append_anchor(context, cx, cy):
     lane_x, beat = _canvas_to_chart(context, cx, cy)
     lane_x, beat = _snap_chart_point(context, lane_x, beat)
+    anchors = STATE["anchors"]
 
-    if not STATE["anchors"]:
-        STATE["anchors"].append({"id": _new_anchor_id(), "lane_x": lane_x, "beat": beat, "in": [-16.0, 0.0], "out": [16.0, 0.0], "smooth": True})
-        return len(STATE["anchors"]) - 1
+    if not anchors:
+        anchors.append({"id": _new_anchor_id(), "lane_x": lane_x, "beat": beat, "in": [-16.0, 0.0], "out": [16.0, 0.0], "smooth": True})
+        return len(anchors) - 1
 
-    prev = STATE["anchors"][-1]
-    dl = lane_x - prev["lane_x"]
-    db = beat - prev["beat"]
-    # Split axis scaling to avoid overly weak handles on lane axis.
-    ol = _clamp(dl * 0.25, -96.0, 96.0)
-    ob = _clamp(db * 0.25, -2.0, 2.0)
-    STATE["anchors"].append({"id": _new_anchor_id(), "lane_x": lane_x, "beat": beat, "in": [-ol, -ob], "out": [ol, ob], "smooth": True})
-    idx = len(STATE["anchors"]) - 1
+    idx = len(anchors)
+    for i, a in enumerate(anchors):
+        if beat < float(a.get("beat", 0.0)):
+            idx = i
+            break
+
+    ref = None
+    if idx > 0 and idx < len(anchors):
+        prev = anchors[idx - 1]
+        nxt = anchors[idx]
+        prev_dist = abs(beat - float(prev.get("beat", beat)))
+        next_dist = abs(float(nxt.get("beat", beat)) - beat)
+        ref = prev if prev_dist <= next_dist else nxt
+    elif idx > 0:
+        ref = anchors[idx - 1]
+    elif idx < len(anchors):
+        ref = anchors[idx]
+
+    if ref is None:
+        ol, ob = 16.0, 0.0
+    else:
+        if beat <= float(ref.get("beat", beat)):
+            dl = float(ref.get("lane_x", lane_x)) - lane_x
+            db = float(ref.get("beat", beat)) - beat
+        else:
+            dl = lane_x - float(ref.get("lane_x", lane_x))
+            db = beat - float(ref.get("beat", beat))
+        # Split axis scaling to avoid overly weak handles on lane axis.
+        ol = _clamp(dl * 0.25, -96.0, 96.0)
+        ob = _clamp(db * 0.25, -2.0, 2.0)
+
+    anchors.insert(idx, {"id": _new_anchor_id(), "lane_x": lane_x, "beat": beat, "in": [-ol, -ob], "out": [ol, ob], "smooth": True})
     _enforce_anchor_time_order(idx, context)
     _enforce_handle_time_constraints(idx, context)
     _enforce_handle_time_constraints(idx - 1, context)
+    _enforce_handle_time_constraints(idx + 1, context)
     _cleanup_links_and_selection()
     _invalidate_curve_cache()
     return idx
@@ -1542,33 +1687,108 @@ def _chart_to_note(context, lane_x, beat, den):
     return {"beat": [b, n, d], "x": int(round(lane_x)), "type": 0}
 
 
+def _sample_single_segment_chart(a0, a1, samples_per_segment=24):
+    p0 = (a0["lane_x"], a0["beat"])
+    p1 = _anchor_out_abs_chart(a0)
+    p2 = _anchor_in_abs_chart(a1)
+    p3 = (a1["lane_x"], a1["beat"])
+    pts = []
+    for j in range(samples_per_segment + 1):
+        t = j / float(samples_per_segment)
+        pts.append(_cubic_point(p0, p1, p2, p3, t))
+    return pts
+
+
+def _connected_curve_segment_groups():
+    segments = _connected_anchor_segments()
+    if not segments:
+        return []
+
+    by_anchor = {}
+    for seg in segments:
+        id0 = int(seg[2])
+        id1 = int(seg[3])
+        by_anchor.setdefault(id0, []).append(seg)
+        by_anchor.setdefault(id1, []).append(seg)
+
+    visited_anchor_ids = set()
+    grouped = []
+    for anchor_id in by_anchor.keys():
+        if anchor_id in visited_anchor_ids:
+            continue
+        queue = [anchor_id]
+        comp_anchor_ids = set()
+        comp_segments = []
+        seen_seg_keys = set()
+        while queue:
+            cur = int(queue.pop())
+            if cur in comp_anchor_ids:
+                continue
+            comp_anchor_ids.add(cur)
+            for seg in by_anchor.get(cur, []):
+                id0 = int(seg[2])
+                id1 = int(seg[3])
+                key = (id0, id1)
+                if key not in seen_seg_keys:
+                    seen_seg_keys.add(key)
+                    comp_segments.append(seg)
+                if id0 not in comp_anchor_ids:
+                    queue.append(id0)
+                if id1 not in comp_anchor_ids:
+                    queue.append(id1)
+        visited_anchor_ids.update(comp_anchor_ids)
+        comp_segments.sort(key=lambda s: (min(float(s[4]["beat"]), float(s[5]["beat"])), max(float(s[4]["beat"]), float(s[5]["beat"]))))
+        grouped.append(comp_segments)
+    return grouped
+
+
 def _build_batch_from_curve(context):
     if not isinstance(context, dict):
         return {"add": [], "remove": [], "move": []}
 
-    sampled = _sample_curve_chart_cached(32)
-    if len(sampled) < 2:
+    segments = _connected_anchor_segments()
+    if not segments:
         return {"add": [], "remove": [], "move": []}
 
     override_den = int(context.get("plugin_time_division_override", 0) or 0)
-    current_den = max(1, override_den if override_den > 0 else int(context.get("time_division", 4)))
-    samples_by_beat = _normalize_samples_by_beat(sampled)
-    if len(samples_by_beat) < 2:
-        return {"add": [], "remove": [], "move": []}
-
-    start_beat = samples_by_beat[0][1]
-    end_beat = samples_by_beat[-1][1]
-    start_tick = int(round(start_beat * current_den))
-    end_tick = int(round(end_beat * current_den))
-    if end_tick < start_tick:
-        start_tick, end_tick = end_tick, start_tick
+    default_den = max(1, override_den if override_den > 0 else int(context.get("time_division", 4)))
 
     out = []
-    for tick in range(start_tick, end_tick + 1):
-        beat = float(tick) / float(current_den)
-        lane_x = _lane_x_at_beat(samples_by_beat, beat)
-        note = _chart_to_note(context, lane_x, beat, current_den)
-        out.append(note)
+    seen = set()
+    for _i0, _i1, id0, id1, a0, a1 in segments:
+        seg_den = _segment_denominator_for_link(id0, id1, default_den)
+        sampled_segment = _sample_single_segment_chart(a0, a1, 32)
+        samples_by_beat = _normalize_samples_by_beat(sampled_segment)
+        if len(samples_by_beat) < 2:
+            continue
+
+        seg_start = float(samples_by_beat[0][1])
+        seg_end = float(samples_by_beat[-1][1])
+        lo = min(seg_start, seg_end)
+        hi = max(seg_start, seg_end)
+
+        start_tick = int(round(float(lo) * seg_den))
+        end_tick = int(round(float(hi) * seg_den))
+        if end_tick < start_tick:
+            start_tick, end_tick = end_tick, start_tick
+
+        for tick in range(start_tick, end_tick + 1):
+            beat = float(tick) / float(seg_den)
+            if beat < lo or beat > hi:
+                continue
+            lane_x = _lane_x_at_beat(samples_by_beat, beat)
+            note = _chart_to_note(context, lane_x, beat, seg_den)
+            beat_triplet = note.get("beat", [0, 0, 1])
+            key = (int(beat_triplet[0]), int(beat_triplet[1]), int(beat_triplet[2]), int(note.get("x", 0)))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(note)
+
+    out.sort(key=lambda n: (int((n.get("beat") or [0, 0, 1])[0]),
+                            int((n.get("beat") or [0, 0, 1])[1]),
+                            int((n.get("beat") or [0, 0, 1])[2]),
+                            int(n.get("x", 0))))
 
     return {"add": out, "remove": [], "move": []}
 
@@ -1596,9 +1816,64 @@ def _host_controls_anchor_mode(context):
     return mode in ("anchor_place", "place_note", "place_rain", "delete", "select")
 
 
+def _selected_target_links():
+    selected_links = []
+    for raw in STATE.get("selected_links", []):
+        if not isinstance(raw, list) or len(raw) != 2:
+            continue
+        norm = _normalize_link(raw[0], raw[1])
+        if norm is None:
+            continue
+        selected_links.append(norm)
+
+    if selected_links:
+        return selected_links
+
+    selected_anchor_ids = [int(v) for v in STATE.get("selected_anchor_ids", []) if int(v) > 0]
+    if len(selected_anchor_ids) == 2:
+        norm = _normalize_link(selected_anchor_ids[0], selected_anchor_ids[1])
+        if norm is not None and _link_exists(norm[0], norm[1]):
+            return [norm]
+    return []
+
+
+def _set_density_for_selected_segments(context, target_den):
+    links = _selected_target_links()
+    if not links:
+        return False
+    den = int(target_den)
+    if den <= 0:
+        den = _context_default_segment_denominator(context)
+    changed = False
+    for id0, id1 in links:
+        changed = _set_segment_denominator(id0, id1, den) or changed
+    if changed:
+        _record_history_state(context)
+    return changed
+
+
 def _cycle_density_style(context):
     current = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
-    normalized = tuple(_sanitize_denominators(current, context))
+    normalized_values = _sanitize_denominators(current, context)
+    normalized = tuple(normalized_values)
+    selected_links = _selected_target_links()
+
+    if selected_links:
+        override_den = int(context.get("plugin_time_division_override", 0) or 0) if isinstance(context, dict) else 0
+        default_den = max(1, override_den if override_den > 0 else int((context or {}).get("time_division", 4)))
+        changed = False
+        for id0, id1 in selected_links:
+            cur_den = _segment_denominator_for_link(id0, id1, default_den)
+            if cur_den in normalized_values:
+                idx = normalized_values.index(cur_den)
+                next_den = normalized_values[(idx + 1) % len(normalized_values)]
+            else:
+                next_den = normalized_values[0]
+            changed = _set_segment_denominator(id0, id1, next_den) or changed
+        if changed:
+            _record_history_state(context)
+        return
+
     target_index = 0
     for i, preset in enumerate(STYLE_PRESETS):
         if tuple(_sanitize_denominators(preset, context)) == normalized:
@@ -1609,12 +1884,71 @@ def _cycle_density_style(context):
     _record_history_state(context)
 
 
+def _sync_anchor_selection_from_host_notes(context):
+    if not isinstance(context, dict):
+        return
+    if not _selection_enabled("notes") or not _selection_enabled("anchors"):
+        STATE["last_host_selected_note_ids"] = []
+        return
+    if STATE.get("drag", {}).get("mode") or bool(STATE.get("box_select", {}).get("active", False)):
+        return
+
+    raw_ids = context.get("selected_note_ids")
+    selected_ids = [str(v) for v in raw_ids if isinstance(v, str) and v] if isinstance(raw_ids, list) else []
+    if selected_ids == list(STATE.get("last_host_selected_note_ids", [])):
+        return
+    STATE["last_host_selected_note_ids"] = list(selected_ids)
+
+    selected_notes = context.get("selected_notes")
+    if not isinstance(selected_notes, list) or not selected_notes:
+        return
+
+    idx_map = _anchor_index_map()
+    anchors = STATE.get("anchors", [])
+    if not idx_map or not anchors:
+        return
+
+    picked = []
+    used_anchor_ids = set()
+    for raw in selected_notes:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            lane_x = float(raw.get("lane_x", raw.get("x", 0.0)))
+            beat = float(raw.get("beat", 0.0))
+        except Exception:
+            continue
+
+        best_id = -1
+        best_dist = 1e18
+        for aid, idx in idx_map.items():
+            if aid in used_anchor_ids:
+                continue
+            a = anchors[idx]
+            dx = float(a.get("lane_x", 0.0)) - lane_x
+            dy = float(a.get("beat", 0.0)) - beat
+            dist2 = dx * dx + dy * dy
+            if dist2 < best_dist:
+                best_dist = dist2
+                best_id = aid
+        if best_id > 0:
+            used_anchor_ids.add(best_id)
+            picked.append(best_id)
+
+    if not picked:
+        return
+    picked.sort(key=lambda aid: idx_map.get(aid, 1 << 30))
+    STATE["selected_anchor_ids"] = picked
+
+
 def _handle_canvas_input(payload):
     context = payload.get("context", {}) if isinstance(payload, dict) else {}
     event = payload.get("event", {}) if isinstance(payload, dict) else {}
     STATE["last_context"] = context if isinstance(context, dict) else {}
     _ensure_project_context(STATE["last_context"])
+    _seed_missing_segment_denominators(STATE["last_context"])
     _sync_anchor_placement_with_host_mode(STATE["last_context"])
+    _sync_anchor_selection_from_host_notes(STATE["last_context"])
 
     et = str(event.get("type", ""))
     x = float(event.get("x", 0.0))
@@ -1642,7 +1976,10 @@ def _handle_canvas_input(payload):
         elif button == LEFT_BUTTON:
             notes_selectable = _selection_enabled("notes")
             anchor_placement_enabled = bool(STATE.get("anchor_placement_enabled", False))
-            if hidx >= 0:
+            host_select_passthrough = bool(is_select_mode and notes_selectable)
+            if host_select_passthrough:
+                consumed = False
+            elif hidx >= 0:
                 STATE["drag"] = {"mode": hkind, "index": hidx}
                 consumed = True
                 cursor = "crosshair"
@@ -1696,11 +2033,25 @@ def _handle_canvas_input(payload):
                     _toggle_selected_link(seg_hit[0], seg_hit[1])
                 else:
                     _set_single_selected_link(seg_hit[0], seg_hit[1])
+                if _selection_enabled("anchors"):
+                    seg_anchor_ids = []
+                    for aid in (int(seg_hit[0]), int(seg_hit[1])):
+                        if aid > 0 and aid not in seg_anchor_ids:
+                            seg_anchor_ids.append(aid)
+                    if ctrl:
+                        merged = [int(v) for v in STATE.get("selected_anchor_ids", []) if int(v) > 0]
+                        for aid in seg_anchor_ids:
+                            if aid not in merged:
+                                merged.append(aid)
+                        STATE["selected_anchor_ids"] = merged
+                    else:
+                        STATE["selected_anchor_ids"] = seg_anchor_ids
+                else:
                     STATE["selected_anchor_ids"] = []
                 consumed = True
                 cursor = "pointing_hand"
                 status = tr(STATE["last_context"], "status_segment_selected")
-            elif ctrl or is_select_mode:
+            elif (ctrl or is_select_mode) and not notes_selectable:
                 STATE["box_select"] = {"active": True, "start": [x, y], "end": [x, y], "append": bool(ctrl)}
                 consumed = True
                 status = tr(STATE["last_context"], "status_box_selecting")
@@ -1711,12 +2062,11 @@ def _handle_canvas_input(payload):
                     STATE["selected_links"] = []
                     status = tr(STATE["last_context"], "status_selection_cleared")
                     consumed = not notes_selectable
-                if not anchor_placement_enabled:
-                    if notes_selectable:
-                        consumed = False
-                    else:
-                        consumed = True
-                        status = tr(STATE["last_context"], "anchor_place_off_hint")
+                if notes_selectable and not anchor_placement_enabled:
+                    consumed = False
+                elif not anchor_placement_enabled:
+                    consumed = True
+                    status = tr(STATE["last_context"], "anchor_place_off_hint")
                 else:
                     consumed = True
                     new_idx = _append_anchor(STATE["last_context"], x, y)
@@ -1971,7 +2321,7 @@ def _handle_canvas_input(payload):
 
 
 def _list_tool_actions():
-    return [
+    actions = [
         {
             "action_id": "commit_curve_to_notes",
             "title": tr(STATE.get("last_context", {}), "action_commit_curve"),
@@ -2040,13 +2390,6 @@ def _list_tool_actions():
             "requires_undo_snapshot": False,
         },
         {
-            "action_id": "cycle_density_style",
-            "title": tr(STATE.get("last_context", {}), "action_cycle_density"),
-            "description": tr(STATE.get("last_context", {}), "action_cycle_density_desc"),
-            "placement": "left_sidebar",
-            "requires_undo_snapshot": False,
-        },
-        {
             "action_id": "connect_selected_nodes",
             "title": tr(STATE.get("last_context", {}), "action_connect_selected"),
             "description": tr(STATE.get("last_context", {}), "action_connect_selected_desc"),
@@ -2069,8 +2412,15 @@ def _list_tool_actions():
         },
         {
             "action_id": "disconnect_selected_segments_ctx",
-            "title": tr(STATE.get("last_context", {}), "action_disconnect_selected_segments"),
-            "description": tr(STATE.get("last_context", {}), "action_disconnect_selected_segments_desc"),
+            "title": tr(STATE.get("last_context", {}), "status_selection_deleted"),
+            "description": tr(STATE.get("last_context", {}), "status_selection_deleted"),
+            "placement": "plugin_context_menu",
+            "requires_undo_snapshot": False,
+        },
+        {
+            "action_id": "cycle_density_style",
+            "title": tr(STATE.get("last_context", {}), "action_cycle_density"),
+            "description": tr(STATE.get("last_context", {}), "action_cycle_density_desc"),
             "placement": "plugin_context_menu",
             "requires_undo_snapshot": False,
         },
@@ -2089,6 +2439,8 @@ def _list_tool_actions():
             "requires_undo_snapshot": False,
         },
     ]
+
+    return actions
 
 
 def _run_tool_action(payload):
@@ -2133,10 +2485,23 @@ def _run_tool_action(payload):
     if action_id == "cycle_density_style":
         _cycle_density_style(context)
         return True
+    if action_id == "set_segment_density_follow":
+        return _set_density_for_selected_segments(context, 0)
+    if action_id.startswith("set_segment_density_"):
+        suffix = action_id[len("set_segment_density_") :]
+        try:
+            den = int(suffix)
+        except Exception:
+            return False
+        return _set_density_for_selected_segments(context, den)
     if action_id in ("connect_selected_nodes", "connect_selected_nodes_ctx"):
         return _connect_selected_anchors(context)
-    if action_id in ("disconnect_selected_segments", "disconnect_selected_segments_ctx"):
+    if action_id == "disconnect_selected_segments":
         return _disconnect_selected_segments(context)
+    if action_id == "disconnect_selected_segments_ctx":
+        changed_segments = _disconnect_selected_segments(context)
+        changed_anchors = _delete_selected_anchors(context)
+        return changed_segments or changed_anchors
     if action_id == "export_style_preset":
         return _save_style(context)
     if action_id == "import_style_preset":
@@ -2161,12 +2526,16 @@ def _build_batch_edit(payload):
     action_id = str((payload or {}).get("action_id", ""))
     context = (payload or {}).get("context", {}) or {}
     _ensure_project_context(context)
+    _seed_missing_segment_denominators(context)
     if action_id not in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar"):
         return {"add": [], "remove": [], "move": []}
     return _build_batch_from_curve(context)
 
 
 def run_one_shot(action_id):
+    if isinstance(action_id, str):
+        if action_id == "set_segment_density_follow" or action_id.startswith("set_segment_density_"):
+            return 0
     known = {
         "reset_curve",
         "commit_curve_to_notes",

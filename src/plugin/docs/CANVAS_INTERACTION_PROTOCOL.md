@@ -80,6 +80,10 @@ Host sends:
       "lane_width": 512,
       "note_type_scope": "normal_only",
       "selected_note_ids": ["n1", "n2"],
+      "selected_notes": [
+        {"id":"n1","x":256,"lane_x":256,"beat":32.5},
+        {"id":"n2","x":300,"lane_x":300,"beat":33.0}
+      ],
       "host_selection_tool": {
         "mode": "select|place_note|place_rain|delete",
         "is_select_mode": true,

@@ -595,6 +595,10 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
 {
     if (m_pluginToolModeActive)
     {
+        const QString pluginId = resolvePluginCanvasToolId();
+        const bool routeDensityToSelectedSegments =
+            (pluginId.trimmed().compare(QStringLiteral("builtin.note_chain_assist"), Qt::CaseInsensitive) == 0);
+
         QMenu pluginMenu(this);
         QAction *commitCurveAction = pluginMenu.addAction(tr("Commit Curve -> Notes"));
         pluginMenu.addSeparator();
@@ -626,23 +630,38 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
         for (const DensityOption &opt : densityOptions)
         {
             QAction *act = densityMenu->addAction(tr(opt.label));
-            act->setCheckable(true);
-            act->setChecked(m_pluginPlacementDensityOverride == opt.denominator);
-            connect(act, &QAction::triggered, this, [this, opt]() {
-                m_pluginPlacementDensityOverride = opt.denominator;
-                if (opt.denominator <= 0)
-                    emit statusMessage(tr("Curve density: follow editor"));
-                else
-                    emit statusMessage(tr("Curve density set to 1/%1").arg(opt.denominator));
-                update();
-            });
+            if (routeDensityToSelectedSegments)
+            {
+                const QString actionId = (opt.denominator <= 0)
+                                             ? QStringLiteral("set_segment_density_follow")
+                                             : QStringLiteral("set_segment_density_%1").arg(opt.denominator);
+                const QString actionTitle = (opt.denominator <= 0)
+                                                ? tr("Set Segment Density: Follow Editor")
+                                                : tr("Set Segment Density: 1/%1").arg(opt.denominator);
+                connect(act, &QAction::triggered, this, [this, actionId, actionTitle]() {
+                    if (!triggerPluginToolAction(actionId, actionTitle))
+                        emit statusMessage(tr("No segment selected for density change."));
+                });
+            }
+            else
+            {
+                act->setCheckable(true);
+                act->setChecked(m_pluginPlacementDensityOverride == opt.denominator);
+                connect(act, &QAction::triggered, this, [this, opt]() {
+                    m_pluginPlacementDensityOverride = opt.denominator;
+                    if (opt.denominator <= 0)
+                        emit statusMessage(tr("Curve density: follow editor"));
+                    else
+                        emit statusMessage(tr("Curve density set to 1/%1").arg(opt.denominator));
+                    update();
+                });
+            }
         }
 
         QAction *contextSeparator = nullptr;
         QHash<QAction *, QPair<QString, QString>> pluginContextActions;
         if (PluginManager *pm = activePluginManager())
         {
-            const QString pluginId = resolvePluginCanvasToolId();
             if (!pluginId.trimmed().isEmpty())
             {
                 const QList<PluginManager::ToolActionEntry> entries = pm->toolActions();

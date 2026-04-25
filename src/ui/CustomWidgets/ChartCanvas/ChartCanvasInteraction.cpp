@@ -57,6 +57,16 @@ QString sidecarDirForChart(const QString &chartPath)
         return QString();
     return fi.absoluteDir().filePath(".mcce-plugin");
 }
+
+QVariantMap serializeSelectedNoteForPlugin(const Note &note)
+{
+    QVariantMap noteObj;
+    noteObj.insert("id", note.id);
+    noteObj.insert("x", note.x);
+    noteObj.insert("lane_x", note.x);
+    noteObj.insert("beat", MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator));
+    return noteObj;
+}
 }
 
 
@@ -422,6 +432,7 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     overlayContext.insert("style_library_paths", styleLibraryPaths);
 
     QVariantList selectedIds;
+    QVariantList selectedNotes;
     if (m_selectionController && chart())
     {
         const auto &notes = chart()->notes();
@@ -432,12 +443,16 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
         {
             if (idx < 0 || idx >= notes.size())
                 continue;
-            if (notes[idx].id.isEmpty())
+            const auto &note = notes[idx];
+            if (note.id.isEmpty())
                 continue;
-            selectedIds.append(notes[idx].id);
+            selectedIds.append(note.id);
+
+            selectedNotes.append(serializeSelectedNoteForPlugin(note));
         }
     }
     overlayContext.insert("selected_note_ids", selectedIds);
+    overlayContext.insert("selected_notes", selectedNotes);
     return overlayContext;
 }
 
