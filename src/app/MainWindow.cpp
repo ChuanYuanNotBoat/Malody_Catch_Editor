@@ -1499,6 +1499,7 @@ void MainWindow::createCentralArea()
     connect(d->notePanel, &NoteEditPanel::mirrorGuideVisibilityChanged, d->canvas, &ChartCanvas::setMirrorGuideVisible);
     connect(d->notePanel, &NoteEditPanel::mirrorPreviewVisibilityChanged, d->canvas, &ChartCanvas::setMirrorPreviewVisible);
     connect(d->notePanel, &NoteEditPanel::mirrorFlipRequested, d->canvas, &ChartCanvas::flipSelectedNotes);
+    connect(d->notePanel, &NoteEditPanel::pluginPlacementActionTriggered, this, &MainWindow::triggerPluginQuickAction);
     connect(d->canvas, &ChartCanvas::mirrorAxisChanged, d->notePanel, &NoteEditPanel::setMirrorAxisValue);
 
     if (useCompactMobileLayout())

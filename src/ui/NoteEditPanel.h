@@ -2,6 +2,8 @@
 
 #include "CustomWidgets/RightPanel.h"
 #include <QButtonGroup>
+#include <QList>
+#include <QString>
 
 class QComboBox;
 class QCheckBox;
@@ -16,9 +18,20 @@ class NoteEditPanel : public RightPanel
 {
     Q_OBJECT
 public:
+    struct PluginPlacementAction
+    {
+        QString pluginId;
+        QString actionId;
+        QString title;
+        QString tooltip;
+        bool checkable = false;
+        bool checked = false;
+    };
+
     explicit NoteEditPanel(QWidget *parent = nullptr);
     void setChartController(ChartController *controller) override;
     void setSelectionController(SelectionController *controller) override;
+    void setPluginPlacementActions(const QList<PluginPlacementAction> &actions);
     void retranslateUi();
     void setMirrorAxisValue(int axisX);
 
@@ -32,6 +45,7 @@ signals:
     void mirrorGuideVisibilityChanged(bool visible);
     void mirrorPreviewVisibilityChanged(bool visible);
     void mirrorFlipRequested();
+    void pluginPlacementActionTriggered(const QString &pluginId, const QString &actionId);
 
 private slots:
     void onNoteModeClicked();
@@ -56,6 +70,9 @@ private:
     QRadioButton *m_rainRadio;
     QRadioButton *m_deleteRadio;
     QRadioButton *m_selectRadio;
+    QLabel *m_pluginToolsLabel;
+    QWidget *m_pluginToolsContainer;
+    QVBoxLayout *m_pluginToolsLayout;
     QLabel *m_timeDivisionLabel;
     QComboBox *m_timeDivisionCombo;
     QCheckBox *m_gridSnapCheck;

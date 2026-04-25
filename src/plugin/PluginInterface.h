@@ -21,10 +21,11 @@ public:
         QString description;
         QString confirmMessage;
         QString hostAction; // "" | undo | redo
-        QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar
+        QString placement = "tools_menu"; // tools_menu | top_toolbar | left_sidebar | right_note_panel
         bool requiresUndoSnapshot = true;
         bool checkable = false;
         bool checked = false;
+        bool syncPluginToolModeWithChecked = false;
     };
     struct FloatingPanelDescriptor
     {
@@ -97,6 +98,7 @@ public:
     static constexpr const char *kPlacementToolsMenu = "tools_menu";
     static constexpr const char *kPlacementTopToolbar = "top_toolbar";
     static constexpr const char *kPlacementLeftSidebar = "left_sidebar";
+    static constexpr const char *kPlacementRightNotePanel = "right_note_panel";
 
     virtual ~PluginInterface() = default;
 

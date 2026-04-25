@@ -9,6 +9,7 @@
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "ui/CustomWidgets/RealtimePreviewWidget.h"
 #include "ui/LeftPanel.h"
+#include "ui/NoteEditPanel.h"
 #include "file/ChartIO.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
@@ -242,6 +243,7 @@ void MainWindow::populatePluginToolsMenu()
         payload.insert("placement", entry.action.placement);
         payload.insert("checkable", entry.action.checkable);
         payload.insert("checked", entry.action.checked);
+        payload.insert("sync_plugin_tool_mode_with_checked", entry.action.syncPluginToolModeWithChecked);
         act->setData(payload);
         connect(act, &QAction::triggered, this, &MainWindow::triggerPluginToolAction);
         added = true;
@@ -312,6 +314,7 @@ void MainWindow::refreshPluginUiExtensions()
     d->pluginToolbarActions.clear();
 
     QList<LeftPanel::PluginQuickAction> sidebarActions;
+    QList<NoteEditPanel::PluginPlacementAction> notePanelActions;
     const QList<PluginManager::ToolActionEntry> entries = app->pluginManager()->toolActions();
     Logger::info(QString("refreshPluginUiExtensions: discovered %1 plugin tool actions.").arg(entries.size()));
     for (const PluginManager::ToolActionEntry &entry : entries)
@@ -335,6 +338,7 @@ void MainWindow::refreshPluginUiExtensions()
         meta.insert("placement", entry.action.placement);
         meta.insert("checkable", entry.action.checkable);
         meta.insert("checked", entry.action.checked);
+        meta.insert("sync_plugin_tool_mode_with_checked", entry.action.syncPluginToolModeWithChecked);
 
         const QString key = entry.pluginId + "::" + entry.action.actionId;
         d->pluginActionMeta.insert(key, meta);
@@ -363,10 +367,23 @@ void MainWindow::refreshPluginUiExtensions()
             qa.checked = entry.action.checked;
             sidebarActions.append(qa);
         }
+        else if (placement == QString(PluginInterface::kPlacementRightNotePanel))
+        {
+            NoteEditPanel::PluginPlacementAction qa;
+            qa.pluginId = entry.pluginId;
+            qa.actionId = entry.action.actionId;
+            qa.title = title;
+            qa.tooltip = entry.action.description;
+            qa.checkable = entry.action.checkable;
+            qa.checked = entry.action.checked;
+            notePanelActions.append(qa);
+        }
     }
 
     if (d->leftPanel)
         d->leftPanel->setPluginQuickActions(sidebarActions);
+    if (d->notePanel)
+        d->notePanel->setPluginPlacementActions(notePanelActions);
 
     const QString interactionPluginId = firstCanvasInteractionPluginId(app->pluginManager());
     const bool hasInteractionPlugin = !interactionPluginId.isEmpty();
@@ -466,8 +483,24 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
     const QString confirmMessage = meta.value("confirm_message").toString();
     const QString hostAction = meta.value("host_action").toString().trimmed().toLower();
     const bool requiresUndo = meta.value("requires_undo_snapshot", true).toBool();
+    const bool syncToolModeWithChecked = meta.value("sync_plugin_tool_mode_with_checked", false).toBool();
     if (pluginId.isEmpty() || actionId.isEmpty())
         return false;
+
+    const auto applyPostActionPluginModeSync = [this, pluginId, actionId, syncToolModeWithChecked, meta]()
+    {
+        if (!syncToolModeWithChecked)
+            return;
+        if (!d->canvas)
+            return;
+        const QString key = pluginId + "::" + actionId;
+        const QVariantMap refreshedMeta = d->pluginActionMeta.value(key, meta);
+        if (!refreshedMeta.value("checkable", false).toBool())
+            return;
+        const bool checked = refreshedMeta.value("checked", false).toBool();
+        d->pluginToolModePluginId = pluginId;
+        togglePluginEnhancedToolMode(checked);
+    };
 
     if (!confirmMessage.isEmpty())
     {
@@ -490,6 +523,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
         undo();
         statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
         refreshPluginUiExtensions();
+        applyPostActionPluginModeSync();
         return true;
     }
     if (hostAction == "redo")
@@ -497,6 +531,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
         redo();
         statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
         refreshPluginUiExtensions();
+        applyPostActionPluginModeSync();
         return true;
     }
 
@@ -555,6 +590,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
         }
         statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
         refreshPluginUiExtensions();
+        applyPostActionPluginModeSync();
         return true;
     }
     else if (batchEditAvailable)
@@ -588,6 +624,7 @@ bool MainWindow::runPluginActionWithMeta(const QVariantMap &meta)
 
     statusBar()->showMessage(tr("Plugin action completed: %1").arg(actionTitle), 2500);
     refreshPluginUiExtensions();
+    applyPostActionPluginModeSync();
     return true;
 }
 

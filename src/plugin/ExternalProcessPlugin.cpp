@@ -230,6 +230,7 @@ QList<PluginInterface::ToolAction> ExternalProcessPlugin::toolActions() const
         action.requiresUndoSnapshot = obj.value("requires_undo_snapshot").toBool(true);
         action.checkable = obj.value("checkable").toBool(false);
         action.checked = obj.value("checked").toBool(false);
+        action.syncPluginToolModeWithChecked = obj.value("sync_plugin_tool_mode_with_checked").toBool(false);
         if (action.actionId.isEmpty() || action.title.isEmpty())
             continue;
         actions.append(action);

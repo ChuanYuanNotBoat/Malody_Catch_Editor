@@ -1081,10 +1081,11 @@ def _list_tool_actions():
             "action_id": "toggle_anchor_placement",
             "title": tr(STATE.get("last_context", {}), "action_anchor_place"),
             "description": tr(STATE.get("last_context", {}), "action_anchor_place_desc"),
-            "placement": "left_sidebar",
+            "placement": "right_note_panel",
             "requires_undo_snapshot": False,
             "checkable": True,
             "checked": bool(STATE.get("anchor_placement_enabled", False)),
+            "sync_plugin_tool_mode_with_checked": True,
         },
         {
             "action_id": "undo_curve_edit",

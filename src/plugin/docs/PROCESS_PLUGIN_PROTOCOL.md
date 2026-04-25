@@ -99,14 +99,22 @@
   "description": "可选描述",
   "confirm_message": "执行前确认文案",
   "placement": "left_sidebar",
-  "requires_undo_snapshot": true
+  "requires_undo_snapshot": true,
+  "checkable": false,
+  "checked": false,
+  "sync_plugin_tool_mode_with_checked": false
 }
 ```
+
+当 `sync_plugin_tool_mode_with_checked=true` 且该 action 为 `checkable` 时，Host 会在动作执行后按最新 `checked` 状态自动切换插件增强工具模式：
+- `checked=true`：启用插件工具模式
+- `checked=false`：退出插件工具模式（回归原始编辑状态）
 
 `placement` 可选值：
 - `tools_menu`
 - `top_toolbar`
 - `left_sidebar`
+- `right_note_panel`
 
 ### 4.4 Optional Request: Host Batch Edit
 
