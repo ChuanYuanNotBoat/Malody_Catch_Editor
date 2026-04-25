@@ -152,6 +152,10 @@ public:
     {
         (void)actionText;
     }
+    virtual void onHostDiscardChanges(const QString &reasonText)
+    {
+        (void)reasonText;
+    }
 
     // Optional UI extension point.
     virtual bool openAdvancedColorEditor(const QVariantMap &context)

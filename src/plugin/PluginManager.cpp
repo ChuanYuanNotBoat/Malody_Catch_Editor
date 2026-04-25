@@ -639,6 +639,23 @@ void PluginManager::notifyHostRedo(const QString &actionText)
     }
 }
 
+void PluginManager::notifyHostDiscardChanges(const QString &reasonText)
+{
+    for (PluginInterface *p : m_plugins)
+    {
+        if (!p)
+            continue;
+        try
+        {
+            p->onHostDiscardChanges(reasonText);
+        }
+        catch (...)
+        {
+            Logger::warn(QString("Error in plugin '%1' onHostDiscardChanges").arg(localizedNameForLog(p)));
+        }
+    }
+}
+
 bool PluginManager::tryOpenAdvancedColorEditor(const QVariantMap &context)
 {
     const QVariantMap enrichedContext = enrichContextWithLocale(context);

@@ -588,3 +588,19 @@ bool ChartCanvas::triggerPluginToolAction(const QString &actionId, const QString
     return true;
 }
 
+bool ChartCanvas::triggerPluginDeleteSelection()
+{
+    if (!m_pluginToolModeActive)
+        return false;
+
+    PluginInterface::CanvasInputEvent pluginEvent;
+    pluginEvent.type = "key_down";
+    pluginEvent.key = static_cast<int>(Qt::Key_Delete);
+    pluginEvent.modifiers = static_cast<int>(Qt::NoModifier);
+    pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
+
+    bool consumed = false;
+    if (!dispatchPluginCanvasInput(pluginEvent, &consumed))
+        return false;
+    return consumed;
+}

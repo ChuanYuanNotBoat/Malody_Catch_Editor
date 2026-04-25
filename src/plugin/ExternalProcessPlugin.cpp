@@ -196,6 +196,11 @@ void ExternalProcessPlugin::onHostRedo(const QString &actionText)
     sendNotification("onHostRedo", QJsonObject{{"action_text", actionText}});
 }
 
+void ExternalProcessPlugin::onHostDiscardChanges(const QString &reasonText)
+{
+    sendNotification("onHostDiscardChanges", QJsonObject{{"reason_text", reasonText}});
+}
+
 bool ExternalProcessPlugin::openAdvancedColorEditor(const QVariantMap &context)
 {
     if (!hasCapability(kCapabilityAdvancedColorEditor))

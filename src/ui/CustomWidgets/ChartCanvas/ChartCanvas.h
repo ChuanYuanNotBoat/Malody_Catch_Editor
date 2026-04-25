@@ -87,6 +87,7 @@ public:
     void setPluginOverlayToggles(const QVariantMap &toggles);
     QVariantMap pluginOverlayToggles() const { return m_pluginOverlayToggles; }
     QVariantMap pluginCanvasActionContext() const;
+    bool triggerPluginDeleteSelection();
 
 public slots:
     void showGridSettings();

@@ -797,10 +797,7 @@ bool ChartCanvas::handleHitNoteLeftClick(int hitIndex, Qt::KeyboardModifiers mod
     }
 
     if (!m_selectionController->selectedIndices().contains(hitIndex))
-    {
-        m_selectionController->clearSelection();
         m_selectionController->addToSelection(hitIndex);
-    }
 
     beginMoveSelection(pos, hitIndex);
     return true;

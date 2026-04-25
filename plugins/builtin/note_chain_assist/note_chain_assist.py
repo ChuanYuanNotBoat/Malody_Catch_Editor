@@ -9,8 +9,10 @@ import time
 LEFT_BUTTON = 1
 RIGHT_BUTTON = 2
 CTRL_MODIFIER_MASK = 0x04000000
+SHIFT_MODIFIER_MASK = 0x02000000
 KEY_A = 0x41
 KEY_DELETE = 0x01000007
+KEY_BACKSPACE = 0x01000003
 MAX_HISTORY = 128
 SERIALIZE_DEN = 288
 CURVE_CHECKPOINT_PREFIX = "Plugin Curve Edit"
@@ -133,6 +135,8 @@ STATE = {
     "lang": "en",
     "curve_revision": 0,
     "curve_samples_cache": {},
+    "suppress_persist_once": False,
+    "link_drag": {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0},
 }
 
 TRANSLATIONS.update(
@@ -157,6 +161,11 @@ TRANSLATIONS.update(
         "action_connect_selected_desc": {"en": "Connect selected anchors by time order", "zh": "按时间顺序连接选中节点", "ja": "時間順に選択ノードを接続"},
         "action_disconnect_selected_segments": {"en": "Delete Selected Segment", "zh": "删除选中曲线段", "ja": "選択セグメントを削除"},
         "action_disconnect_selected_segments_desc": {"en": "Disconnect selected curve segments", "zh": "断开选中的曲线段连接", "ja": "選択セグメントの接続を解除"},
+        "status_link_dragging": {"en": "Shift-drag to another anchor to connect", "zh": "按住 Shift 拖到另一个节点即可连接", "ja": "Shiftドラッグで別ノードに接続"},
+        "status_link_drag_target": {"en": "Release to connect A{from_idx} -> A{to_idx}", "zh": "松开即可连接 A{from_idx} -> A{to_idx}", "ja": "離して接続 A{from_idx} -> A{to_idx}"},
+        "status_link_connected": {"en": "Connected A{from_idx} -> A{to_idx}", "zh": "已连接 A{from_idx} -> A{to_idx}", "ja": "接続済み A{from_idx} -> A{to_idx}"},
+        "status_link_already_connected": {"en": "A{from_idx} and A{to_idx} are already connected", "zh": "A{from_idx} 与 A{to_idx} 已连接", "ja": "A{from_idx} と A{to_idx} は既に接続済み"},
+        "status_link_cancelled": {"en": "Connect drag cancelled", "zh": "连接拖拽已取消", "ja": "接続ドラッグをキャンセル"},
     }
 )
 
@@ -276,6 +285,7 @@ def _restore_snapshot(snapshot):
     STATE["selected_anchor_ids"] = []
     STATE["selected_links"] = []
     STATE["box_select"] = {"active": False, "start": [0.0, 0.0], "end": [0.0, 0.0], "append": False}
+    STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
     STATE["pending_connect_anchor_id"] = int(snapshot.get("pending_connect_anchor_id", -1))
     STATE["next_anchor_id"] = max(1, int(snapshot.get("next_anchor_id", 1)))
     _ensure_anchor_ids()
@@ -668,7 +678,7 @@ def _push_history():
 def _record_history_state(context):
     changed = _push_history()
     if changed:
-        _mark_dirty(context)
+        _mark_dirty(context, flush=True)
     return changed
 
 
@@ -680,7 +690,7 @@ def _undo_history_from_host(context):
     idx -= 1
     STATE["history_index"] = idx
     _restore_snapshot(hist[idx])
-    _mark_dirty(context)
+    _mark_dirty(context, flush=True)
     return True
 
 
@@ -692,7 +702,7 @@ def _redo_history_from_host(context):
     idx += 1
     STATE["history_index"] = idx
     _restore_snapshot(hist[idx])
-    _mark_dirty(context)
+    _mark_dirty(context, flush=True)
     return True
 
 
@@ -1191,8 +1201,12 @@ def _ensure_project_context(context):
 
     if STATE["project_path"] != path:
         if STATE["project_path"] and STATE["project_dirty"]:
-            _save_project(STATE["project_path"], context)
+            if not bool(STATE.get("suppress_persist_once", False)):
+                _save_project(STATE["project_path"], context)
+            else:
+                STATE["project_dirty"] = False
         STATE["project_path"] = path
+        STATE["suppress_persist_once"] = False
         _try_seed_curve_project_from_source(context, path)
         if not _load_project(path, context):
             STATE["anchors"] = _default_anchors()
@@ -1232,12 +1246,16 @@ def _try_seed_curve_project_from_source(context, target_curve_path):
         return False
 
 
-def _mark_dirty(context):
+def _mark_dirty(context, flush=False):
     STATE["project_dirty"] = True
+    if not flush:
+        return
+    if bool(STATE.get("suppress_persist_once", False)):
+        return
     if isinstance(context, dict):
         _ensure_project_context(context)
-        if STATE["project_path"]:
-            _save_project(STATE["project_path"], context)
+    if STATE["project_path"]:
+        _save_project(STATE["project_path"], context)
 
 
 def _build_overlay(context):
@@ -1405,6 +1423,43 @@ def _build_overlay(context):
             "width": 1.5,
         })
 
+    link_drag = STATE.get("link_drag", {})
+    if bool(link_drag.get("active", False)):
+        idx_map = _anchor_index_map()
+        source_id = int(link_drag.get("source_anchor_id", -1))
+        source_idx = idx_map.get(source_id, -1)
+        if 0 <= source_idx < len(anchors):
+            src = anchors[source_idx]
+            sx, sy = _chart_to_canvas(context, src["lane_x"], src["beat"])
+            tx = float(link_drag.get("x", sx))
+            ty = float(link_drag.get("y", sy))
+            hover_id = int(link_drag.get("hover_anchor_id", -1))
+            hover_idx = idx_map.get(hover_id, -1)
+            if 0 <= hover_idx < len(anchors):
+                dst = anchors[hover_idx]
+                tx, ty = _chart_to_canvas(context, dst["lane_x"], dst["beat"])
+                items.append({
+                    "kind": "rect",
+                    "coord_space": "chart",
+                    "lane_x": dst["lane_x"],
+                    "beat": dst["beat"],
+                    "w": 16,
+                    "h": 16,
+                    "rect_anchor": "center",
+                    "color": "#FFE08A",
+                    "fill_color": "#33FFE08A",
+                    "width": 2.0,
+                })
+            items.append({
+                "kind": "line",
+                "x1": sx,
+                "y1": sy,
+                "x2": tx,
+                "y2": ty,
+                "color": "#FFE08A",
+                "width": 2.0,
+            })
+
     return items
 
 
@@ -1414,6 +1469,7 @@ def _reset_anchors(context):
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
     STATE["selected_links"] = []
+    STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
     STATE["pending_connect_anchor_id"] = -1
     _invalidate_curve_cache()
     _record_history_state(context)
@@ -1532,10 +1588,15 @@ def _handle_canvas_input(payload):
         seg_hit = _find_segment_hit(STATE["last_context"], x, y) if _selection_enabled("segments") else None
         mods = int(event.get("modifiers", 0))
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
+        shift = (mods & SHIFT_MODIFIER_MASK) != 0
+        host_sel = STATE["last_context"].get("host_selection_tool", {}) if isinstance(STATE["last_context"], dict) else {}
+        is_select_mode = bool(host_sel.get("is_select_mode", False)) if isinstance(host_sel, dict) else False
 
         if button == RIGHT_BUTTON:
             consumed = False
         elif button == LEFT_BUTTON:
+            notes_selectable = _selection_enabled("notes")
+            anchor_placement_enabled = bool(STATE.get("anchor_placement_enabled", False))
             if hidx >= 0:
                 STATE["drag"] = {"mode": hkind, "index": hidx}
                 consumed = True
@@ -1543,6 +1604,26 @@ def _handle_canvas_input(payload):
                 status = tr(STATE["last_context"], "dragging_handle", handle_kind=tr(STATE["last_context"], f"handle_kind_{hkind}"), index=hidx)
             elif aidx >= 0:
                 anchor_id = int(STATE["anchors"][aidx].get("id", 0))
+                if shift:
+                    STATE["link_drag"] = {
+                        "active": True,
+                        "source_anchor_id": anchor_id,
+                        "hover_anchor_id": -1,
+                        "x": x,
+                        "y": y,
+                    }
+                    consumed = True
+                    cursor = "pointing_hand"
+                    status = tr(STATE["last_context"], "status_link_dragging")
+                    return {
+                        "consumed": consumed,
+                        "overlay": _build_overlay(STATE["last_context"]),
+                        "cursor": cursor,
+                        "status_text": status,
+                        "preview_batch_edit": {"add": [], "remove": [], "move": []},
+                        "request_undo_checkpoint": request_checkpoint,
+                        "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
+                    }
                 if ctrl:
                     _toggle_selected_anchor(anchor_id)
                 else:
@@ -1573,34 +1654,25 @@ def _handle_canvas_input(payload):
                 consumed = True
                 cursor = "pointing_hand"
                 status = tr(STATE["last_context"], "status_segment_selected")
-            elif ctrl:
-                STATE["box_select"] = {"active": True, "start": [x, y], "end": [x, y], "append": True}
+            elif ctrl or is_select_mode:
+                STATE["box_select"] = {"active": True, "start": [x, y], "end": [x, y], "append": bool(ctrl)}
                 consumed = True
                 status = tr(STATE["last_context"], "status_box_selecting")
             else:
-                consumed = True
                 had_selection = bool(STATE.get("selected_anchor_ids")) or bool(STATE.get("selected_links"))
-                if had_selection:
+                if not anchor_placement_enabled and had_selection:
                     STATE["selected_anchor_ids"] = []
                     STATE["selected_links"] = []
                     status = tr(STATE["last_context"], "status_selection_cleared")
-                    return {
-                        "consumed": consumed,
-                        "overlay": _build_overlay(STATE["last_context"]),
-                        "cursor": cursor,
-                        "status_text": status,
-                        "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                        "request_undo_checkpoint": request_checkpoint,
-                        "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-                    }
-                notes_selectable = _selection_enabled("notes")
-                if not bool(STATE.get("anchor_placement_enabled", False)):
+                    consumed = not notes_selectable
+                if not anchor_placement_enabled:
                     if notes_selectable:
                         consumed = False
-                        status = ""
                     else:
+                        consumed = True
                         status = tr(STATE["last_context"], "anchor_place_off_hint")
                 else:
+                    consumed = True
                     new_idx = _append_anchor(STATE["last_context"], x, y)
                     new_anchor_id = int(STATE["anchors"][new_idx].get("id", 0))
                     selected = [int(v) for v in STATE.get("selected_anchor_ids", []) if int(v) > 0]
@@ -1630,6 +1702,37 @@ def _handle_canvas_input(payload):
                     status = tr(STATE["last_context"], "anchor_added", index=new_idx)
 
     elif et == "mouse_move":
+        link_drag = STATE.get("link_drag", {})
+        if bool(link_drag.get("active", False)):
+            link_drag["x"] = x
+            link_drag["y"] = y
+            hidx = _find_anchor_hit(STATE["last_context"], x, y) if _selection_enabled("anchors") else -1
+            hover_id = -1
+            if hidx >= 0:
+                hit_id = int(STATE["anchors"][hidx].get("id", 0))
+                if hit_id > 0 and hit_id != int(link_drag.get("source_anchor_id", -1)):
+                    hover_id = hit_id
+            link_drag["hover_anchor_id"] = hover_id
+            STATE["link_drag"] = link_drag
+            consumed = True
+            cursor = "pointing_hand"
+            if hover_id > 0:
+                idx_map = _anchor_index_map()
+                src_i = idx_map.get(int(link_drag.get("source_anchor_id", -1)), -1)
+                dst_i = idx_map.get(hover_id, -1)
+                status = tr(STATE["last_context"], "status_link_drag_target", from_idx=src_i, to_idx=dst_i)
+            else:
+                status = tr(STATE["last_context"], "status_link_dragging")
+            return {
+                "consumed": consumed,
+                "overlay": _build_overlay(STATE["last_context"]),
+                "cursor": cursor,
+                "status_text": status,
+                "preview_batch_edit": {"add": [], "remove": [], "move": []},
+                "request_undo_checkpoint": request_checkpoint,
+                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
+            }
+
         box = STATE.get("box_select", {})
         if bool(box.get("active", False)):
             box["end"] = [x, y]
@@ -1684,6 +1787,37 @@ def _handle_canvas_input(payload):
                 cursor = "pointing_hand"
 
     elif et == "mouse_up":
+        link_drag = STATE.get("link_drag", {})
+        if bool(link_drag.get("active", False)):
+            consumed = True
+            source_id = int(link_drag.get("source_anchor_id", -1))
+            target_id = int(link_drag.get("hover_anchor_id", -1))
+            STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
+            if source_id > 0 and target_id > 0 and source_id != target_id:
+                added = _add_link(source_id, target_id)
+                idx_map = _anchor_index_map()
+                src_i = idx_map.get(source_id, -1)
+                dst_i = idx_map.get(target_id, -1)
+                if added:
+                    _cleanup_links_and_selection()
+                    _invalidate_curve_cache()
+                    _record_history_state(STATE["last_context"])
+                    request_checkpoint = True
+                    status = tr(STATE["last_context"], "status_link_connected", from_idx=src_i, to_idx=dst_i)
+                else:
+                    status = tr(STATE["last_context"], "status_link_already_connected", from_idx=src_i, to_idx=dst_i)
+            else:
+                status = tr(STATE["last_context"], "status_link_cancelled")
+            return {
+                "consumed": consumed,
+                "overlay": _build_overlay(STATE["last_context"]),
+                "cursor": cursor,
+                "status_text": status,
+                "preview_batch_edit": {"add": [], "remove": [], "move": []},
+                "request_undo_checkpoint": request_checkpoint,
+                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
+            }
+
         if bool(STATE.get("box_select", {}).get("active", False)):
             changed = _apply_box_selection(STATE["last_context"])
             consumed = True
@@ -1710,6 +1844,7 @@ def _handle_canvas_input(payload):
 
     elif et == "cancel":
         STATE["drag"] = {"mode": "", "index": -1}
+        STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
         consumed = True
         status = tr(STATE["last_context"], "interaction_cancelled")
 
@@ -1723,7 +1858,7 @@ def _handle_canvas_input(payload):
             status = tr(STATE["last_context"], "anchor_enabled") if STATE["anchor_placement_enabled"] else tr(STATE["last_context"], "anchor_disabled")
             _record_history_state(STATE["last_context"])
             request_checkpoint = True
-        elif key == KEY_DELETE:
+        elif key in (KEY_DELETE, KEY_BACKSPACE):
             changed_segments = _disconnect_selected_segments(STATE["last_context"])
             changed_anchors = _delete_selected_anchors(STATE["last_context"])
             if changed_segments or changed_anchors:
@@ -1993,8 +2128,16 @@ def run_plugin_loop():
                     STATE["lang"] = normalize_lang(locale_name, STATE.get("lang", "en"))
                 elif language_name.strip():
                     STATE["lang"] = normalize_lang(language_name, STATE.get("lang", "en"))
-            elif event == "shutdown":
+            elif event == "onHostDiscardChanges":
+                STATE["suppress_persist_once"] = True
+                STATE["project_dirty"] = False
+            elif event == "onChartSaved":
+                STATE["suppress_persist_once"] = False
                 if STATE["project_path"] and STATE["project_dirty"]:
+                    _save_project(STATE["project_path"], STATE.get("last_context", {}))
+            elif event == "shutdown":
+                if (not bool(STATE.get("suppress_persist_once", False)) and
+                        STATE["project_path"] and STATE["project_dirty"]):
                     _save_project(STATE["project_path"], STATE.get("last_context", {}))
                 break
             elif event == "onHostUndo":

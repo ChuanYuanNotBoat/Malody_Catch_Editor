@@ -1037,6 +1037,10 @@ void MainWindow::createMenus()
     registerShortcutAction(deleteAction, "edit.delete", QKeySequence::Delete);
     connect(deleteAction, &QAction::triggered, this, [this]()
             {
+        if (d->canvas && d->canvas->triggerPluginDeleteSelection()) {
+            Logger::debug("Deleted plugin selection via menu");
+            return;
+        }
         if (d->selectionController && !d->selectionController->selectedIndices().isEmpty()) {
             QSet<int> selected = d->selectionController->selectedIndices();
             const auto& notes = d->chartController->chart()->notes();
@@ -1707,7 +1711,11 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
         return false;
 
     if (choice == QMessageBox::Discard)
+    {
+        if (PluginManager *pm = activePluginManager())
+            pm->notifyHostDiscardChanges(reasonText);
         return true;
+    }
 
     QString savePath = d->sourceChartPath;
     if (savePath.isEmpty())
