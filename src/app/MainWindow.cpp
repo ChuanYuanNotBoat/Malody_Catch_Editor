@@ -1533,7 +1533,7 @@ void MainWindow::createCentralArea()
         addToolBarBreak(Qt::TopToolBarArea);
         d->pluginToolBar = addToolBar(tr("Plugins"));
         d->pluginManagerToolbarAction = d->pluginToolBar->addAction(tr("Plugins"), this, &MainWindow::openPluginManager);
-        d->pluginToolModeToolbarAction = d->pluginToolBar->addAction(tr("Curve Tool"));
+        d->pluginToolModeToolbarAction = d->pluginToolBar->addAction(tr("Launch Curve Tool"));
         d->pluginToolModeToolbarAction->setCheckable(true);
         d->pluginToolModeToolbarAction->setEnabled(false);
         connect(d->pluginToolModeToolbarAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
@@ -2622,7 +2622,7 @@ void MainWindow::retranslateUi()
     if (d->pluginManagerToolbarAction)
         d->pluginManagerToolbarAction->setText(tr("Plugins"));
     if (d->pluginToolModeToolbarAction)
-        d->pluginToolModeToolbarAction->setText(tr("Curve Tool"));
+        d->pluginToolModeToolbarAction->setText(tr("Launch Curve Tool"));
     if (d->leftPanel)
         d->leftPanel->retranslateUi();
     if (d->notePanel)
@@ -3073,6 +3073,8 @@ void MainWindow::applySidebarTheme()
         const QString css = QString(
                                 "QWidget#%9 { background-color: %1; color: %2; border: 1px solid %4; }"
                                 "QLabel, QCheckBox, QRadioButton, QGroupBox { color: %2; }"
+                                "QGroupBox { border: 1px solid %4; border-radius: 6px; margin-top: 8px; padding-top: 10px; }"
+                                "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: %2; }"
                                 "QLineEdit, QAbstractSpinBox, QComboBox, QListWidget, QTextEdit, QPlainTextEdit {"
                                 "  background-color: %3; color: %2; border: 1px solid %4; }"
                                 "QAbstractItemView { background-color: %3; color: %2; border: 1px solid %4; selection-background-color: %5; selection-color: %6; }"

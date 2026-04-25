@@ -1714,8 +1714,8 @@ Open the **History** tab for collapsible long update notes.</source>
         <translation>セッション設定を更新しました</translation>
     </message>
     <message>
-        <source>Curve Tool</source>
-        <translation>曲線ツール</translation>
+        <source>Launch Curve Tool</source>
+        <translation>曲線ツールを起動</translation>
     </message>
     <message>
         <source>No plugin supports canvas interaction.</source>
@@ -2160,3 +2160,4 @@ Open the **History** tab for collapsible long update notes.</source>
     </message>
 </context>
 </TS>
+

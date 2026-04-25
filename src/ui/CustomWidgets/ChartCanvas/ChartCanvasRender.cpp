@@ -442,12 +442,14 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
     PluginManager *pm = activePluginManager();
     if (!pm)
         return;
+    if (!m_pluginToolModeActive)
+        return;
     if (!m_pluginOverlayToggles.value("overlay_enabled", true).toBool())
         return;
 
     const bool isPlaying = m_playbackController &&
                            m_playbackController->state() == PlaybackController::Playing;
-    const bool allowQueryInCurrentState = m_pluginToolModeActive || !isPlaying;
+    const bool allowQueryInCurrentState = true;
     const int queryIntervalMs = m_pluginToolModeActive
                                     ? (isPlaying ? kOverlayQueryIntervalMsToolModePlaying
                                                  : kOverlayQueryIntervalMsToolMode)

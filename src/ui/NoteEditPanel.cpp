@@ -23,7 +23,7 @@
 #include <QSignalBlocker>
 
 NoteEditPanel::NoteEditPanel(QWidget *parent)
-    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20), m_pluginToolsExpanded(true)
+    : RightPanel(parent), m_chartController(nullptr), m_selectionController(nullptr), m_currentMode(0), m_gridDivision(20), m_pluginToolsExpanded(false)
 {
     setupUi();
 }
@@ -56,7 +56,7 @@ void NoteEditPanel::setupUi()
     m_pluginToolsToggleBtn = new QToolButton(this);
     m_pluginToolsToggleBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
     m_pluginToolsToggleBtn->setCheckable(true);
-    m_pluginToolsToggleBtn->setChecked(true);
+    m_pluginToolsToggleBtn->setChecked(false);
     connect(m_pluginToolsToggleBtn, &QToolButton::clicked, this, [this](bool checked)
             {
                 m_pluginToolsExpanded = checked;

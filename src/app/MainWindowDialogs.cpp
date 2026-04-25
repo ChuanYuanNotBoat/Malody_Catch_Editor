@@ -32,6 +32,7 @@
 #include <QUrl>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QSignalBlocker>
 #include <QFile>
 #include <QTextStream>
 #include <QJsonDocument>
@@ -360,6 +361,7 @@ void MainWindow::refreshPluginUiExtensions()
         {
             LeftPanel::PluginQuickAction qa;
             qa.pluginId = entry.pluginId;
+            qa.pluginDisplayName = entry.pluginDisplayName;
             qa.actionId = entry.action.actionId;
             qa.title = title;
             qa.tooltip = entry.action.description;
@@ -392,12 +394,30 @@ void MainWindow::refreshPluginUiExtensions()
         d->pluginToolModeAction->setEnabled(hasInteractionPlugin);
         if (!hasInteractionPlugin && d->pluginToolModeAction->isChecked())
             d->pluginToolModeAction->setChecked(false);
+        else if (hasInteractionPlugin && d->canvas)
+        {
+            const bool checked = d->canvas->isPluginToolModeActive();
+            if (d->pluginToolModeAction->isChecked() != checked)
+            {
+                const QSignalBlocker blocker(d->pluginToolModeAction);
+                d->pluginToolModeAction->setChecked(checked);
+            }
+        }
     }
     if (d->pluginToolModeToolbarAction)
     {
         d->pluginToolModeToolbarAction->setEnabled(hasInteractionPlugin);
         if (!hasInteractionPlugin && d->pluginToolModeToolbarAction->isChecked())
             d->pluginToolModeToolbarAction->setChecked(false);
+        else if (hasInteractionPlugin && d->canvas)
+        {
+            const bool checked = d->canvas->isPluginToolModeActive();
+            if (d->pluginToolModeToolbarAction->isChecked() != checked)
+            {
+                const QSignalBlocker blocker(d->pluginToolModeToolbarAction);
+                d->pluginToolModeToolbarAction->setChecked(checked);
+            }
+        }
     }
     if (!interactionPluginId.isEmpty())
         d->pluginToolModePluginId = interactionPluginId;

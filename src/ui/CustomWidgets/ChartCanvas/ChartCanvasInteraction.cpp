@@ -298,7 +298,10 @@ void ChartCanvas::setPluginToolMode(bool enabled, const QString &pluginId)
         m_pluginToolPluginId = pluginId.trimmed();
     if (!enabled)
     {
+        m_overlayCache.clear();
         m_eventOverlayCache.clear();
+        m_lastOverlayQueryMs = 0;
+        m_overlayQueryBlockedUntilMs = 0;
         applyPluginCursor(QString());
     }
     update();

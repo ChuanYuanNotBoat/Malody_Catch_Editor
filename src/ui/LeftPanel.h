@@ -3,6 +3,7 @@
 #include <QList>
 #include <QString>
 #include <QWidget>
+#include <QHash>
 
 class ChartController;
 class PlaybackController;
@@ -20,6 +21,7 @@ public:
     struct PluginQuickAction
     {
         QString pluginId;
+        QString pluginDisplayName;
         QString actionId;
         QString title;
         QString tooltip;
@@ -58,4 +60,5 @@ private:
     QLabel *m_pluginSectionLabel = nullptr;
     QWidget *m_pluginSectionContainer = nullptr;
     QVBoxLayout *m_pluginButtonsLayout = nullptr;
+    QHash<QString, bool> m_pluginSectionExpanded;
 };

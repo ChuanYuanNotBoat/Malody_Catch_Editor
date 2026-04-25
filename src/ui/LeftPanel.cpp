@@ -5,6 +5,7 @@
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include <QDoubleSpinBox>
 #include <QHBoxLayout>
+#include <QGroupBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -148,22 +149,77 @@ void LeftPanel::setPluginQuickActions(const QList<PluginQuickAction> &actions)
         delete item;
     }
 
+    QList<QString> pluginOrder;
+    QHash<QString, QList<PluginQuickAction>> grouped;
     for (const PluginQuickAction &a : actions)
     {
         if (a.pluginId.isEmpty() || a.actionId.isEmpty() || a.title.isEmpty())
             continue;
+        if (!grouped.contains(a.pluginId))
+            pluginOrder.append(a.pluginId);
+        grouped[a.pluginId].append(a);
+    }
 
-        QPushButton *btn = new QPushButton(a.title, m_pluginSectionContainer);
-        if (!a.tooltip.isEmpty())
-            btn->setToolTip(a.tooltip);
-        btn->setCheckable(a.checkable);
-        if (a.checkable)
-            btn->setChecked(a.checked);
-        btn->setMinimumWidth(0);
-        btn->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        connect(btn, &QPushButton::clicked, this, [this, a]()
-                { emit pluginQuickActionTriggered(a.pluginId, a.actionId); });
-        m_pluginButtonsLayout->addWidget(btn);
+    for (const QString &pluginId : pluginOrder)
+    {
+        const QList<PluginQuickAction> pluginActions = grouped.value(pluginId);
+        if (pluginActions.isEmpty())
+            continue;
+
+        const bool alwaysExpanded = (pluginId.trimmed() == QStringLiteral("builtin.note_color_formatter"));
+        bool expanded = alwaysExpanded;
+        if (!alwaysExpanded)
+        {
+            if (m_pluginSectionExpanded.contains(pluginId))
+                expanded = m_pluginSectionExpanded.value(pluginId, false);
+            else
+                expanded = false;
+        }
+        m_pluginSectionExpanded.insert(pluginId, expanded);
+
+        const QString pluginTitle = pluginActions.first().pluginDisplayName.trimmed().isEmpty()
+                                        ? pluginId
+                                        : pluginActions.first().pluginDisplayName.trimmed();
+        QGroupBox *section = new QGroupBox(pluginTitle, m_pluginSectionContainer);
+        section->setCheckable(!alwaysExpanded);
+        section->setChecked(expanded);
+        QVBoxLayout *sectionLayout = new QVBoxLayout(section);
+        sectionLayout->setContentsMargins(8, 8, 8, 8);
+        sectionLayout->setSpacing(4);
+
+        QWidget *body = new QWidget(section);
+        QVBoxLayout *bodyLayout = new QVBoxLayout(body);
+        bodyLayout->setContentsMargins(0, 0, 0, 0);
+        bodyLayout->setSpacing(6);
+        body->setVisible(expanded);
+        sectionLayout->addWidget(body);
+
+        if (!alwaysExpanded && section->isCheckable())
+        {
+            connect(section, &QGroupBox::toggled, this, [this, pluginId, body](bool checked)
+                    {
+                        m_pluginSectionExpanded.insert(pluginId, checked);
+                        body->setVisible(checked);
+                        updateGeometry();
+                    });
+        }
+
+        for (const PluginQuickAction &a : pluginActions)
+        {
+            QPushButton *btn = new QPushButton(a.title, body);
+            if (!a.tooltip.isEmpty())
+                btn->setToolTip(a.tooltip);
+            btn->setCheckable(a.checkable);
+            if (a.checkable)
+                btn->setChecked(a.checked);
+            btn->setMinimumWidth(0);
+            btn->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+            connect(btn, &QPushButton::clicked, this, [this, a]()
+                    { emit pluginQuickActionTriggered(a.pluginId, a.actionId); });
+            bodyLayout->addWidget(btn);
+        }
+
+        m_pluginButtonsLayout->addWidget(section);
     }
 
     const bool hasActions = (m_pluginButtonsLayout->count() > 0);
