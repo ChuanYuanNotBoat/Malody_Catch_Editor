@@ -80,6 +80,15 @@ Host sends:
       "lane_width": 512,
       "note_type_scope": "normal_only",
       "selected_note_ids": ["n1", "n2"],
+      "host_selection_tool": {
+        "mode": "select|place_note|place_rain|delete",
+        "is_select_mode": true,
+        "is_selecting_rect": false,
+        "selection_rect": {"x": 0, "y": 0, "w": 0, "h": 0},
+        "ctrl_toggle_select": true,
+        "empty_click_clears_selection": true,
+        "escape_clears_selection": true
+      },
       "safe_denominators": [1,2,3,4,6,8,12,16,24,32,48,64,96,192,288]
     },
     "event": {

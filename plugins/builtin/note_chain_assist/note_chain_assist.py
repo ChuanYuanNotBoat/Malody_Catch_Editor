@@ -114,6 +114,7 @@ STATE = {
     "drag": {"mode": "", "index": -1},
     "selected_anchor_ids": [],
     "selected_links": [],
+    "selection_targets": {"anchors": True, "segments": True},
     "box_select": {"active": False, "start": [0.0, 0.0], "end": [0.0, 0.0], "append": False},
     "pending_connect_anchor_id": -1,
     "next_anchor_id": 1,
@@ -217,6 +218,7 @@ def _capture_snapshot():
         "anchors": _clone(STATE.get("anchors", [])),
         "links": _clone(STATE.get("links", [])),
         "style": _clone(STATE.get("style", {})),
+        "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True})),
         "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
         "next_anchor_id": int(STATE.get("next_anchor_id", 1)),
         "pending_connect_anchor_id": int(STATE.get("pending_connect_anchor_id", -1)),
@@ -230,6 +232,14 @@ def _restore_snapshot(snapshot):
     STATE["links"] = _clone(snapshot.get("links", [])) if isinstance(snapshot.get("links"), list) else []
     style = snapshot.get("style")
     STATE["style"] = _clone(style) if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
+    targets = snapshot.get("selection_targets")
+    if isinstance(targets, dict):
+        STATE["selection_targets"] = {
+            "anchors": bool(targets.get("anchors", True)),
+            "segments": bool(targets.get("segments", True)),
+        }
+    else:
+        STATE["selection_targets"] = {"anchors": True, "segments": True}
     STATE["anchor_placement_enabled"] = bool(snapshot.get("anchor_placement_enabled", False))
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
@@ -357,6 +367,8 @@ def _cleanup_links_and_selection():
     STATE["links"] = cleaned_links
 
     selected_anchor_ids = [int(aid) for aid in STATE.get("selected_anchor_ids", []) if int(aid) in valid_ids]
+    if not _selection_enabled("anchors"):
+        selected_anchor_ids = []
     STATE["selected_anchor_ids"] = selected_anchor_ids
 
     selected_links = []
@@ -369,6 +381,8 @@ def _cleanup_links_and_selection():
         if not _link_exists(norm[0], norm[1]):
             continue
         selected_links.append([norm[0], norm[1]])
+    if not _selection_enabled("segments"):
+        selected_links = []
     STATE["selected_links"] = selected_links
 
     pending = int(STATE.get("pending_connect_anchor_id", -1))
@@ -492,6 +506,13 @@ def _toggle_selected_link(id_a, id_b):
     if not exists:
         selected.append([norm[0], norm[1]])
     STATE["selected_links"] = selected
+
+
+def _selection_enabled(kind):
+    targets = STATE.get("selection_targets", {})
+    if not isinstance(targets, dict):
+        return True
+    return bool(targets.get(kind, True))
 
 
 def _connect_selected_anchors(context):
@@ -1474,8 +1495,8 @@ def _handle_canvas_input(payload):
 
     if et == "mouse_down":
         hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
-        aidx = _find_anchor_hit(STATE["last_context"], x, y)
-        seg_hit = _find_segment_hit(STATE["last_context"], x, y)
+        aidx = _find_anchor_hit(STATE["last_context"], x, y) if _selection_enabled("anchors") else -1
+        seg_hit = _find_segment_hit(STATE["last_context"], x, y) if _selection_enabled("segments") else None
         mods = int(event.get("modifiers", 0))
         ctrl = (mods & CTRL_MODIFIER_MASK) != 0
 
@@ -1715,6 +1736,24 @@ def _list_tool_actions():
             "sync_plugin_tool_mode_with_checked": True,
         },
         {
+            "action_id": "toggle_select_anchors",
+            "title": "Selectable: Anchors",
+            "description": "Enable/disable anchor selection",
+            "placement": "right_note_panel",
+            "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": bool(STATE.get("selection_targets", {}).get("anchors", True)),
+        },
+        {
+            "action_id": "toggle_select_segments",
+            "title": "Selectable: Segments",
+            "description": "Enable/disable segment selection",
+            "placement": "right_note_panel",
+            "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": bool(STATE.get("selection_targets", {}).get("segments", True)),
+        },
+        {
             "action_id": "undo_curve_edit",
             "title": tr(STATE.get("last_context", {}), "action_undo_curve"),
             "description": tr(STATE.get("last_context", {}), "action_undo_curve_desc"),
@@ -1812,6 +1851,20 @@ def _run_tool_action(payload):
         STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
         _record_history_state(context)
         return True
+    if action_id == "toggle_select_anchors":
+        cur = bool(STATE.get("selection_targets", {}).get("anchors", True))
+        STATE["selection_targets"]["anchors"] = not cur
+        if not STATE["selection_targets"]["anchors"]:
+            STATE["selected_anchor_ids"] = []
+        _record_history_state(context)
+        return True
+    if action_id == "toggle_select_segments":
+        cur = bool(STATE.get("selection_targets", {}).get("segments", True))
+        STATE["selection_targets"]["segments"] = not cur
+        if not STATE["selection_targets"]["segments"]:
+            STATE["selected_links"] = []
+        _record_history_state(context)
+        return True
     if action_id == "cycle_density_style":
         _cycle_density_style(context)
         return True
@@ -1858,6 +1911,8 @@ def run_one_shot(action_id):
         "commit_curve_to_notes",
         "commit_curve_to_notes_sidebar",
         "toggle_anchor_placement",
+        "toggle_select_anchors",
+        "toggle_select_segments",
         "undo_curve_edit",
         "redo_curve_edit",
         "cycle_density_style",

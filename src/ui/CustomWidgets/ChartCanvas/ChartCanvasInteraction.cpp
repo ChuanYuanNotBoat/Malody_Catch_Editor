@@ -369,6 +369,32 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     overlayContext.insert("overlay_toggles", m_pluginOverlayToggles);
     overlayContext.insert("plugin_time_division_override", m_pluginPlacementDensityOverride);
 
+    QVariantMap hostSelectionTool;
+    QString modeName = "place_note";
+    if (m_currentMode == PlaceRain)
+        modeName = "place_rain";
+    else if (m_currentMode == Delete)
+        modeName = "delete";
+    else if (m_currentMode == Select)
+        modeName = "select";
+    hostSelectionTool.insert("mode", modeName);
+    hostSelectionTool.insert("is_select_mode", m_currentMode == Select);
+    hostSelectionTool.insert("is_selecting_rect", m_isSelecting);
+    if (m_isSelecting)
+    {
+        const QRectF rect = QRectF(m_selectionStart, m_selectionEnd).normalized();
+        QVariantMap rectObj;
+        rectObj.insert("x", rect.x());
+        rectObj.insert("y", rect.y());
+        rectObj.insert("w", rect.width());
+        rectObj.insert("h", rect.height());
+        hostSelectionTool.insert("selection_rect", rectObj);
+    }
+    hostSelectionTool.insert("ctrl_toggle_select", true);
+    hostSelectionTool.insert("empty_click_clears_selection", true);
+    hostSelectionTool.insert("escape_clears_selection", true);
+    overlayContext.insert("host_selection_tool", hostSelectionTool);
+
     const QString chartPath = m_chartController ? m_chartController->chartFilePath() : QString();
     if (!chartPath.isEmpty())
         overlayContext.insert("chart_path", chartPath);
@@ -561,5 +587,4 @@ bool ChartCanvas::triggerPluginToolAction(const QString &actionId, const QString
     emit statusMessage(tr("Plugin action completed: %1").arg(title));
     return true;
 }
-
 
