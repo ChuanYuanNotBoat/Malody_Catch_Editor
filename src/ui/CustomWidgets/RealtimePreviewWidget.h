@@ -3,12 +3,14 @@
 #include <QSet>
 #include <QVector>
 #include <QWidget>
+#include <QElapsedTimer>
 
 class ChartController;
 class PlaybackController;
 class Skin;
 class NoteRenderer;
 class HyperfruitDetector;
+class QTimer;
 
 class RealtimePreviewWidget : public QWidget
 {
@@ -33,6 +35,7 @@ protected:
 
 private:
     static constexpr int kLaneWidth = 512;
+    static constexpr int kMinFrameIntervalMs = 16;
 
     struct BpmSegment
     {
@@ -41,16 +44,26 @@ private:
         double bpm = 0.0;
     };
 
+    struct TimedNoteEntry
+    {
+        int index = -1;
+        double startMs = 0.0;
+        double endMs = 0.0;
+    };
+
     double beatToTimeMs(double beat);
     double timeToY(double timeMs,
                    const QRectF &laneRect,
                    double referenceY,
                    double upperSpanMs,
                    double lowerSpanMs) const;
+    void scheduleUpdate();
     void invalidateNoteCache();
     void ensureNoteCache();
     void invalidateHyperCache();
     void ensureHyperCache();
+    void onPlaybackStateChanged();
+    void tickPlaybackFrame();
 
     ChartController *m_chartController = nullptr;
     PlaybackController *m_playbackController = nullptr;
@@ -64,7 +77,17 @@ private:
     QVector<double> m_noteEndTimesMs;
     QVector<int> m_normalIndices;
     QVector<int> m_rainIndices;
+    QVector<TimedNoteEntry> m_sortedNormalEntries;
     bool m_noteCacheValid = false;
     QSet<int> m_hyperIndices;
+    QVector<bool> m_hyperMask;
     bool m_hyperCacheValid = false;
+    QTimer *m_deferredUpdateTimer = nullptr;
+    QTimer *m_playbackFrameTimer = nullptr;
+    QElapsedTimer m_frameTimer;
+    QElapsedTimer m_playbackClock;
+    bool m_updateScheduled = false;
+    bool m_playbackAnchored = false;
+    double m_playbackAnchorTimeMs = 0.0;
+    qint64 m_playbackAnchorWallMs = 0;
 };

@@ -119,7 +119,8 @@ private:
     static constexpr int kScrollSignalIntervalMs = 33;
     static constexpr double kWheelScrollBeatStepRatio = 0.1;
     static constexpr int kSideMarginDivisor = 20;
-    static constexpr int kOverlayQueryIntervalMs = 120;
+    static constexpr int kOverlayQueryIntervalMsToolMode = 120;
+    static constexpr int kOverlayQueryIntervalMsIdle = 800;
     static constexpr int kOverlaySlowCallThresholdMs = 40;
     static constexpr int kOverlaySlowCallBackoffMs = 1000;
 
@@ -242,6 +243,8 @@ private:
     QVector<double> m_noteXPositions;
     QVector<double> m_noteTimesMs;
     QVector<NoteType> m_noteTypes;
+    QVector<int> m_sortedNormalNoteIndicesByBeat;
+    QVector<int> m_sortedRainNoteIndicesByBeat;
     bool m_noteDataDirty;
     bool m_timesDirty;
     QVector<MathUtils::BpmCacheEntry> m_bpmTimeCache;
@@ -331,7 +334,8 @@ private:
     qint64 m_lastScrollSignalTimeMs;
     bool m_hasPlaybackAnchor;
     double m_playbackAnchorMs;
-    qint64 m_playbackAnchorWallMs;
+    qint64 m_playbackAnchorMonoMs;
+    QElapsedTimer m_playbackMonoClock;
     NoteSoundPlayer *m_noteSoundPlayer;
     QVector<double> m_playableNoteTimesMs;
     int m_nextPlayableNoteIndex;

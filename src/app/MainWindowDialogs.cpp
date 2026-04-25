@@ -2,6 +2,7 @@
 #include "MainWindowPrivate.h"
 #include "app/Application.h"
 #include "controller/ChartController.h"
+#include "controller/PlaybackController.h"
 #include "plugin/PluginManager.h"
 #include "ui/dialogs/LogSettingsDialog.h"
 #include "ui/dialogs/PluginManagerDialog.h"
@@ -769,9 +770,12 @@ void MainWindow::openSessionSettings()
     autoSaveIntervalSpin->setValue(Settings::instance().autoSaveIntervalSec());
     autoSaveIntervalSpin->setEnabled(autoSaveCheck->isChecked());
     connect(autoSaveCheck, &QCheckBox::toggled, autoSaveIntervalSpin, &QWidget::setEnabled);
+    QCheckBox *audioCorrectionCheck = new QCheckBox(tr("Enable Audio Correction (Testing)"), sessionGroup);
+    audioCorrectionCheck->setChecked(Settings::instance().audioCorrectionEnabled());
 
     sessionLayout->addRow(autoSaveCheck);
     sessionLayout->addRow(tr("Auto Save Interval:"), autoSaveIntervalSpin);
+    sessionLayout->addRow(audioCorrectionCheck);
     layout->addWidget(sessionGroup);
     layout->addStretch();
 
@@ -780,6 +784,9 @@ void MainWindow::openSessionSettings()
             {
         Settings::instance().setAutoSaveEnabled(autoSaveCheck->isChecked());
         Settings::instance().setAutoSaveIntervalSec(autoSaveIntervalSpin->value());
+        Settings::instance().setAudioCorrectionEnabled(audioCorrectionCheck->isChecked());
+        if (d->playbackController && d->playbackController->audioPlayer())
+            d->playbackController->audioPlayer()->setAudioCorrectionEnabled(audioCorrectionCheck->isChecked());
         setupAutoSaveTimer();
         statusBar()->showMessage(tr("Session settings updated"), 2000);
         dialog.accept(); });

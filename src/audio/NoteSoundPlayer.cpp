@@ -11,6 +11,7 @@ NoteSoundPlayer::NoteSoundPlayer(QObject *parent)
 {
     m_effect->setLoopCount(1);
     setVolumePercent(100);
+    m_retriggerTimer.start();
 }
 
 void NoteSoundPlayer::playHitSound()
@@ -18,10 +19,15 @@ void NoteSoundPlayer::playHitSound()
     if (!m_enabled || !hasValidSound())
         return;
 
-    // Restart to make sure repeated hits are audible during dense playback.
+    // In very dense sections, avoid stop/play thrash that can cause UI hitches.
+    if (m_effect->isPlaying() && m_retriggerTimer.isValid() &&
+        m_retriggerTimer.elapsed() < kMinRetriggerIntervalMs)
+        return;
+
     if (m_effect->isPlaying())
         m_effect->stop();
     m_effect->play();
+    m_retriggerTimer.restart();
 }
 
 void NoteSoundPlayer::setSoundFile(const QString &filePath)

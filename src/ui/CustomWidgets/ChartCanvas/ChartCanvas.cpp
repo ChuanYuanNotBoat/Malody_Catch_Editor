@@ -103,7 +103,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_lastScrollSignalTimeMs(0),
       m_hasPlaybackAnchor(false),
       m_playbackAnchorMs(0.0),
-      m_playbackAnchorWallMs(0),
+      m_playbackAnchorMonoMs(0),
       m_noteSoundPlayer(nullptr),
       m_nextPlayableNoteIndex(0),
       m_lastNoteSoundTimeMs(0.0)
@@ -127,6 +127,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     connect(m_playbackTimer, &QTimer::timeout, this, &ChartCanvas::requestNextFrame);
 
     m_fpsTimer.start();
+    m_playbackMonoClock.start();
     m_pluginOverlayToggles.insert("overlay_enabled", true);
     m_pluginOverlayToggles.insert("preview", true);
     m_pluginOverlayToggles.insert("control_points", true);
@@ -196,6 +197,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteXPositions.clear();
         m_noteTimesMs.clear();
         m_noteTypes.clear();
+        m_sortedNormalNoteIndicesByBeat.clear();
+        m_sortedRainNoteIndicesByBeat.clear();
         m_playableNoteTimesMs.clear();
         m_nextPlayableNoteIndex = 0;
         m_timesDirty = false;
@@ -213,6 +216,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteXPositions.clear();
         m_noteTimesMs.clear();
         m_noteTypes.clear();
+        m_sortedNormalNoteIndicesByBeat.clear();
+        m_sortedRainNoteIndicesByBeat.clear();
         m_playableNoteTimesMs.clear();
         m_nextPlayableNoteIndex = 0;
         m_timesDirty = false;
@@ -228,6 +233,8 @@ void ChartCanvas::rebuildNoteTimesCache()
         m_noteXPositions.clear();
         m_noteTimesMs.clear();
         m_noteTypes.clear();
+        m_sortedNormalNoteIndicesByBeat.clear();
+        m_sortedRainNoteIndicesByBeat.clear();
         m_playableNoteTimesMs.clear();
         m_nextPlayableNoteIndex = 0;
         m_timesDirty = false;
@@ -241,6 +248,10 @@ void ChartCanvas::rebuildNoteTimesCache()
     m_noteXPositions.resize(N);
     m_noteTimesMs.resize(N);
     m_noteTypes.resize(N);
+    m_sortedNormalNoteIndicesByBeat.clear();
+    m_sortedRainNoteIndicesByBeat.clear();
+    m_sortedNormalNoteIndicesByBeat.reserve(N);
+    m_sortedRainNoteIndicesByBeat.reserve(N);
     m_playableNoteTimesMs.clear();
     m_playableNoteTimesMs.reserve(N);
 
@@ -264,13 +275,26 @@ void ChartCanvas::rebuildNoteTimesCache()
         {
             double endBeat = MathUtils::beatToFloat(note.endBeatNum, note.endNumerator, note.endDenominator);
             m_noteEndBeatPositions[i] = endBeat;
+            m_sortedRainNoteIndicesByBeat.append(i);
         }
         else
         {
             m_noteEndBeatPositions[i] = beat;
+            m_sortedNormalNoteIndicesByBeat.append(i);
         }
         m_noteXPositions[i] = static_cast<double>(note.x) / static_cast<double>(kLaneWidth);
     }
+
+    std::sort(m_sortedNormalNoteIndicesByBeat.begin(),
+              m_sortedNormalNoteIndicesByBeat.end(),
+              [this](int a, int b) {
+                  return m_noteBeatPositions[a] < m_noteBeatPositions[b];
+              });
+    std::sort(m_sortedRainNoteIndicesByBeat.begin(),
+              m_sortedRainNoteIndicesByBeat.end(),
+              [this](int a, int b) {
+                  return m_noteBeatPositions[a] < m_noteBeatPositions[b];
+              });
 
     std::sort(m_playableNoteTimesMs.begin(), m_playableNoteTimesMs.end());
     m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
@@ -331,7 +355,7 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
                 m_lastScrollSignalTimeMs = 0;
                 m_hasPlaybackAnchor = false;
                 m_playbackAnchorMs = m_playbackController ? m_playbackController->currentTime() : m_currentPlayTime;
-                m_playbackAnchorWallMs = QDateTime::currentMSecsSinceEpoch();
+                m_playbackAnchorMonoMs = m_playbackMonoClock.elapsed();
                 m_lastNoteSoundTimeMs = m_playbackAnchorMs;
                 m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
                     m_playableNoteTimesMs.begin(),

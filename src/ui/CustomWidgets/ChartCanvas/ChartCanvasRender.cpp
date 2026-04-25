@@ -1,6 +1,7 @@
 ﻿#include "ChartCanvas.h"
 #include "controller/ChartController.h"
 #include "controller/SelectionController.h"
+#include "controller/PlaybackController.h"
 #include "render/NoteRenderer.h"
 #include "render/GridRenderer.h"
 #include "render/BackgroundRenderer.h"
@@ -92,11 +93,14 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     painter.setClipRect(rect());
 
     int renderedNotesCount = 0;
-    for (int i = 0; i < notes.size(); ++i)
+
+    auto renderNoteAtIndex = [&](int i)
     {
+        if (i < 0 || i >= notes.size())
+            return;
         NoteType type = m_noteTypes[i];
         if (type == NoteType::SOUND)
-            continue;
+            return;
 
         double beat = m_noteBeatPositions[i];
         double endBeatNote = m_noteEndBeatPositions[i];
@@ -104,12 +108,12 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         if (type == NoteType::NORMAL)
         {
             if (beat < startBeat - 0.5 || beat > endBeat + 0.5)
-                continue;
+                return;
         }
         else if (type == NoteType::RAIN)
         {
             if (endBeatNote <= startBeat || beat >= endBeat)
-                continue;
+                return;
         }
 
         double y = baseY + sign * ((beat - m_scrollBeat) * invVisibleRange * canvasHeight);
@@ -123,7 +127,7 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
             double rectTop = qMin(yStart, yEnd);
             double rectHeight = qAbs(yEnd - yStart);
             if (rectHeight <= 0)
-                continue;
+                return;
             QRectF rainRect(lmargin, rectTop, availableWidth, rectHeight);
             bool selected = selectedSet.contains(i);
             m_noteRenderer->drawRain(painter, notes[i], rainRect, selected);
@@ -136,6 +140,54 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
             bool selected = selectedSet.contains(i);
             m_noteRenderer->drawNote(painter, notes[i], pos, selected, i);
             renderedNotesCount++;
+        }
+    };
+
+    if (!m_sortedRainNoteIndicesByBeat.isEmpty())
+    {
+        const auto rainBegin = std::lower_bound(
+            m_sortedRainNoteIndicesByBeat.begin(),
+            m_sortedRainNoteIndicesByBeat.end(),
+            startBeat,
+            [this](int idx, double beatValue) {
+                return m_noteBeatPositions[idx] < beatValue;
+            });
+
+        // Include rain notes that started earlier but may still overlap current view.
+        auto rainStartIt = rainBegin;
+        while (rainStartIt != m_sortedRainNoteIndicesByBeat.begin())
+        {
+            auto prev = rainStartIt - 1;
+            const int idx = *prev;
+            if (m_noteEndBeatPositions[idx] <= startBeat)
+                break;
+            rainStartIt = prev;
+        }
+
+        for (auto it = rainStartIt; it != m_sortedRainNoteIndicesByBeat.end(); ++it)
+        {
+            const int idx = *it;
+            if (m_noteBeatPositions[idx] >= endBeat)
+                break;
+            renderNoteAtIndex(idx);
+        }
+    }
+
+    if (!m_sortedNormalNoteIndicesByBeat.isEmpty())
+    {
+        const auto normalStart = std::lower_bound(
+            m_sortedNormalNoteIndicesByBeat.begin(),
+            m_sortedNormalNoteIndicesByBeat.end(),
+            startBeat - 0.5,
+            [this](int idx, double beatValue) {
+                return m_noteBeatPositions[idx] < beatValue;
+            });
+        for (auto it = normalStart; it != m_sortedNormalNoteIndicesByBeat.end(); ++it)
+        {
+            const int idx = *it;
+            if (m_noteBeatPositions[idx] > endBeat + 0.5)
+                break;
+            renderNoteAtIndex(idx);
         }
     }
 
@@ -393,14 +445,19 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
     if (!m_pluginOverlayToggles.value("overlay_enabled", true).toBool())
         return;
 
+    const bool isPlaying = m_playbackController &&
+                           m_playbackController->state() == PlaybackController::Playing;
+    const bool allowQueryInCurrentState = m_pluginToolModeActive || !isPlaying;
+    const int queryIntervalMs = m_pluginToolModeActive ? kOverlayQueryIntervalMsToolMode
+                                                       : kOverlayQueryIntervalMsIdle;
+
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
     const bool canQuery = nowMs >= m_overlayQueryBlockedUntilMs;
     const bool dueForQuery =
-        m_pluginToolModeActive ||
         (m_lastOverlayQueryMs == 0) ||
-        (nowMs - m_lastOverlayQueryMs >= kOverlayQueryIntervalMs);
+        (nowMs - m_lastOverlayQueryMs >= queryIntervalMs);
 
-    if (canQuery && dueForQuery)
+    if (allowQueryInCurrentState && canQuery && dueForQuery)
     {
         QVariantMap overlayContext = buildPluginCanvasContext();
         overlayContext.insert("left_margin", lmargin);

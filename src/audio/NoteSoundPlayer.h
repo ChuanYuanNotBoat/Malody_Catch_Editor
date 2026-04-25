@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QSoundEffect>
 #include <QString>
+#include <QElapsedTimer>
 
 class NoteSoundPlayer : public QObject
 {
@@ -20,6 +21,8 @@ public:
     bool hasValidSound() const;
 
 private:
+    static constexpr qint64 kMinRetriggerIntervalMs = 12;
     QSoundEffect *m_effect;
     bool m_enabled;
+    QElapsedTimer m_retriggerTimer;
 };

@@ -9,13 +9,15 @@
 
 NoteRenderer::NoteRenderer()
     : m_skin(nullptr), m_showColors(true), m_hyperfruitEnabled(true),
-      m_hyperfruitDetector(nullptr), m_noteSize(16)
+      m_hyperfruitDetector(nullptr), m_noteSize(16),
+      m_cachedSkinPtr(nullptr)
 {
 }
 
 void NoteRenderer::setSkin(const Skin *skin)
 {
     m_skin = skin;
+    invalidateSkinPixmapCache();
 }
 
 void NoteRenderer::setShowColors(bool show)
@@ -40,7 +42,11 @@ void NoteRenderer::setHyperfruitIndices(const QSet<int> &indices)
 
 void NoteRenderer::setNoteSize(int size)
 {
+    if (m_noteSize == size)
+        return;
     m_noteSize = size;
+    // Keep cache coherent if skin scaling policy changes in future.
+    invalidateSkinPixmapCache();
 }
 
 int NoteRenderer::getNoteSize() const
@@ -69,30 +75,23 @@ void NoteRenderer::drawNote(QPainter &painter, const Note &note, const QPointF &
         noteType = 5;
     }
 
-    QPixmap notePix;
+    const QPixmap *notePix = nullptr;
     if (m_skin && m_skin->isValid() && note.type != NoteType::RAIN)
     {
-        const QPixmap *pix = m_skin->getNotePixmap(noteType);
-        if (pix && !pix->isNull())
-        {
-            double scale = m_skin->getNoteScale(noteType);
-            int scaledW = pix->width() * scale;
-            int scaledH = pix->height() * scale;
-            notePix = pix->scaled(scaledW, scaledH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        }
+        notePix = cachedSkinPixmapForType(noteType);
     }
 
-    int drawW = notePix.isNull() ? m_noteSize : notePix.width();
-    int drawH = notePix.isNull() ? m_noteSize : notePix.height();
+    int drawW = (!notePix || notePix->isNull()) ? m_noteSize : notePix->width();
+    int drawH = (!notePix || notePix->isNull()) ? m_noteSize : notePix->height();
     QRectF rect(pos.x() - drawW / 2, pos.y() - drawH / 2, drawW, drawH);
 
     int outlineWidth;
     QColor outlineColor;
     calculateOutline(note, selected, index, outlineWidth, outlineColor);
 
-    if (!notePix.isNull())
+    if (notePix && !notePix->isNull())
     {
-        painter.drawPixmap(rect.toRect(), notePix);
+        painter.drawPixmap(rect.toRect(), *notePix);
     }
     else if (m_showColors && !m_skin)
     {
@@ -187,4 +186,43 @@ bool NoteRenderer::validateRect(const QRectF &rect) const
         !std::isfinite(rect.width()) || !std::isfinite(rect.height()))
         return false;
     return true;
+}
+
+const QPixmap *NoteRenderer::cachedSkinPixmapForType(int noteType) const
+{
+    if (!m_skin || !m_skin->isValid())
+        return nullptr;
+
+    if (m_cachedSkinPtr != m_skin)
+        invalidateSkinPixmapCache();
+
+    const auto cachedIt = m_cachedScaledSkinPixmaps.constFind(noteType);
+    if (cachedIt != m_cachedScaledSkinPixmaps.constEnd())
+    {
+        if (!cachedIt.value().isNull())
+            return &cachedIt.value();
+        return nullptr;
+    }
+
+    const QPixmap *basePix = m_skin->getNotePixmap(noteType);
+    if (!basePix || basePix->isNull())
+    {
+        m_cachedScaledSkinPixmaps.insert(noteType, QPixmap());
+        return nullptr;
+    }
+
+    const double scale = m_skin->getNoteScale(noteType);
+    const int scaledW = qMax(1, qRound(basePix->width() * scale));
+    const int scaledH = qMax(1, qRound(basePix->height() * scale));
+    const QPixmap scaled = basePix->scaled(scaledW, scaledH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    auto inserted = m_cachedScaledSkinPixmaps.insert(noteType, scaled);
+    if (inserted.value().isNull())
+        return nullptr;
+    return &inserted.value();
+}
+
+void NoteRenderer::invalidateSkinPixmapCache() const
+{
+    m_cachedSkinPtr = m_skin;
+    m_cachedScaledSkinPixmaps.clear();
 }

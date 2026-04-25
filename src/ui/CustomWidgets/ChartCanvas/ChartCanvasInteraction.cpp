@@ -225,16 +225,16 @@ void ChartCanvas::requestNextFrame()
     {
         if (m_playbackController)
         {
-            const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+            const qint64 nowMs = m_playbackMonoClock.elapsed();
             const double speed = m_playbackController->speed();
             if (!m_hasPlaybackAnchor)
             {
                 m_playbackAnchorMs = m_playbackController->currentTime();
-                m_playbackAnchorWallMs = nowMs;
+                m_playbackAnchorMonoMs = nowMs;
                 m_hasPlaybackAnchor = true;
             }
             double predicted = m_playbackAnchorMs +
-                               (nowMs - m_playbackAnchorWallMs) * speed;
+                               (nowMs - m_playbackAnchorMonoMs) * speed;
             // Guard against tiny backwards jitter in source timestamps.
             if (predicted < m_currentPlayTime)
                 predicted = m_currentPlayTime;

@@ -2,6 +2,7 @@
 
 #include <QPainter>
 #include <QSet>
+#include <QHash>
 #include "model/Note.h"
 
 class Skin;
@@ -27,6 +28,8 @@ private:
     void calculateOutline(const Note &note, bool selected, int index, int &outlineWidth, QColor &outlineColor) const;
     void drawSelectionHighlight(QPainter &painter, const QRectF &rect) const;
     bool validateRect(const QRectF &rect) const;
+    const QPixmap *cachedSkinPixmapForType(int noteType) const;
+    void invalidateSkinPixmapCache() const;
 
 private:
     const Skin *m_skin;
@@ -35,4 +38,6 @@ private:
     HyperfruitDetector *m_hyperfruitDetector;
     QSet<int> m_hyperfruitIndices;
     int m_noteSize;
+    mutable const Skin *m_cachedSkinPtr;
+    mutable QHash<int, QPixmap> m_cachedScaledSkinPixmaps;
 };

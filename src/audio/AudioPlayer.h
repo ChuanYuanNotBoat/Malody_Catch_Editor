@@ -1,17 +1,10 @@
-// src/audio/AudioPlayer.h - 音频播放器
-
-#pragma once
+﻿#pragma once
 
 #include <QObject>
 #include <QMediaPlayer>
 #include <QAudioOutput>
 #include <QTimer>
 
-/**
- * @brief 封装音频播放，支持播放、暂停、定位、变速。
- *
- * 线程安全：方法调用应在主线程（Qt 信号槽机制）。
- */
 class AudioPlayer : public QObject
 {
     Q_OBJECT
@@ -47,11 +40,12 @@ public:
     LoadingState loadingState() const;
     void setLoadingState(LoadingState state);
 
-    // 音频延迟补偿
     void setAudioLatency(int latency);
     int audioLatency() const;
     void setUserOffset(int offset);
     int userOffset() const;
+    void setAudioCorrectionEnabled(bool enabled);
+    bool audioCorrectionEnabled() const;
     qint64 adjustedPosition() const;
     void setAdjustedPosition(qint64 adjustedMs);
 
@@ -70,10 +64,11 @@ private:
     QString m_currentLoadPath;
     bool m_loaded;
     QString m_lastError;
-    QStringList m_tempAudioFiles; ///< 临时音频文件列表，用于清理
+    QStringList m_tempAudioFiles;
 
-    int m_audioLatency; ///< 音频延迟补偿（毫秒）
-    int m_userOffset;   ///< 用户全局偏移（毫秒）
+    int m_audioLatency;
+    int m_userOffset;
+    bool m_audioCorrectionEnabled;
 
     QString normalizeAudioPath(const QString &originalPath);
     void cleanupTempAudioFiles();

@@ -27,6 +27,7 @@ PluginManager *activePluginManager()
 void ChartCanvas::playbackPositionChanged(double timeMs)
 {
     constexpr double kPlaybackVisualEpsilonMs = 0.05;
+    constexpr double kAnchorDeadZoneMs = 2.0;
 
     if (m_timesDirty || m_noteDataDirty)
         rebuildNoteTimesCache();
@@ -46,43 +47,45 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
         return;
     }
 
-    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    const qint64 nowMs = m_playbackMonoClock.elapsed();
     const double speed = m_playbackController->speed();
 
     if (!m_hasPlaybackAnchor)
     {
         m_playbackAnchorMs = timeMs;
-        m_playbackAnchorWallMs = nowMs;
+        m_playbackAnchorMonoMs = nowMs;
         m_hasPlaybackAnchor = true;
         m_currentPlayTime = timeMs;
         return;
     }
 
     const double predicted =
-        m_playbackAnchorMs + (nowMs - m_playbackAnchorWallMs) * speed;
+        m_playbackAnchorMs + (nowMs - m_playbackAnchorMonoMs) * speed;
     const double delta = timeMs - predicted;
 
-    // Small negative delta is usually backend jitter; keep monotonic progression.
-    if (delta > -24.0 && delta < 24.0)
-    {
-        m_playbackAnchorMs = predicted + delta * 0.08;
-        m_playbackAnchorWallMs = nowMs;
-    }
-    else if (delta < -24.0 && delta > -220.0)
+    // Keep a dead-zone around prediction to avoid beat-like micro tugging.
+    if (std::abs(delta) <= kAnchorDeadZoneMs)
     {
         m_playbackAnchorMs = predicted;
-        m_playbackAnchorWallMs = nowMs;
+        m_playbackAnchorMonoMs = nowMs;
     }
-    else if (delta >= 24.0 && delta < 220.0)
+    else if (std::abs(delta) < 48.0)
     {
-        m_playbackAnchorMs = predicted + delta * 0.12;
-        m_playbackAnchorWallMs = nowMs;
+        // Moderate drift: very gentle correction to keep motion visually stable.
+        m_playbackAnchorMs = predicted + delta * 0.04;
+        m_playbackAnchorMonoMs = nowMs;
+    }
+    else if (std::abs(delta) < 220.0)
+    {
+        // Larger drift: faster catch-up while still avoiding hard snaps.
+        m_playbackAnchorMs = predicted + delta * 0.10;
+        m_playbackAnchorMonoMs = nowMs;
     }
     else
     {
-        // Large jump: treat as explicit seek or real discontinuity.
+        // Real discontinuity / seek.
         m_playbackAnchorMs = timeMs;
-        m_playbackAnchorWallMs = nowMs;
+        m_playbackAnchorMonoMs = nowMs;
     }
 
     if (!m_autoScrollEnabled)
@@ -295,6 +298,9 @@ void ChartCanvas::snapPlayheadToGrid()
     {
         return;
     }
+
+    if (m_playbackController && m_playbackController->state() == PlaybackController::Playing)
+        return;
 
     double currentTime = m_currentPlayTime;
     const auto &bpmList = chart()->bpmList();

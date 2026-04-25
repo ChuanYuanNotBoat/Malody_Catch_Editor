@@ -36,6 +36,8 @@ public:
     void setAudioLatency(int latency);
     int globalAudioOffset() const;
     void setGlobalAudioOffset(int offset);
+    bool audioCorrectionEnabled() const;
+    void setAudioCorrectionEnabled(bool enabled);
     QString noteSoundPath() const;
     void setNoteSoundPath(const QString &path);
     int noteSoundVolume() const;

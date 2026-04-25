@@ -144,6 +144,14 @@ void Settings::setGlobalAudioOffset(int offset)
 {
     m_settings.setValue("audio/globalOffset", offset);
 }
+bool Settings::audioCorrectionEnabled() const
+{
+    return m_settings.value("audio/correctionEnabled", true).toBool();
+}
+void Settings::setAudioCorrectionEnabled(bool enabled)
+{
+    m_settings.setValue("audio/correctionEnabled", enabled);
+}
 QString Settings::noteSoundPath() const
 {
     return m_settings.value("audio/noteSoundPath", "").toString();

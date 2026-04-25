@@ -19,7 +19,8 @@ AudioPlayer::AudioPlayer(QObject *parent) : QObject(parent),
                                             m_loadTimeoutTimer(nullptr),
                                             m_currentLoadPath(),
                                             m_audioLatency(0),
-                                            m_userOffset(0)
+                                            m_userOffset(0),
+                                            m_audioCorrectionEnabled(true)
 {
     m_player = new QMediaPlayer(this);
     m_audioOutput = new QAudioOutput(this);
@@ -47,6 +48,7 @@ AudioPlayer::AudioPlayer(QObject *parent) : QObject(parent),
     // 从设置加载音频延迟和全局偏移
     m_audioLatency = Settings::instance().audioLatency();
     m_userOffset = Settings::instance().globalAudioOffset();
+    m_audioCorrectionEnabled = Settings::instance().audioCorrectionEnabled();
 }
 
 AudioPlayer::~AudioPlayer()
@@ -341,8 +343,20 @@ int AudioPlayer::userOffset() const
     return m_userOffset;
 }
 
+void AudioPlayer::setAudioCorrectionEnabled(bool enabled)
+{
+    m_audioCorrectionEnabled = enabled;
+}
+
+bool AudioPlayer::audioCorrectionEnabled() const
+{
+    return m_audioCorrectionEnabled;
+}
+
 qint64 AudioPlayer::adjustedPosition() const
 {
+    if (!m_audioCorrectionEnabled)
+        return position();
     qint64 pos = position();
     int totalOffset = m_audioLatency + m_userOffset;
     // 调整位置：实际听到的时间 = 音频位置 + 总偏移量
@@ -353,6 +367,11 @@ qint64 AudioPlayer::adjustedPosition() const
 
 void AudioPlayer::setAdjustedPosition(qint64 adjustedMs)
 {
+    if (!m_audioCorrectionEnabled)
+    {
+        setPosition(adjustedMs);
+        return;
+    }
     int totalOffset = m_audioLatency + m_userOffset;
     // 调整位置：音频位置 = 调整后位置 - 总偏移量
     qint64 pos = adjustedMs - totalOffset;

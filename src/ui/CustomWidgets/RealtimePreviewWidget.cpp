@@ -10,11 +10,15 @@
 #include <limits>
 #include <QPainter>
 #include <QPen>
+#include <QTimer>
+#include <algorithm>
 
 RealtimePreviewWidget::RealtimePreviewWidget(QWidget *parent)
     : QWidget(parent),
       m_noteRenderer(new NoteRenderer()),
-      m_hyperfruitDetector(new HyperfruitDetector())
+      m_hyperfruitDetector(new HyperfruitDetector()),
+      m_deferredUpdateTimer(new QTimer(this)),
+      m_playbackFrameTimer(new QTimer(this))
 {
     setMinimumWidth(170);
     setMaximumWidth(260);
@@ -23,6 +27,20 @@ RealtimePreviewWidget::RealtimePreviewWidget(QWidget *parent)
     // Preview uses unified fallback style only (no skin texture).
     m_noteRenderer->setSkin(nullptr);
     m_noteRenderer->setShowColors(false);
+
+    m_deferredUpdateTimer->setSingleShot(true);
+    connect(m_deferredUpdateTimer, &QTimer::timeout, this, [this]() {
+        m_updateScheduled = false;
+        if (!isVisible())
+            return;
+        update();
+        m_frameTimer.restart();
+    });
+    m_playbackFrameTimer->setInterval(kMinFrameIntervalMs);
+    m_playbackFrameTimer->setTimerType(Qt::PreciseTimer);
+    connect(m_playbackFrameTimer, &QTimer::timeout, this, &RealtimePreviewWidget::tickPlaybackFrame);
+    m_frameTimer.start();
+    m_playbackClock.start();
 }
 
 RealtimePreviewWidget::~RealtimePreviewWidget()
@@ -47,10 +65,10 @@ void RealtimePreviewWidget::setChartController(ChartController *controller)
         connect(m_chartController, &ChartController::chartChanged, this, [this]() {
             invalidateNoteCache();
             invalidateHyperCache();
-            update();
+            scheduleUpdate();
         });
     }
-    update();
+    scheduleUpdate();
 }
 
 void RealtimePreviewWidget::setPlaybackController(PlaybackController *controller)
@@ -61,13 +79,66 @@ void RealtimePreviewWidget::setPlaybackController(PlaybackController *controller
     if (m_playbackController)
         disconnect(m_playbackController, nullptr, this, nullptr);
 
+    if (m_playbackFrameTimer)
+        m_playbackFrameTimer->stop();
+    m_playbackAnchored = false;
+
     m_playbackController = controller;
     if (m_playbackController)
     {
         connect(m_playbackController, &PlaybackController::positionChanged, this, [this](double timeMs) {
-            m_currentTimeMs = qMax(0.0, timeMs);
-            update();
+            const double clamped = qMax(0.0, timeMs);
+            if (m_playbackController->state() != PlaybackController::Playing)
+            {
+                if (std::abs(clamped - m_currentTimeMs) < 0.05)
+                    return;
+                m_currentTimeMs = clamped;
+                m_playbackAnchored = false;
+                scheduleUpdate();
+                return;
+            }
+
+            const qint64 nowMs = m_playbackClock.elapsed();
+            if (!m_playbackAnchored)
+            {
+                m_playbackAnchorTimeMs = clamped;
+                m_playbackAnchorWallMs = nowMs;
+                m_playbackAnchored = true;
+            }
+            else
+            {
+                const double predicted = m_playbackAnchorTimeMs +
+                                         (nowMs - m_playbackAnchorWallMs) * m_playbackController->speed();
+                const double delta = clamped - predicted;
+                if (std::abs(delta) <= 2.0)
+                {
+                    m_playbackAnchorTimeMs = predicted;
+                    m_playbackAnchorWallMs = nowMs;
+                }
+                else if (std::abs(delta) < 48.0)
+                {
+                    m_playbackAnchorTimeMs = predicted + delta * 0.04;
+                    m_playbackAnchorWallMs = nowMs;
+                }
+                else if (std::abs(delta) < 220.0)
+                {
+                    m_playbackAnchorTimeMs = predicted + delta * 0.10;
+                    m_playbackAnchorWallMs = nowMs;
+                }
+                else
+                {
+                    m_playbackAnchorTimeMs = clamped;
+                    m_playbackAnchorWallMs = nowMs;
+                }
+            }
+
+            if (!m_playbackFrameTimer->isActive())
+                m_playbackFrameTimer->start();
         });
+        connect(m_playbackController, &PlaybackController::stateChanged, this, [this](PlaybackController::State) {
+            onPlaybackStateChanged();
+        });
+        onPlaybackStateChanged();
     }
 }
 
@@ -76,7 +147,7 @@ void RealtimePreviewWidget::setSkin(Skin *skin)
     Q_UNUSED(skin);
     // Intentionally ignore external skin to keep preview style consistent.
     m_noteRenderer->setSkin(nullptr);
-    update();
+    scheduleUpdate();
 }
 
 void RealtimePreviewWidget::setColorMode(bool enabled)
@@ -92,13 +163,13 @@ void RealtimePreviewWidget::setHyperfruitEnabled(bool enabled)
     m_hyperfruitEnabled = enabled;
     m_noteRenderer->setHyperfruitEnabled(enabled);
     invalidateHyperCache();
-    update();
+    scheduleUpdate();
 }
 
 void RealtimePreviewWidget::setNoteSize(int size)
 {
     m_noteRenderer->setNoteSize(size);
-    update();
+    scheduleUpdate();
 }
 
 void RealtimePreviewWidget::setCurrentBeat(double beat)
@@ -110,13 +181,16 @@ void RealtimePreviewWidget::setCurrentBeat(double beat)
         return;
 
     m_currentTimeMs = beatToTimeMs(beat);
-    update();
+    scheduleUpdate();
 }
 
 void RealtimePreviewWidget::setCurrentTimeMs(double timeMs)
 {
-    m_currentTimeMs = qMax(0.0, timeMs);
-    update();
+    const double clamped = qMax(0.0, timeMs);
+    if (std::abs(clamped - m_currentTimeMs) < 0.05)
+        return;
+    m_currentTimeMs = clamped;
+    scheduleUpdate();
 }
 
 double RealtimePreviewWidget::beatToTimeMs(double beat)
@@ -153,10 +227,80 @@ double RealtimePreviewWidget::timeToY(double timeMs,
     return referenceY - (timeMs - m_currentTimeMs) * pxPerMs;
 }
 
+void RealtimePreviewWidget::scheduleUpdate()
+{
+    if (!isVisible())
+        return;
+
+    if (!m_frameTimer.isValid() || m_frameTimer.elapsed() >= kMinFrameIntervalMs)
+    {
+        if (m_deferredUpdateTimer->isActive())
+            m_deferredUpdateTimer->stop();
+        m_updateScheduled = false;
+        update();
+        m_frameTimer.restart();
+        return;
+    }
+
+    if (m_updateScheduled)
+        return;
+
+    const int delayMs = qMax(1, kMinFrameIntervalMs - static_cast<int>(m_frameTimer.elapsed()));
+    m_updateScheduled = true;
+    m_deferredUpdateTimer->start(delayMs);
+}
+
+void RealtimePreviewWidget::onPlaybackStateChanged()
+{
+    if (!m_playbackController)
+        return;
+
+    if (m_playbackController->state() == PlaybackController::Playing)
+    {
+        m_playbackAnchorTimeMs = qMax(0.0, m_playbackController->currentTime());
+        m_playbackAnchorWallMs = m_playbackClock.elapsed();
+        m_playbackAnchored = true;
+        if (!m_playbackFrameTimer->isActive())
+            m_playbackFrameTimer->start();
+        return;
+    }
+
+    if (m_playbackFrameTimer->isActive())
+        m_playbackFrameTimer->stop();
+    m_playbackAnchored = false;
+    m_currentTimeMs = qMax(0.0, m_playbackController->currentTime());
+    scheduleUpdate();
+}
+
+void RealtimePreviewWidget::tickPlaybackFrame()
+{
+    if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing)
+    {
+        if (m_playbackFrameTimer->isActive())
+            m_playbackFrameTimer->stop();
+        return;
+    }
+
+    if (!m_playbackAnchored)
+    {
+        m_playbackAnchorTimeMs = qMax(0.0, m_playbackController->currentTime());
+        m_playbackAnchorWallMs = m_playbackClock.elapsed();
+        m_playbackAnchored = true;
+    }
+
+    const qint64 nowMs = m_playbackClock.elapsed();
+    const double predicted = m_playbackAnchorTimeMs +
+                             (nowMs - m_playbackAnchorWallMs) * m_playbackController->speed();
+    if (predicted > m_currentTimeMs - 24.0)
+        m_currentTimeMs = qMax(0.0, predicted);
+    scheduleUpdate();
+}
+
 void RealtimePreviewWidget::invalidateHyperCache()
 {
     m_hyperCacheValid = false;
     m_hyperIndices.clear();
+    m_hyperMask.clear();
 }
 
 void RealtimePreviewWidget::invalidateNoteCache()
@@ -167,6 +311,7 @@ void RealtimePreviewWidget::invalidateNoteCache()
     m_noteEndTimesMs.clear();
     m_normalIndices.clear();
     m_rainIndices.clear();
+    m_sortedNormalEntries.clear();
 }
 
 void RealtimePreviewWidget::ensureNoteCache()
@@ -179,6 +324,7 @@ void RealtimePreviewWidget::ensureNoteCache()
     m_noteEndTimesMs.clear();
     m_normalIndices.clear();
     m_rainIndices.clear();
+    m_sortedNormalEntries.clear();
 
     if (!m_chartController || !m_chartController->chart())
     {
@@ -212,6 +358,7 @@ void RealtimePreviewWidget::ensureNoteCache()
     m_noteEndTimesMs.fill(std::numeric_limits<double>::quiet_NaN(), notes.size());
     m_normalIndices.reserve(notes.size());
     m_rainIndices.reserve(notes.size());
+    m_sortedNormalEntries.reserve(notes.size());
 
     for (int i = 0; i < notes.size(); ++i)
     {
@@ -231,8 +378,14 @@ void RealtimePreviewWidget::ensureNoteCache()
         {
             m_noteEndTimesMs[i] = startMs;
             m_normalIndices.push_back(i);
+            m_sortedNormalEntries.push_back(TimedNoteEntry{i, startMs, startMs});
         }
     }
+
+    std::sort(m_sortedNormalEntries.begin(), m_sortedNormalEntries.end(),
+              [](const TimedNoteEntry &a, const TimedNoteEntry &b) {
+                  return a.startMs < b.startMs;
+              });
 
     m_noteCacheValid = true;
 }
@@ -258,6 +411,12 @@ void RealtimePreviewWidget::ensureHyperCache()
     }
 
     m_hyperIndices = m_hyperfruitDetector->detect(chart->notes(), bpmList, chart->meta().offset);
+    m_hyperMask.fill(false, chart->notes().size());
+    for (int idx : std::as_const(m_hyperIndices))
+    {
+        if (idx >= 0 && idx < m_hyperMask.size())
+            m_hyperMask[idx] = true;
+    }
     m_hyperCacheValid = true;
 }
 
@@ -323,17 +482,26 @@ void RealtimePreviewWidget::paintEvent(QPaintEvent *event)
     const qreal radius = noteSize * 0.5;
     const qreal hyperRadius = radius * 1.3;
 
-    for (int idx : m_normalIndices)
+    const double minVisibleTime = m_currentTimeMs - lowerSpanMs;
+    const double maxVisibleTime = m_currentTimeMs + upperSpanMs;
+    auto lower = std::lower_bound(m_sortedNormalEntries.begin(),
+                                  m_sortedNormalEntries.end(),
+                                  minVisibleTime,
+                                  [](const TimedNoteEntry &entry, double value) {
+                                      return entry.startMs < value;
+                                  });
+
+    for (auto it = lower; it != m_sortedNormalEntries.end(); ++it)
     {
+        if (it->startMs > maxVisibleTime)
+            break;
+        const int idx = it->index;
         if (idx < 0 || idx >= notes.size())
             continue;
         const Note &note = notes[idx];
 
-        const double timeMs = m_noteStartTimesMs.value(idx, std::numeric_limits<double>::quiet_NaN());
+        const double timeMs = it->startMs;
         if (!std::isfinite(timeMs))
-            continue;
-        const double delta = timeMs - m_currentTimeMs;
-        if (delta > upperSpanMs || delta < -lowerSpanMs)
             continue;
 
         const int clampedX = qBound(0, note.x, kLaneWidth);
@@ -344,7 +512,11 @@ void RealtimePreviewWidget::paintEvent(QPaintEvent *event)
             continue;
 
         const QPointF center(x, y);
-        if (m_hyperfruitEnabled && m_hyperIndices.contains(idx))
+        const bool isHyper = m_hyperfruitEnabled &&
+                             idx >= 0 &&
+                             idx < m_hyperMask.size() &&
+                             m_hyperMask[idx];
+        if (isHyper)
         {
             painter.setPen(QPen(Qt::red, 2));
             painter.setBrush(Qt::NoBrush);
