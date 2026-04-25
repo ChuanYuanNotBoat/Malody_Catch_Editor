@@ -72,6 +72,8 @@ TRANSLATIONS = {
         "zh": "切换锚点放置模式，避免误触新增锚点",
         "ja": "アンカー配置モードを切り替えて誤操作での追加を防ぎます",
     },
+    "action_curve_visible": {"en": "Show Curve (with Nodes)", "zh": "显示曲线（含节点）", "ja": "カーブ表示（ノード含む）"},
+    "action_curve_visible_desc": {"en": "Toggle curve and node overlay visibility", "zh": "切换曲线与节点叠加层显示", "ja": "カーブとノードのオーバーレイ表示を切替"},
     "action_undo_curve": {"en": "Undo Curve", "zh": "撤销曲线", "ja": "曲線を元に戻す"},
     "action_undo_curve_desc": {
         "en": "Undo latest curve anchor/handle edit",
@@ -122,6 +124,7 @@ STATE = {
     "last_click_anchor": -1,
     "last_click_ms": 0,
     "style": {"denominators": [4, 8, 12, 16], "style_name": "balanced"},
+    "curve_visible": True,
     "anchor_placement_enabled": False,
     "project_path": "",
     "project_dirty": False,
@@ -244,6 +247,7 @@ def _capture_snapshot():
         "links": _clone(STATE.get("links", [])),
         "style": _clone(STATE.get("style", {})),
         "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True, "notes": False})),
+        "curve_visible": bool(STATE.get("curve_visible", True)),
         "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
         "next_anchor_id": int(STATE.get("next_anchor_id", 1)),
         "pending_connect_anchor_id": int(STATE.get("pending_connect_anchor_id", -1)),
@@ -266,6 +270,7 @@ def _restore_snapshot(snapshot):
         }
     else:
         STATE["selection_targets"] = {"anchors": True, "segments": True, "notes": False}
+    STATE["curve_visible"] = bool(snapshot.get("curve_visible", True))
     STATE["anchor_placement_enabled"] = bool(snapshot.get("anchor_placement_enabled", False))
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
@@ -1237,6 +1242,8 @@ def _mark_dirty(context):
 
 def _build_overlay(context):
     _ensure_project_context(context)
+    if not bool(STATE.get("curve_visible", True)):
+        return []
     toggles = context.get("overlay_toggles", {}) if isinstance(context, dict) else {}
     if not bool(toggles.get("overlay_enabled", True)):
         return []
@@ -1768,6 +1775,15 @@ def _list_tool_actions():
             "sync_plugin_tool_mode_with_checked": True,
         },
         {
+            "action_id": "toggle_curve_visible",
+            "title": tr(STATE.get("last_context", {}), "action_curve_visible"),
+            "description": tr(STATE.get("last_context", {}), "action_curve_visible_desc"),
+            "placement": "right_note_panel",
+            "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": bool(STATE.get("curve_visible", True)),
+        },
+        {
             "action_id": "toggle_select_anchors",
             "title": tr(STATE.get("last_context", {}), "action_toggle_select_anchors"),
             "description": tr(STATE.get("last_context", {}), "action_toggle_select_anchors_desc"),
@@ -1793,22 +1809,6 @@ def _list_tool_actions():
             "requires_undo_snapshot": False,
             "checkable": True,
             "checked": bool(STATE.get("selection_targets", {}).get("notes", False)),
-        },
-        {
-            "action_id": "undo_curve_edit",
-            "title": tr(STATE.get("last_context", {}), "action_undo_curve"),
-            "description": tr(STATE.get("last_context", {}), "action_undo_curve_desc"),
-            "placement": "left_sidebar",
-            "requires_undo_snapshot": False,
-            "host_action": "undo",
-        },
-        {
-            "action_id": "redo_curve_edit",
-            "title": tr(STATE.get("last_context", {}), "action_redo_curve"),
-            "description": tr(STATE.get("last_context", {}), "action_redo_curve_desc"),
-            "placement": "left_sidebar",
-            "requires_undo_snapshot": False,
-            "host_action": "redo",
         },
         {
             "action_id": "commit_curve_to_notes_sidebar",
@@ -1892,6 +1892,10 @@ def _run_tool_action(payload):
         STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
         _record_history_state(context)
         return True
+    if action_id == "toggle_curve_visible":
+        STATE["curve_visible"] = not bool(STATE.get("curve_visible", True))
+        _record_history_state(context)
+        return True
     if action_id == "toggle_select_anchors":
         cur = bool(STATE.get("selection_targets", {}).get("anchors", True))
         STATE["selection_targets"]["anchors"] = not cur
@@ -1918,10 +1922,6 @@ def _run_tool_action(payload):
         return _connect_selected_anchors(context)
     if action_id in ("disconnect_selected_segments", "disconnect_selected_segments_ctx"):
         return _disconnect_selected_segments(context)
-    if action_id == "undo_curve_edit":
-        return True
-    if action_id == "redo_curve_edit":
-        return True
     if action_id == "export_style_preset":
         return _save_style(context)
     if action_id == "import_style_preset":
@@ -1957,11 +1957,10 @@ def run_one_shot(action_id):
         "commit_curve_to_notes",
         "commit_curve_to_notes_sidebar",
         "toggle_anchor_placement",
+        "toggle_curve_visible",
         "toggle_select_anchors",
         "toggle_select_segments",
         "toggle_select_notes",
-        "undo_curve_edit",
-        "redo_curve_edit",
         "cycle_density_style",
         "connect_selected_nodes",
         "disconnect_selected_segments",
