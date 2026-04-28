@@ -16,19 +16,25 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 点击下载最新版本：[CatchChartEditor Beta v1.9.1 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
 
+文档导航：
+- 帮助文档：[docs/help.md](docs/help.md)
+- 版本信息：[docs/version.md](docs/version.md)
+- 测试说明：[TESTING.md](TESTING.md)
+- 插件说明：[src/plugin/README.md](src/plugin/README.md)
+
 ---
 
 ## Features / 功能特性
 
-- Load / save `.mc/mcz` charts (JSON based)读取/保存 `.mc/mcz` 谱面（基于 JSON）
-- Place, move, delete, copy, and paste notes / rain notes放置、移动、删除、复制粘贴普通音符与雨音符
-- Snap to grid and time division网格吸附与时间轴分度吸附
-- Colorful notes based on beat division (toggleable)按拍型显示彩色音符（可开关）
-- Hyperfruit detection with red outlineHyperfruit 自动判定与红色描边
-- Skin support (custom note images)皮肤支持（自定义音符图片）
-- Audio playback with speed control音频播放与速度控制
-- BPM table editingBPM 表编辑
-- Undo / redo撤销/重做
+- Load / save `.mc/mcz` charts (JSON based) / 读取与保存 `.mc/mcz` 谱面（基于 JSON）
+- Place, move, delete, copy, and paste notes / rain notes / 放置、移动、删除、复制粘贴普通音符与雨音符
+- Snap to grid and time division / 网格吸附与时间轴分度吸附
+- Colorful notes based on beat division (toggleable) / 按拍型显示彩色音符（可开关）
+- Hyperfruit detection with red outline / Hyperfruit 自动判定与红色描边
+- Skin support (custom note images) / 皮肤支持（自定义音符图片）
+- Audio playback with speed control / 音频播放与速度控制
+- BPM table editing / BPM 表编辑
+- Undo / redo / 撤销与重做
 - Plugin system (experimental)
   插件系统（实验性）
 
@@ -36,13 +42,30 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## Recent Updates / 近期特性
 
-- Safer note removal by note `id` first (avoid wrong delete on same-content notes)音符删除优先按 `id` 匹配，避免同内容误删
-- Temporary audio files are cleaned up automatically after loading/destruction临时音频文件会在加载切换/析构时自动清理
-- Playback snap now follows current time division setting播放头吸附使用当前时间分度设置
-- Paste preview now matches 288-division conversion behavior粘贴预览与 288 分度转换行为一致
-- Unified skin discovery from both `skins` and `resources/default_skin`皮肤扫描统一支持 `skins` 与 `resources/default_skin`
-- Added diagnostics/export and log settings dialog integration
-  新增诊断导出与日志设置入口
+- `Beta v1.9.1`
+  - Fixed `.mcz` export structure compatibility (top-level `0/`), so Malody can import reliably.
+  - 修复 `.mcz` 导出目录结构兼容性（顶层 `0/`），避免 Malody 无法导入。
+  - Filtered export payload to required assets only (`.mc` / 音频 / 背景 / 引用资源) and switched Meta edits to auto-save.
+  - 导出仅打包必要资源（`.mc` / 音频 / 背景 / 引用资源），Meta 编辑改为自动保存。
+- `Beta v1.9.0`
+  - Curve plugin now supports per-segment density (between two anchors), with better selection and density interaction.
+  - 曲线插件支持“按分段设置密度”（两节点间），并修复节点/音符选择联动与密度交互。
+- `Beta v1.8.x`
+  - Added checkable plugin actions, anchor placement toggle, and sidecar auto sync (`.mcce-plugin/*.curve_tbd.json`).
+  - 新增可勾选插件动作、锚点放置开关，以及曲线 sidecar 自动同步（`.mcce-plugin/*.curve_tbd.json`）。
+  - Unified UTF-8 process-plugin environment and improved plugin toolbar/panel theme consistency.
+  - 统一进程插件 UTF-8 运行环境，并优化插件工具栏/面板主题一致性。
+- `Beta v1.7.x`
+  - Added mirror flip workflow (custom axis, preview, center-line quick action) and timeline division color presets.
+  - 新增镜像翻转流程（自定义轴、预览、中心线快速翻转）与时间分度颜色预设系统。
+- `Beta v1.6.x ~ v1.5.x`
+  - Added shortcut customization, imported chart quick entry, and selection mode.
+  - 新增快捷键自定义、已导入谱面快速入口与选择模式。
+  - Plugin system upgraded with panel/overlay/batch-edit extension points and process-plugin protocol.
+  - 插件系统升级为面板/叠加层/批量编辑三类扩展点，并完善进程插件协议。
+
+For full changelog / 完整更新历史：
+- [docs/history.md](docs/history.md)
 
 ---
 
@@ -54,10 +77,10 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## Build Requirements / 构建要求
 
-- C++17 compatible compiler支持 C++17 的编译器
+- C++17 compatible compiler / 支持 C++17 的编译器
 - CMake 3.16+
-- Qt 6 (Core, Widgets, Multimedia)
-  Qt 6 组件：Core, Widgets, Multimedia
+- Qt 6 (Core, Widgets, Multimedia, Quick, QuickWidgets, Qml)
+  Qt 6 组件：Core、Widgets、Multimedia、Quick、QuickWidgets、Qml
 
 ### Build steps / 构建步骤
 
@@ -67,6 +90,14 @@ cd Malody_Catch_Editor
 mkdir build && cd build
 cmake ..
 cmake --build . --config Release
+```
+
+Windows 开发构建（含最小测试）：
+
+```powershell
+cmake -S . -B build_test -DBUILD_TESTING=ON
+cmake --build build_test --config Release --target CatchChartEditorTests
+ctest --test-dir build_test -C Release --output-on-failure
 ```
 
 ---
@@ -135,3 +166,10 @@ This project is licensed under the GPL-3.0 License — see the [LICENSE](LICENSE
 - Malody community for the game and file format
 - Qt team for the cross-platform framework
 - All testers and contributors
+
+---
+
+## Runtime Layout / 运行目录说明
+
+- Runtime plugin directory is resolved as `<appDir>/plugins`.
+- 构建后会复制默认皮肤、插件与文档到可执行文件目录，便于开箱即用。
