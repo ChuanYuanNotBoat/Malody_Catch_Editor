@@ -3,7 +3,7 @@
 A desktop chart editor for Malody Catch mode, developed to fill the feature gaps of the official charting tool.
 为 Malody Catch 模式开发的谱面编辑器，弥补官方制谱器功能的缺失。
 
-当前版本 / Current Version: **Beta v1.9.1**
+当前版本 / Current Version: **Beta v1.9.2**
 
 > ⚠️ **Early Stage Notice / 早期状态说明**
 > This project is in a very early stage of development. It is not yet ready for production use. Features may be incomplete, unstable, or subject to change.
@@ -14,7 +14,7 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## 📥 下载
 
-点击下载最新版本：[CatchChartEditor Beta v1.9.1 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
+点击下载最新版本：[CatchChartEditor Beta v1.9.2 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
 
 文档导航：
 - 帮助文档：[docs/help.md](docs/help.md)
@@ -42,6 +42,13 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## Recent Updates / 近期特性
 
+- `Beta v1.9.2`
+  - Enhanced curve-plugin editing flow: segment-level density actions, richer selection toggles, and note-snap reference overlays.
+  - 增强曲线插件编辑流程：分段密度动作、可选目标切换更完整，并支持 note 吸附参考线叠加。
+  - Improved multi-note drag reliability and validation; fixed cases where multi-select dragging could incorrectly increase note count.
+  - 提升多选拖动稳定性与校验，修复多选拖动导致 note 数量异常增加的问题。
+  - Added quick `Del` button beside `Delete Mode`, plus `.mcz` drag-and-drop import and background brightness/resource-sync improvements.
+  - 在 `Delete Mode` 旁新增快速 `Del` 按钮，并支持 `.mcz` 拖拽导入及背景亮度/资源同步改进。
 - `Beta v1.9.1`
   - Fixed `.mcz` export structure compatibility (top-level `0/`), so Malody can import reliably.
   - 修复 `.mcz` 导出目录结构兼容性（顶层 `0/`），避免 Malody 无法导入。
