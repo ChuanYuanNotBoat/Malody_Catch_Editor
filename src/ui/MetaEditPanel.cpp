@@ -11,6 +11,9 @@
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QFileDialog>
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QTimer>
 
 MetaEditPanel::MetaEditPanel(QWidget *parent)
@@ -73,7 +76,12 @@ void MetaEditPanel::setupUi()
     connect(m_bgBrowseBtn, &QPushButton::clicked, [this]()
             {
         QString fileName = QFileDialog::getOpenFileName(this, tr("Select Background"), QString(), tr("JPEG Files (*.jpg)"));
-        if (!fileName.isEmpty()) m_backgroundFileEdit->setText(fileName); });
+        if (fileName.isEmpty())
+            return;
+
+        const QString imported = importResourceToChartDirectory(fileName);
+        m_backgroundFileEdit->setText(imported.isEmpty() ? fileName : imported);
+        emit backgroundResourceChanged(); });
 
     m_previewTimeSpin = new QSpinBox(this);
     m_previewTimeSpin->setRange(0, 999999);
@@ -234,6 +242,53 @@ void MetaEditPanel::retranslateUi()
         m_offsetSpin->setSuffix(tr(" ms"));
 }
 
+QString MetaEditPanel::importResourceToChartDirectory(const QString &sourcePath) const
+{
+    if (!m_chartController)
+        return QString();
+
+    const QString chartPath = m_chartController->chartFilePath();
+    if (chartPath.isEmpty())
+        return QString();
+
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile())
+        return QString();
+
+    const QDir chartDir(QFileInfo(chartPath).absolutePath());
+    if (!chartDir.exists())
+        return QString();
+
+    const QString sourceAbs = sourceInfo.absoluteFilePath();
+    const QString existingRel = chartDir.relativeFilePath(sourceAbs);
+    if (!existingRel.startsWith("..") && !QDir::isAbsolutePath(existingRel))
+        return existingRel;
+
+    const QString baseName = sourceInfo.completeBaseName().isEmpty()
+                                 ? QStringLiteral("background")
+                                 : sourceInfo.completeBaseName();
+    const QString suffix = sourceInfo.suffix().isEmpty()
+                               ? QStringLiteral("jpg")
+                               : sourceInfo.suffix();
+
+    QString fileName = baseName + "." + suffix;
+    QString targetPath = chartDir.filePath(fileName);
+    for (int i = 2; QFileInfo::exists(targetPath); ++i)
+    {
+        fileName = QString("%1_%2.%3").arg(baseName).arg(i).arg(suffix);
+        targetPath = chartDir.filePath(fileName);
+    }
+
+    if (!QFile::copy(sourceAbs, targetPath))
+    {
+        Logger::warn(QString("Failed to copy background image into chart directory: %1 -> %2")
+                         .arg(sourceAbs, targetPath));
+        return QString();
+    }
+
+    return fileName;
+}
+
 MetaData MetaEditPanel::collectMetaFromUi() const
 {
     MetaData meta;
@@ -273,7 +328,22 @@ bool MetaEditPanel::applyMetaAndPersist(bool persistToDisk)
     if (!m_chartController || !m_chartController->chart())
         return false;
 
-    const MetaData next = collectMetaFromUi();
+    MetaData next = collectMetaFromUi();
+    if (!next.backgroundFile.trimmed().isEmpty() && QDir::isAbsolutePath(next.backgroundFile))
+    {
+        const QString imported = importResourceToChartDirectory(next.backgroundFile);
+        if (!imported.isEmpty())
+        {
+            next.backgroundFile = imported;
+            if (m_backgroundFileEdit->text() != imported)
+            {
+                m_isRefreshingUi = true;
+                m_backgroundFileEdit->setText(imported);
+                m_isRefreshingUi = false;
+            }
+            emit backgroundResourceChanged();
+        }
+    }
     const MetaData current = m_chartController->chart()->meta();
 
     if (!isSameMeta(current, next))

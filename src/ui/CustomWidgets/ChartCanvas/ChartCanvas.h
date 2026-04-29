@@ -165,6 +165,10 @@ private:
     QVector<int> collectMirrorTargetIndices(const QPoint &pos) const;
     void populateColorMenu(QMenu *colorMenu, const QVector<int> &targetIndices);
     bool performMirrorFlip(const QVector<int> &targetIndices, int axisX, const QString &actionName);
+    bool hasNoteSnapReferenceOverlays() const;
+    void refreshPluginOverlayCacheForSnap();
+    bool curveSnapXForBeat(double beat, int currentX, int *outX) const;
+    void applyCurveSnapToMovedNote(Note *note, double beat) const;
     void handleLeftMousePress(QMouseEvent *event);
     bool handlePastePreviewLeftClick(const QPoint &pos);
     bool handleRainPlacementLeftClick(const QPointF &pos);
@@ -301,6 +305,7 @@ private:
     QHash<int, QPair<Note, Note>> m_moveChanges; // Original->updated note snapshot by index.
     QSet<int> m_originalSelectedIndices;
     int m_dragReferenceIndex;
+    bool m_noteSnapReferenceActiveForMove;
 
     bool m_gridSnapBackup;
     bool m_wasGridSnapEnabled;

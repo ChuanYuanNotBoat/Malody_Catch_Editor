@@ -73,6 +73,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_gridSnapBackup(false),
       m_wasGridSnapEnabled(false),
       m_dragReferenceIndex(-1),
+      m_noteSnapReferenceActiveForMove(false),
       m_rainFirst(true),
       m_snapToGrid(true),
       m_snapTimerId(0),

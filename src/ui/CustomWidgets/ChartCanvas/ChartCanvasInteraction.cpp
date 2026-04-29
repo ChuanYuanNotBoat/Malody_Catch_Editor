@@ -67,6 +67,20 @@ QVariantMap serializeSelectedNoteForPlugin(const Note &note)
     noteObj.insert("beat", MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator));
     return noteObj;
 }
+
+QVariantMap serializeNotePositionForPlugin(const Note &note)
+{
+    QVariantMap noteObj;
+    noteObj.insert("type", static_cast<int>(note.type));
+    noteObj.insert("x", note.x);
+
+    QVariantList beat;
+    beat.append(note.beatNum);
+    beat.append(note.numerator);
+    beat.append(note.denominator);
+    noteObj.insert("beat", beat);
+    return noteObj;
+}
 }
 
 
@@ -433,6 +447,7 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
 
     QVariantList selectedIds;
     QVariantList selectedNotes;
+    QVariantList existingNotePositions;
     if (m_selectionController && chart())
     {
         const auto &notes = chart()->notes();
@@ -451,8 +466,18 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
             selectedNotes.append(serializeSelectedNoteForPlugin(note));
         }
     }
+    if (chart())
+    {
+        const auto &notes = chart()->notes();
+        for (const Note &note : notes)
+        {
+            if (note.type == NoteType::NORMAL)
+                existingNotePositions.append(serializeNotePositionForPlugin(note));
+        }
+    }
     overlayContext.insert("selected_note_ids", selectedIds);
     overlayContext.insert("selected_notes", selectedNotes);
+    overlayContext.insert("existing_note_positions", existingNotePositions);
     return overlayContext;
 }
 

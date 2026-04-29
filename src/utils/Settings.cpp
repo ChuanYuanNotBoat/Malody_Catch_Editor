@@ -250,6 +250,16 @@ void Settings::setBackgroundImageEnabled(bool enabled)
     m_settings.setValue("view/backgroundImageEnabled", enabled);
 }
 
+int Settings::backgroundImageBrightness() const
+{
+    return qBound(0, m_settings.value("view/backgroundImageBrightness", 100).toInt(), 200);
+}
+
+void Settings::setBackgroundImageBrightness(int brightness)
+{
+    m_settings.setValue("view/backgroundImageBrightness", qBound(0, brightness, 200));
+}
+
 QColor Settings::backgroundColor() const
 {
     return m_settings.value("view/backgroundColor", QColor(40, 40, 40)).value<QColor>();

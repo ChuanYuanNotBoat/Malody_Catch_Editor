@@ -15,6 +15,7 @@
 #include "model/Chart.h"
 #include <QPainter>
 #include <QPen>
+#include <QDir>
 #include <QFileInfo>
 #include <algorithm>
 #include <chrono>
@@ -540,6 +541,10 @@ void ChartCanvas::drawBackground(QPainter &painter)
     {
         if (!chart())
         {
+            m_backgroundRenderer->setBackgroundImage("");
+            m_backgroundRenderer->setBackgroundColor(Settings::instance().backgroundColor());
+            m_backgroundRenderer->setImageEnabled(Settings::instance().backgroundImageEnabled());
+            m_backgroundRenderer->setImageBrightness(Settings::instance().backgroundImageBrightness());
             m_backgroundCache = m_backgroundRenderer->generateBackground(sz);
         }
         else
@@ -548,8 +553,11 @@ void ChartCanvas::drawBackground(QPainter &painter)
             QString bgPath = meta.backgroundFile;
             if (!bgPath.isEmpty())
             {
-                QString chartDir = QFileInfo(m_chartController->chartFilePath()).absolutePath();
-                bgPath = chartDir + "/" + bgPath;
+                if (!QDir::isAbsolutePath(bgPath))
+                {
+                    const QString chartDir = QFileInfo(m_chartController->chartFilePath()).absolutePath();
+                    bgPath = QDir(chartDir).filePath(bgPath);
+                }
                 m_backgroundRenderer->setBackgroundImage(bgPath);
             }
             else
@@ -558,6 +566,7 @@ void ChartCanvas::drawBackground(QPainter &painter)
             }
             m_backgroundRenderer->setBackgroundColor(Settings::instance().backgroundColor());
             m_backgroundRenderer->setImageEnabled(Settings::instance().backgroundImageEnabled());
+            m_backgroundRenderer->setImageBrightness(Settings::instance().backgroundImageBrightness());
             m_backgroundCache = m_backgroundRenderer->generateBackground(sz);
         }
         m_backgroundCacheDirty = false;

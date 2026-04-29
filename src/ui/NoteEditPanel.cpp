@@ -41,6 +41,9 @@ void NoteEditPanel::setupUi()
     m_deleteRadio = new QRadioButton(tr("Delete Mode"), this);
     m_selectRadio = new QRadioButton(tr("Select Mode"), this);
     m_anchorRadio = new QRadioButton(tr("Place Anchor"), this);
+    m_deleteOnceButton = new QPushButton(tr("Del"), this);
+    m_deleteOnceButton->setFixedWidth(40);
+    m_deleteOnceButton->setToolTip(tr("Delete selected notes once"));
     m_noteRadio->setChecked(true);
     m_modeGroup->addButton(m_noteRadio, PlaceNoteMode);
     m_modeGroup->addButton(m_rainRadio, PlaceRainMode);
@@ -52,9 +55,17 @@ void NoteEditPanel::setupUi()
 
     mainLayout->addWidget(m_noteRadio);
     mainLayout->addWidget(m_rainRadio);
-    mainLayout->addWidget(m_deleteRadio);
+    QWidget *deleteRow = new QWidget(this);
+    QHBoxLayout *deleteRowLayout = new QHBoxLayout(deleteRow);
+    deleteRowLayout->setContentsMargins(0, 0, 0, 0);
+    deleteRowLayout->setSpacing(6);
+    deleteRowLayout->addWidget(m_deleteRadio);
+    deleteRowLayout->addStretch();
+    deleteRowLayout->addWidget(m_deleteOnceButton);
+    mainLayout->addWidget(deleteRow);
     mainLayout->addWidget(m_selectRadio);
     mainLayout->addWidget(m_anchorRadio);
+    connect(m_deleteOnceButton, &QPushButton::clicked, this, &NoteEditPanel::deleteOnceRequested);
 
     m_pluginToolsToggleBtn = new QToolButton(this);
     m_pluginToolsToggleBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -296,6 +307,11 @@ void NoteEditPanel::retranslateUi()
         m_rainRadio->setText(tr("Place Rain"));
     if (m_deleteRadio)
         m_deleteRadio->setText(tr("Delete Mode"));
+    if (m_deleteOnceButton)
+    {
+        m_deleteOnceButton->setText(tr("Del"));
+        m_deleteOnceButton->setToolTip(tr("Delete selected notes once"));
+    }
     if (m_selectRadio)
         m_selectRadio->setText(tr("Select Mode"));
     if (m_anchorRadio)

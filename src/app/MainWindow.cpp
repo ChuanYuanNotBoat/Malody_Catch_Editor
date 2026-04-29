@@ -46,7 +46,11 @@
 #include <QFormLayout>
 #include <QColorDialog>
 #include <QCloseEvent>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRadioButton>
@@ -153,6 +157,24 @@ bool extractSemver(const QString &text, int &major, int &minor, int &patch)
     minor = match.captured(2).toInt(&ok2);
     patch = match.captured(3).toInt(&ok3);
     return ok1 && ok2 && ok3;
+}
+
+QString firstLocalMczPathFromMimeData(const QMimeData *mimeData)
+{
+    if (!mimeData || !mimeData->hasUrls())
+        return QString();
+
+    const QList<QUrl> urls = mimeData->urls();
+    for (const QUrl &url : urls)
+    {
+        if (!url.isLocalFile())
+            continue;
+
+        const QString path = url.toLocalFile();
+        if (QFileInfo(path).suffix().compare(QStringLiteral("mcz"), Qt::CaseInsensitive) == 0)
+            return path;
+    }
+    return QString();
 }
 
 int compareSemver(const QString &current, const QString &latest)
@@ -758,6 +780,16 @@ void syncSidecarDirectoryForChart(const QString &sourceChartPath, const QString 
     }
 }
 
+void syncReferencedResourcesForSavedChart(const QString &workingChartPath, const QString &savedChartPath)
+{
+    if (workingChartPath.isEmpty() || savedChartPath.isEmpty())
+        return;
+    if (QDir::cleanPath(workingChartPath) == QDir::cleanPath(savedChartPath))
+        return;
+
+    copyReferencedExternalResources(workingChartPath, savedChartPath);
+}
+
 void cleanupSessionWorkingCopies(const QString &preserveWorkingPath)
 {
     QDir dir(sessionWorkingCopyRootDir());
@@ -908,6 +940,8 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->autoSaveTimer = nullptr;
     d->pluginToolModePluginId.clear();
 
+    setAcceptDrops(true);
+
     setupUi();
     createCentralArea();
     createMenus();
@@ -1033,9 +1067,9 @@ void MainWindow::createMenus()
     QAction *pasteAction = editMenu->addAction(tr("&Paste"), d->canvas, &ChartCanvas::paste);
     registerShortcutAction(pasteAction, "edit.paste", QKeySequence::Paste);
     editMenu->addSeparator();
-    QAction *deleteAction = editMenu->addAction(tr("&Delete"));
-    registerShortcutAction(deleteAction, "edit.delete", QKeySequence::Delete);
-    connect(deleteAction, &QAction::triggered, this, [this]()
+    d->deleteAction = editMenu->addAction(tr("&Delete"));
+    registerShortcutAction(d->deleteAction, "edit.delete", QKeySequence::Delete);
+    connect(d->deleteAction, &QAction::triggered, this, [this]()
             {
         if (d->canvas && d->canvas->triggerPluginDeleteSelection()) {
             Logger::debug("Deleted plugin selection via menu");
@@ -1057,7 +1091,7 @@ void MainWindow::createMenus()
             }
             d->selectionController->clearSelection();
             Logger::debug("Deleted selected notes via menu");
-        } });
+         } });
 
     // Paste option: use 288-division conversion.
     editMenu->addSeparator();
@@ -1094,6 +1128,27 @@ void MainWindow::createMenus()
             {
     Settings::instance().setBackgroundImageEnabled(on);
     if (d->canvas) d->canvas->refreshBackground(); });
+    QAction *bgBrightnessAction = viewMenu->addAction(tr("Background Image Brightness..."));
+    connect(bgBrightnessAction, &QAction::triggered, this, [this]()
+            {
+    bool ok = false;
+    const int current = Settings::instance().backgroundImageBrightness();
+    const int brightness = QInputDialog::getInt(
+        this,
+        tr("Background Image Brightness"),
+        tr("Brightness (%):"),
+        current,
+        0,
+        200,
+        5,
+        &ok);
+    if (!ok)
+        return;
+
+    Settings::instance().setBackgroundImageBrightness(brightness);
+    if (d->canvas)
+        d->canvas->refreshBackground();
+    statusBar()->showMessage(tr("Background image brightness: %1%").arg(brightness), 2000); });
 
     QMenu *bgColorMenu = viewMenu->addMenu(tr("Background Color"));
     bgColorMenu->addAction(tr("Black"), [this]()
@@ -1488,6 +1543,7 @@ void MainWindow::createCentralArea()
     d->notePanel->setSelectionController(d->selectionController);
     d->bpmPanel->setChartController(d->chartController);
     d->metaPanel->setChartController(d->chartController);
+    connect(d->metaPanel, &MetaEditPanel::backgroundResourceChanged, d->canvas, &ChartCanvas::refreshBackground);
 
     // Connect NoteEditPanel signals.
     connect(d->notePanel, &NoteEditPanel::timeDivisionChanged, d->canvas, &ChartCanvas::setTimeDivision);
@@ -1514,6 +1570,10 @@ void MainWindow::createCentralArea()
             togglePluginEnhancedToolMode(false);
         d->canvas->setMode(static_cast<ChartCanvas::Mode>(mode)); });
     connect(d->notePanel, &NoteEditPanel::copyRequested, d->canvas, &ChartCanvas::handleCopy);
+    connect(d->notePanel, &NoteEditPanel::deleteOnceRequested, this, [this]()
+            {
+        if (d->deleteAction)
+            d->deleteAction->trigger(); });
     connect(d->notePanel, &NoteEditPanel::mirrorAxisChanged, d->canvas, &ChartCanvas::setMirrorAxisX);
     connect(d->notePanel, &NoteEditPanel::mirrorGuideVisibilityChanged, d->canvas, &ChartCanvas::setMirrorGuideVisible);
     connect(d->notePanel, &NoteEditPanel::mirrorPreviewVisibilityChanged, d->canvas, &ChartCanvas::setMirrorPreviewVisible);
@@ -1632,6 +1692,9 @@ void MainWindow::performAutoSaveTick()
     if (d->canvas)
         d->canvas->setSourceChartPath(sourcePath);
     d->isModified = false;
+    if (!d->workingChartPath.isEmpty())
+        d->chartController->saveChart(d->workingChartPath);
+    syncReferencedResourcesForSavedChart(d->workingChartPath, sourcePath);
     syncSidecarDirectoryForChart(d->workingChartPath, sourcePath);
     if (!d->workingChartPath.isEmpty())
         d->chartController->saveChart(d->workingChartPath);
@@ -1709,6 +1772,45 @@ void MainWindow::closeEvent(QCloseEvent *event)
     event->accept();
 }
 
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (firstLocalMczPathFromMimeData(event ? event->mimeData() : nullptr).isEmpty())
+    {
+        if (event)
+            event->ignore();
+        return;
+    }
+
+    event->acceptProposedAction();
+}
+
+void MainWindow::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (firstLocalMczPathFromMimeData(event ? event->mimeData() : nullptr).isEmpty())
+    {
+        if (event)
+            event->ignore();
+        return;
+    }
+
+    event->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    const QString mczPath = firstLocalMczPathFromMimeData(event ? event->mimeData() : nullptr);
+    if (mczPath.isEmpty())
+    {
+        if (event)
+            event->ignore();
+        return;
+    }
+
+    event->acceptProposedAction();
+    statusBar()->showMessage(tr("Importing MCZ: %1").arg(QFileInfo(mczPath).fileName()), 2000);
+    loadChartFile(mczPath);
+}
+
 bool MainWindow::confirmSaveIfModified(const QString &reasonText)
 {
     if (!d->isModified)
@@ -1758,6 +1860,9 @@ bool MainWindow::confirmSaveIfModified(const QString &reasonText)
         d->canvas->setSourceChartPath(savePath);
     Settings::instance().setLastOpenPath(QFileInfo(savePath).absolutePath());
     d->isModified = false;
+    if (!d->workingChartPath.isEmpty())
+        d->chartController->saveChart(d->workingChartPath);
+    syncReferencedResourcesForSavedChart(d->workingChartPath, savePath);
     syncSidecarDirectoryForChart(d->workingChartPath, savePath);
     if (!d->workingChartPath.isEmpty())
         d->chartController->saveChart(d->workingChartPath);
@@ -2251,6 +2356,9 @@ void MainWindow::saveChart()
             d->canvas->setSourceChartPath(currentPath);
         Settings::instance().setLastOpenPath(QFileInfo(currentPath).absolutePath());
         d->isModified = false;
+        if (!d->workingChartPath.isEmpty())
+            d->chartController->saveChart(d->workingChartPath);
+        syncReferencedResourcesForSavedChart(d->workingChartPath, currentPath);
         syncSidecarDirectoryForChart(d->workingChartPath, currentPath);
         if (!d->workingChartPath.isEmpty())
             d->chartController->saveChart(d->workingChartPath);
@@ -2286,6 +2394,9 @@ void MainWindow::saveChartAs()
         if (d->canvas)
             d->canvas->setSourceChartPath(fileName);
         d->isModified = false;
+        if (!d->workingChartPath.isEmpty())
+            d->chartController->saveChart(d->workingChartPath);
+        syncReferencedResourcesForSavedChart(d->workingChartPath, fileName);
         syncSidecarDirectoryForChart(d->workingChartPath, fileName);
         if (!d->workingChartPath.isEmpty())
             d->chartController->saveChart(d->workingChartPath);

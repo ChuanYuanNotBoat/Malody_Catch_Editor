@@ -52,6 +52,7 @@ signals:
     void timeDivisionChanged(int division);
     void gridDivisionChanged(int division);
     void gridSnapChanged(bool enabled);
+    void deleteOnceRequested();
     void copyRequested();
     void mirrorAxisChanged(int axisX);
     void mirrorGuideVisibilityChanged(bool visible);
@@ -84,6 +85,7 @@ private:
     QRadioButton *m_deleteRadio;
     QRadioButton *m_selectRadio;
     QRadioButton *m_anchorRadio;
+    QPushButton *m_deleteOnceButton;
     QToolButton *m_pluginToolsToggleBtn;
     QLabel *m_pluginToolsLabel;
     QWidget *m_pluginToolsContainer;

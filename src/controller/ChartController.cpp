@@ -535,6 +535,14 @@ void ChartController::moveNotes(const QList<QPair<Note, Note>> &changes)
 {
     if (changes.isEmpty())
         return;
+
+    QString invalidReason;
+    if (!validateBatchEditPayload(QVector<Note>{}, QVector<Note>{}, changes, m_chart, &invalidReason))
+    {
+        Logger::warn(QString("moveNotes rejected: %1").arg(invalidReason));
+        return;
+    }
+
     m_undoStack->push(new MoveNotesCommand(this, changes));
 }
 

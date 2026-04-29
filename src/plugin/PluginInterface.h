@@ -56,6 +56,7 @@ public:
         QPointF chartFrom;       // x=lane_x, y=beat.
         QPointF chartTo;         // x=lane_x, y=beat (for line end).
         bool rectCenterOnChartPoint = true;
+        bool noteSnapReference = false; // Generic host hint: note dragging may snap to this chart-space line.
     };
     struct BatchEdit
     {

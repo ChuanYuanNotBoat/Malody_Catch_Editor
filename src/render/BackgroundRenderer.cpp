@@ -2,6 +2,7 @@
 #include "utils/Logger.h"
 #include <QFileInfo>
 #include <QPainter>
+#include <QtGlobal>
 
 void BackgroundRenderer::setBackgroundImage(const QString &imagePath)
 {
@@ -53,6 +54,16 @@ void BackgroundRenderer::setImageEnabled(bool enabled)
     }
 }
 
+void BackgroundRenderer::setImageBrightness(int brightness)
+{
+    const int clamped = qBound(0, brightness, 200);
+    if (m_imageBrightness != clamped)
+    {
+        m_imageBrightness = clamped;
+        m_cacheDirty = true;
+    }
+}
+
 QPixmap BackgroundRenderer::generateBackground(const QSize &size)
 {
     QPixmap cache(size);
@@ -65,6 +76,16 @@ QPixmap BackgroundRenderer::generateBackground(const QSize &size)
         int targetHeight = static_cast<int>(m_background.height() * (static_cast<double>(targetWidth) / m_background.width()));
         QRectF targetRect(0, 0, targetWidth, targetHeight);
         painter.drawPixmap(targetRect.toRect(), m_background, m_background.rect());
+        if (m_imageBrightness < 100)
+        {
+            const int alpha = qRound(255.0 * (100 - m_imageBrightness) / 100.0);
+            painter.fillRect(targetRect.toRect(), QColor(0, 0, 0, alpha));
+        }
+        else if (m_imageBrightness > 100)
+        {
+            const int alpha = qRound(255.0 * (m_imageBrightness - 100) / 100.0);
+            painter.fillRect(targetRect.toRect(), QColor(255, 255, 255, alpha));
+        }
     }
 
     m_cacheDirty = false;

@@ -69,6 +69,9 @@ public:
     bool backgroundImageEnabled() const;
     void setBackgroundImageEnabled(bool enabled);
 
+    int backgroundImageBrightness() const;
+    void setBackgroundImageBrightness(int brightness);
+
     QColor backgroundColor() const;
     void setBackgroundColor(const QColor &color);
 

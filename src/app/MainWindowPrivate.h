@@ -54,6 +54,7 @@ public:
     LeftPanel *leftPanel = nullptr;
     QAction *undoAction = nullptr;
     QAction *redoAction = nullptr;
+    QAction *deleteAction = nullptr;
     QAction *colorAction = nullptr;
     QAction *timelineDivisionColorAction = nullptr;
     QAction *timelineDivisionColorSettingsAction = nullptr;

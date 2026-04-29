@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import time
+from fractions import Fraction
 
 LEFT_BUTTON = 1
 RIGHT_BUTTON = 2
@@ -68,6 +69,16 @@ TRANSLATIONS = {
         "zh": "根据当前钢笔曲线生成普通 note",
         "ja": "現在のペン曲線から通常ノートを生成します",
     },
+    "action_commit_context_segments": {
+        "en": "Place Notes for Segment(s)",
+        "zh": "放置曲线段 Note",
+        "ja": "セグメントのノートを配置",
+    },
+    "action_commit_context_segments_desc": {
+        "en": "Generate normal notes from the right-clicked segment, or all selected segments",
+        "zh": "根据右键曲线段生成普通 note；多选曲线段时生成所有选中段",
+        "ja": "右クリックしたセグメント、または選択中のセグメントから通常ノートを生成",
+    },
     "action_anchor_place": {"en": "Anchor Place", "zh": "放置锚点", "ja": "アンカー配置"},
     "action_anchor_place_desc": {
         "en": "Toggle anchor placement mode to prevent misclick additions",
@@ -76,6 +87,27 @@ TRANSLATIONS = {
     },
     "action_curve_visible": {"en": "Show Curve (with Nodes)", "zh": "显示曲线（含节点）", "ja": "カーブ表示（ノード含む）"},
     "action_curve_visible_desc": {"en": "Toggle curve and node overlay visibility", "zh": "切换曲线与节点叠加层显示", "ja": "カーブとノードのオーバーレイ表示を切替"},
+    "action_polyline_mode": {"en": "Polyline Link", "zh": "折线连接", "ja": "ポリライン接続"},
+    "action_polyline_mode_desc": {
+        "en": "Toggle selected connection lines between Bezier curves and straight segments; with no selection this sets the shape for new links",
+        "zh": "切换选中连接线的曲线/折线状态；未选中连接线时设置新连接线的默认状态",
+        "ja": "選択した接続線のベジェ/直線状態を切り替えます。未選択時は新規接続線の既定状態を設定します",
+    },
+    "action_polyline_context_desc": {
+        "en": "Toggle the right-clicked connection line, or all selected connection lines, between curve and polyline",
+        "zh": "切换右键连接线或所有选中连接线的曲线/折线状态",
+        "ja": "右クリックした接続線、または選択中の接続線のカーブ/ポリライン状態を切り替えます",
+    },
+    "action_toggle_context_shape": {"en": "Toggle Curve/Polyline", "zh": "切换曲线/折线", "ja": "カーブ/ポリライン切替"},
+    "action_note_curve_snap": {"en": "Snap Notes to Curve", "zh": "Note 吸附到曲线", "ja": "ノートを曲線に吸着"},
+    "action_note_curve_snap_desc": {
+        "en": "Use the curve as a note drag snap reference; curve and anchor selection is disabled while enabled",
+        "zh": "拖拽 note 时以曲线作为吸附参考；启用时不可选中曲线和节点",
+        "ja": "ノートドラッグ時に曲線を吸着基準にします。有効時は曲線とノードを選択できません",
+    },
+    "status_curve_shape_changed": {"en": "Curve shape: {shape}", "zh": "曲线形态：{shape}", "ja": "曲線形状: {shape}"},
+    "shape_curve": {"en": "Curve", "zh": "曲线", "ja": "カーブ"},
+    "shape_polyline": {"en": "Polyline", "zh": "折线", "ja": "ポリライン"},
     "action_undo_curve": {"en": "Undo Curve", "zh": "撤销曲线", "ja": "曲線を元に戻す"},
     "action_undo_curve_desc": {
         "en": "Undo latest curve anchor/handle edit",
@@ -120,6 +152,8 @@ STATE = {
     "selected_links": [],
     "selection_targets": {"anchors": True, "segments": True, "notes": False},
     "segment_denominators": {},
+    "segment_shapes": {},
+    "context_menu_links": [],
     "box_select": {"active": False, "start": [0.0, 0.0], "end": [0.0, 0.0], "append": False},
     "pending_connect_anchor_id": -1,
     "next_anchor_id": 1,
@@ -128,6 +162,8 @@ STATE = {
     "last_click_ms": 0,
     "style": {"denominators": [4, 8, 12, 16], "style_name": "balanced"},
     "curve_visible": True,
+    "active_link_shape": "curve",
+    "note_curve_snap_enabled": False,
     "anchor_placement_enabled": False,
     "project_path": "",
     "project_dirty": False,
@@ -278,8 +314,11 @@ def _capture_snapshot():
         "links": _clone(STATE.get("links", [])),
         "style": _clone(STATE.get("style", {})),
         "segment_denominators": _clone(STATE.get("segment_denominators", {})),
+        "segment_shapes": _clone(STATE.get("segment_shapes", {})),
         "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True, "notes": False})),
         "curve_visible": bool(STATE.get("curve_visible", True)),
+        "active_link_shape": _active_link_shape(),
+        "note_curve_snap_enabled": bool(STATE.get("note_curve_snap_enabled", False)),
         "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
         "next_anchor_id": int(STATE.get("next_anchor_id", 1)),
         "pending_connect_anchor_id": int(STATE.get("pending_connect_anchor_id", -1)),
@@ -295,6 +334,8 @@ def _restore_snapshot(snapshot):
     STATE["style"] = _clone(style) if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
     seg_dens = snapshot.get("segment_denominators")
     STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
+    seg_shapes = snapshot.get("segment_shapes")
+    STATE["segment_shapes"] = _clone(seg_shapes) if isinstance(seg_shapes, dict) else {}
     targets = snapshot.get("selection_targets")
     if isinstance(targets, dict):
         STATE["selection_targets"] = {
@@ -305,6 +346,9 @@ def _restore_snapshot(snapshot):
     else:
         STATE["selection_targets"] = {"anchors": True, "segments": True, "notes": False}
     STATE["curve_visible"] = bool(snapshot.get("curve_visible", True))
+    active_shape = str(snapshot.get("active_link_shape", snapshot.get("curve_shape", "curve")) or "curve").strip().lower()
+    STATE["active_link_shape"] = "polyline" if active_shape == "polyline" else "curve"
+    STATE["note_curve_snap_enabled"] = bool(snapshot.get("note_curve_snap_enabled", False))
     STATE["anchor_placement_enabled"] = bool(snapshot.get("anchor_placement_enabled", False))
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
@@ -427,6 +471,47 @@ def _set_segment_denominator(id_a, id_b, den):
     return prev != val
 
 
+def _normalize_shape_name(shape):
+    return "polyline" if str(shape or "").strip().lower() == "polyline" else "curve"
+
+
+def _active_link_shape():
+    return _normalize_shape_name(STATE.get("active_link_shape", STATE.get("curve_shape", "curve")))
+
+
+def _active_link_shape_is_polyline():
+    return _active_link_shape() == "polyline"
+
+
+def _segment_shape_for_link(id_a, id_b, fallback_shape="curve"):
+    key = _link_key(id_a, id_b)
+    if not key:
+        return _normalize_shape_name(fallback_shape)
+    seg_map = STATE.get("segment_shapes", {})
+    if isinstance(seg_map, dict) and key in seg_map:
+        return _normalize_shape_name(seg_map.get(key))
+    return _normalize_shape_name(fallback_shape)
+
+
+def _set_segment_shape(id_a, id_b, shape):
+    key = _link_key(id_a, id_b)
+    if not key:
+        return False
+    val = _normalize_shape_name(shape)
+    seg_map = STATE.get("segment_shapes", {})
+    if not isinstance(seg_map, dict):
+        seg_map = {}
+    prev = _normalize_shape_name(seg_map.get(key, "curve"))
+    if val == "curve":
+        changed = key in seg_map and prev != "curve"
+        seg_map.pop(key, None)
+    else:
+        changed = prev != val
+        seg_map[key] = val
+    STATE["segment_shapes"] = seg_map
+    return changed
+
+
 def _context_default_segment_denominator(context=None):
     ctx = context if isinstance(context, dict) else {}
     if not ctx:
@@ -486,6 +571,7 @@ def _add_link(id_a, id_b):
     links.append([norm[0], norm[1]])
     STATE["links"] = links
     _set_segment_denominator(norm[0], norm[1], _context_default_segment_denominator())
+    _set_segment_shape(norm[0], norm[1], _active_link_shape())
     return True
 
 
@@ -507,6 +593,7 @@ def _remove_link(id_a, id_b):
     if changed:
         STATE["links"] = kept
         _set_segment_denominator(norm[0], norm[1], 0)
+        _set_segment_shape(norm[0], norm[1], "curve")
     return changed
 
 
@@ -541,6 +628,17 @@ def _cleanup_links_and_selection():
             if den > 0:
                 seg_cleaned[key] = den
     STATE["segment_denominators"] = seg_cleaned
+
+    seg_shapes_raw = STATE.get("segment_shapes", {})
+    seg_shapes_cleaned = {}
+    if isinstance(seg_shapes_raw, dict):
+        for key, raw_val in seg_shapes_raw.items():
+            if key not in valid_link_keys:
+                continue
+            shape = _normalize_shape_name(raw_val)
+            if shape == "polyline":
+                seg_shapes_cleaned[key] = shape
+    STATE["segment_shapes"] = seg_shapes_cleaned
 
     selected_anchor_ids = [int(aid) for aid in STATE.get("selected_anchor_ids", []) if int(aid) in valid_ids]
     if not _selection_enabled("anchors"):
@@ -607,6 +705,16 @@ def _set_single_selected_anchor(anchor_id):
     STATE["selected_anchor_ids"] = [aid] if aid > 0 else []
 
 
+def _add_selected_anchor(anchor_id):
+    aid = int(anchor_id)
+    if aid <= 0:
+        return
+    selected = [int(v) for v in STATE.get("selected_anchor_ids", []) if int(v) > 0]
+    if aid not in selected:
+        selected.append(aid)
+    STATE["selected_anchor_ids"] = selected
+
+
 def _set_single_selected_link(id_a, id_b):
     norm = _normalize_link(id_a, id_b)
     if norm is None:
@@ -636,14 +744,11 @@ def _find_segment_hit(context, cx, cy, threshold=14.0):
     best = None
     best_d = 1e9
     for _i0, _i1, id0, id1, a0, a1 in _connected_anchor_segments():
-        p0 = (a0["lane_x"], a0["beat"])
-        p1 = _anchor_out_abs_chart(a0)
-        p2 = _anchor_in_abs_chart(a1)
-        p3 = (a1["lane_x"], a1["beat"])
-        prev = _chart_to_canvas(context, p0[0], p0[1])
-        for j in range(1, 25):
-            t = j / 24.0
-            lane_x, beat = _cubic_point(p0, p1, p2, p3, t)
+        sampled = _sample_segment_chart(a0, a1, 24, id0, id1)
+        if len(sampled) < 2:
+            continue
+        prev = _chart_to_canvas(context, sampled[0][0], sampled[0][1])
+        for lane_x, beat in sampled[1:]:
             cur = _chart_to_canvas(context, lane_x, beat)
             d = _distance_point_to_segment(cx, cy, prev[0], prev[1], cur[0], cur[1])
             if d < threshold and d < best_d:
@@ -685,6 +790,8 @@ def _toggle_selected_link(id_a, id_b):
 
 
 def _selection_enabled(kind):
+    if bool(STATE.get("note_curve_snap_enabled", False)) and kind in ("anchors", "segments"):
+        return False
     targets = STATE.get("selection_targets", {})
     if not isinstance(targets, dict):
         return True
@@ -768,14 +875,8 @@ def _apply_box_selection(context):
             selected_anchor_ids.add(int(a.get("id", 0)))
 
     for _i0, _i1, id0, id1, a0, a1 in _connected_anchor_segments():
-        p0 = (a0["lane_x"], a0["beat"])
-        p1 = _anchor_out_abs_chart(a0)
-        p2 = _anchor_in_abs_chart(a1)
-        p3 = (a1["lane_x"], a1["beat"])
         hit = False
-        for j in range(25):
-            t = j / 24.0
-            lane_x, beat = _cubic_point(p0, p1, p2, p3, t)
+        for lane_x, beat in _sample_segment_chart(a0, a1, 24, id0, id1):
             cx, cy = _chart_to_canvas(context, lane_x, beat)
             if _point_in_rect(cx, cy, rect):
                 hit = True
@@ -1070,22 +1171,45 @@ def _cubic_point(a, b, c, d, t):
     return x, y
 
 
+def _note_curve_snap_enabled():
+    return bool(STATE.get("note_curve_snap_enabled", False))
+
+
+def _segment_point_chart(a0, a1, t, id0=None, id1=None):
+    p0 = (a0["lane_x"], a0["beat"])
+    p3 = (a1["lane_x"], a1["beat"])
+    t = _clamp(float(t), 0.0, 1.0)
+    if id0 is not None and id1 is not None:
+        shape = _segment_shape_for_link(id0, id1)
+    else:
+        shape = _active_link_shape()
+    if shape == "polyline":
+        return p0[0] + (p3[0] - p0[0]) * t, p0[1] + (p3[1] - p0[1]) * t
+
+    p1 = _anchor_out_abs_chart(a0)
+    p2 = _anchor_in_abs_chart(a1)
+    return _cubic_point(p0, p1, p2, p3, t)
+
+
+def _sample_segment_chart(a0, a1, samples_per_segment=24, id0=None, id1=None):
+    pts = []
+    samples = max(1, int(samples_per_segment))
+    for j in range(samples + 1):
+        pts.append(_segment_point_chart(a0, a1, j / float(samples), id0, id1))
+    return pts
+
+
 def _sample_curve_chart(samples_per_segment=24):
     segments = _connected_anchor_segments()
     if not segments:
         return []
 
     pts = []
-    for _i0, _i1, _id0, _id1, a0, a1 in segments:
-        p0 = (a0["lane_x"], a0["beat"])
-        p1 = _anchor_out_abs_chart(a0)
-        p2 = _anchor_in_abs_chart(a1)
-        p3 = (a1["lane_x"], a1["beat"])
-        for j in range(samples_per_segment + 1):
-            t = j / float(samples_per_segment)
-            if pts and j == 0:
-                continue
-            pts.append(_cubic_point(p0, p1, p2, p3, t))
+    for _i0, _i1, id0, id1, a0, a1 in segments:
+        sampled = _sample_segment_chart(a0, a1, samples_per_segment, id0, id1)
+        if pts and sampled:
+            sampled = sampled[1:]
+        pts.extend(sampled)
     return pts
 
 
@@ -1280,7 +1404,10 @@ def _save_project(path, context=None):
             "anchors": [_serialize_anchor(a) for a in STATE.get("anchors", [])],
             "links": _clone(STATE.get("links", [])),
             "segment_denominators": _clone(STATE.get("segment_denominators", {})),
+            "segment_shapes": _clone(STATE.get("segment_shapes", {})),
             "style": STATE.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"}),
+            "active_link_shape": _active_link_shape(),
+            "note_curve_snap_enabled": _note_curve_snap_enabled(),
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -1314,6 +1441,18 @@ def _load_project(path, context):
             STATE["links"] = _default_links_for_anchors()
         seg_dens = payload.get("segment_denominators")
         STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
+        seg_shapes = payload.get("segment_shapes")
+        if isinstance(seg_shapes, dict):
+            STATE["segment_shapes"] = _clone(seg_shapes)
+        else:
+            legacy_shape = _normalize_shape_name(payload.get("curve_shape", "curve"))
+            STATE["segment_shapes"] = {}
+            if legacy_shape == "polyline":
+                for raw in STATE.get("links", []):
+                    if isinstance(raw, list) and len(raw) == 2:
+                        norm = _normalize_link(raw[0], raw[1])
+                        if norm is not None:
+                            STATE["segment_shapes"][f"{norm[0]}:{norm[1]}"] = "polyline"
         _cleanup_links_and_selection()
         _seed_missing_segment_denominators(context)
 
@@ -1323,6 +1462,9 @@ def _load_project(path, context):
                 "style_name": str(style.get("style_name", "loaded")),
                 "denominators": _sanitize_denominators(style.get("denominators"), context),
             }
+        active_shape = payload.get("active_link_shape", payload.get("curve_shape", "curve"))
+        STATE["active_link_shape"] = _normalize_shape_name(active_shape)
+        STATE["note_curve_snap_enabled"] = bool(payload.get("note_curve_snap_enabled", False))
 
         _invalidate_curve_cache()
         STATE["project_dirty"] = False
@@ -1423,19 +1565,12 @@ def _build_overlay(context):
 
     if show_preview:
         for _i0, _i1, id0, id1, a0, a1 in _connected_anchor_segments():
-            p0 = (a0["lane_x"], a0["beat"])
-            p1 = _anchor_out_abs_chart(a0)
-            p2 = _anchor_in_abs_chart(a1)
-            p3 = (a1["lane_x"], a1["beat"])
             is_selected_segment = (id0, id1) in selected_link_set
             seg_color = "#FFD66B" if is_selected_segment else "#33CCFF"
             seg_width = 3.0 if is_selected_segment else 2.0
-            sampled = []
-            for j in range(25):
-                t = j / 24.0
-                sampled.append(_cubic_point(p0, p1, p2, p3, t))
+            sampled = _sample_segment_chart(a0, a1, 24, id0, id1)
             for j in range(len(sampled) - 1):
-                items.append({
+                line_item = {
                     "kind": "line",
                     "coord_space": "chart",
                     "lane_x1": sampled[j][0],
@@ -1444,7 +1579,10 @@ def _build_overlay(context):
                     "beat2": sampled[j + 1][1],
                     "color": seg_color,
                     "width": seg_width,
-                })
+                }
+                if _note_curve_snap_enabled():
+                    line_item["note_snap_reference"] = True
+                items.append(line_item)
             if show_samples:
                 for lane_x, beat in sampled[::4]:
                     items.append({
@@ -1606,9 +1744,11 @@ def _reset_anchors(context):
     STATE["anchors"] = _default_anchors()
     STATE["links"] = []
     STATE["segment_denominators"] = {}
+    STATE["segment_shapes"] = {}
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
     STATE["selected_links"] = []
+    STATE["context_menu_links"] = []
     STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
     STATE["pending_connect_anchor_id"] = -1
     _invalidate_curve_cache()
@@ -1687,16 +1827,76 @@ def _chart_to_note(context, lane_x, beat, den):
     return {"beat": [b, n, d], "x": int(round(lane_x)), "type": 0}
 
 
-def _sample_single_segment_chart(a0, a1, samples_per_segment=24):
-    p0 = (a0["lane_x"], a0["beat"])
-    p1 = _anchor_out_abs_chart(a0)
-    p2 = _anchor_in_abs_chart(a1)
-    p3 = (a1["lane_x"], a1["beat"])
-    pts = []
-    for j in range(samples_per_segment + 1):
-        t = j / float(samples_per_segment)
-        pts.append(_cubic_point(p0, p1, p2, p3, t))
-    return pts
+def _beat_fraction_from_triplet(triplet):
+    if not isinstance(triplet, list) or len(triplet) != 3:
+        return None
+    try:
+        beat_num = int(triplet[0])
+        numerator = int(triplet[1])
+        denominator = int(triplet[2])
+    except Exception:
+        return None
+    if denominator <= 0:
+        return None
+    return Fraction(beat_num, 1) + Fraction(numerator, denominator)
+
+
+def _normal_note_position_key(note_obj):
+    if not isinstance(note_obj, dict):
+        return None
+    try:
+        note_type = int(note_obj.get("type", 0) or 0)
+    except Exception:
+        note_type = 0
+    if note_type != 0:
+        return None
+
+    beat = _beat_fraction_from_triplet(note_obj.get("beat"))
+    if beat is None:
+        return None
+    try:
+        x = int(round(float(note_obj.get("x", note_obj.get("lane_x", 0)))))
+    except Exception:
+        return None
+    return beat, x
+
+
+def _existing_normal_note_position_keys(context):
+    keys = set()
+    if not isinstance(context, dict):
+        return keys
+
+    raw_positions = context.get("existing_note_positions")
+    if isinstance(raw_positions, list):
+        for raw in raw_positions:
+            key = _normal_note_position_key(raw)
+            if key is not None:
+                keys.add(key)
+
+    if keys:
+        return keys
+
+    chart_path = str(context.get("chart_path", "") or "").strip()
+    if not chart_path or not os.path.exists(chart_path):
+        return keys
+    try:
+        with open(chart_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return keys
+
+    notes = payload.get("note") if isinstance(payload, dict) else None
+    if not isinstance(notes, list):
+        return keys
+    for raw in notes:
+        key = _normal_note_position_key(raw)
+        if key is not None:
+            keys.add(key)
+    return keys
+
+
+def _sample_single_segment_chart(a0, a1, samples_per_segment=24, id0=None, id1=None):
+    return _sample_segment_chart(a0, a1, samples_per_segment, id0, id1)
 
 
 def _connected_curve_segment_groups():
@@ -1742,11 +1942,23 @@ def _connected_curve_segment_groups():
     return grouped
 
 
-def _build_batch_from_curve(context):
+def _build_batch_from_curve(context, target_links=None):
     if not isinstance(context, dict):
         return {"add": [], "remove": [], "move": []}
 
     segments = _connected_anchor_segments()
+    if target_links is not None:
+        target_set = set()
+        for raw in target_links:
+            if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+                continue
+            norm = _normalize_link(raw[0], raw[1])
+            if norm is not None:
+                target_set.add(norm)
+        if not target_set:
+            return {"add": [], "remove": [], "move": []}
+        segments = [seg for seg in segments if _normalize_link(seg[2], seg[3]) in target_set]
+
     if not segments:
         return {"add": [], "remove": [], "move": []}
 
@@ -1754,10 +1966,11 @@ def _build_batch_from_curve(context):
     default_den = max(1, override_den if override_den > 0 else int(context.get("time_division", 4)))
 
     out = []
+    existing = _existing_normal_note_position_keys(context)
     seen = set()
     for _i0, _i1, id0, id1, a0, a1 in segments:
         seg_den = _segment_denominator_for_link(id0, id1, default_den)
-        sampled_segment = _sample_single_segment_chart(a0, a1, 32)
+        sampled_segment = _sample_single_segment_chart(a0, a1, 32, id0, id1)
         samples_by_beat = _normalize_samples_by_beat(sampled_segment)
         if len(samples_by_beat) < 2:
             continue
@@ -1778,9 +1991,8 @@ def _build_batch_from_curve(context):
                 continue
             lane_x = _lane_x_at_beat(samples_by_beat, beat)
             note = _chart_to_note(context, lane_x, beat, seg_den)
-            beat_triplet = note.get("beat", [0, 0, 1])
-            key = (int(beat_triplet[0]), int(beat_triplet[1]), int(beat_triplet[2]), int(note.get("x", 0)))
-            if key in seen:
+            key = _normal_note_position_key(note)
+            if key is None or key in existing or key in seen:
                 continue
             seen.add(key)
             out.append(note)
@@ -1837,6 +2049,84 @@ def _selected_target_links():
     return []
 
 
+def _selected_links_all_polyline():
+    links = _selected_target_links()
+    if not links:
+        return _active_link_shape_is_polyline()
+    return all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links)
+
+
+def _toggle_polyline_for_active_or_selected(context):
+    links = _selected_target_links()
+    target = "polyline"
+    if links and all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links):
+        target = "curve"
+    elif not links and _active_link_shape_is_polyline():
+        target = "curve"
+
+    STATE["active_link_shape"] = target
+    changed = False
+    for id0, id1 in links:
+        changed = _set_segment_shape(id0, id1, target) or changed
+    if links and changed:
+        _invalidate_curve_cache()
+    _record_history_state(context)
+    return True
+
+
+def _set_context_menu_links_for_hit(context, x, y):
+    hit = _find_segment_hit(context, x, y)
+    selected = _selected_target_links()
+    selected_set = set(selected)
+
+    target = []
+    if hit is not None:
+        norm = _normalize_link(hit[0], hit[1])
+        if norm is not None:
+            if norm in selected_set and len(selected) > 1:
+                target = selected
+            else:
+                target = [norm]
+    elif selected:
+        target = selected
+
+    STATE["context_menu_links"] = [[int(a), int(b)] for a, b in target]
+    return STATE["context_menu_links"]
+
+
+def _context_menu_target_links():
+    target = []
+    for raw in STATE.get("context_menu_links", []):
+        if not isinstance(raw, list) or len(raw) != 2:
+            continue
+        norm = _normalize_link(raw[0], raw[1])
+        if norm is not None and _link_exists(norm[0], norm[1]):
+            target.append(norm)
+    if target:
+        return target
+    return _selected_target_links()
+
+
+def _context_links_all_polyline():
+    links = _context_menu_target_links()
+    return bool(links) and all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links)
+
+
+def _toggle_polyline_for_context_links(context):
+    links = _context_menu_target_links()
+    if not links:
+        return False
+
+    target = "curve" if all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links) else "polyline"
+    changed = False
+    for id0, id1 in links:
+        changed = _set_segment_shape(id0, id1, target) or changed
+    if changed:
+        _invalidate_curve_cache()
+        _record_history_state(context)
+    return True
+
+
 def _set_density_for_selected_segments(context, target_den):
     links = _selected_target_links()
     if not links:
@@ -1850,38 +2140,6 @@ def _set_density_for_selected_segments(context, target_den):
     if changed:
         _record_history_state(context)
     return changed
-
-
-def _cycle_density_style(context):
-    current = STATE.get("style", {}).get("denominators", [4, 8, 12, 16])
-    normalized_values = _sanitize_denominators(current, context)
-    normalized = tuple(normalized_values)
-    selected_links = _selected_target_links()
-
-    if selected_links:
-        override_den = int(context.get("plugin_time_division_override", 0) or 0) if isinstance(context, dict) else 0
-        default_den = max(1, override_den if override_den > 0 else int((context or {}).get("time_division", 4)))
-        changed = False
-        for id0, id1 in selected_links:
-            cur_den = _segment_denominator_for_link(id0, id1, default_den)
-            if cur_den in normalized_values:
-                idx = normalized_values.index(cur_den)
-                next_den = normalized_values[(idx + 1) % len(normalized_values)]
-            else:
-                next_den = normalized_values[0]
-            changed = _set_segment_denominator(id0, id1, next_den) or changed
-        if changed:
-            _record_history_state(context)
-        return
-
-    target_index = 0
-    for i, preset in enumerate(STYLE_PRESETS):
-        if tuple(_sanitize_denominators(preset, context)) == normalized:
-            target_index = (i + 1) % len(STYLE_PRESETS)
-            break
-    next_values = _sanitize_denominators(STYLE_PRESETS[target_index], context)
-    STATE["style"] = {"style_name": f"preset_{target_index + 1}", "denominators": next_values}
-    _record_history_state(context)
 
 
 def _sync_anchor_selection_from_host_notes(context):
@@ -1961,6 +2219,19 @@ def _handle_canvas_input(payload):
     cursor = "arrow"
     request_checkpoint = False
 
+    if _note_curve_snap_enabled() and et in ("mouse_down", "mouse_move", "mouse_up"):
+        buttons = int(event.get("buttons", 0))
+        if button == LEFT_BUTTON or (buttons & LEFT_BUTTON):
+            return {
+                "consumed": False,
+                "overlay": _build_overlay(STATE["last_context"]),
+                "cursor": "arrow",
+                "status_text": "",
+                "preview_batch_edit": {"add": [], "remove": [], "move": []},
+                "request_undo_checkpoint": False,
+                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
+            }
+
     if et == "mouse_down":
         hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
         aidx = _find_anchor_hit(STATE["last_context"], x, y) if _selection_enabled("anchors") else -1
@@ -1972,12 +2243,22 @@ def _handle_canvas_input(payload):
         is_select_mode = bool(host_sel.get("is_select_mode", False)) if isinstance(host_sel, dict) else False
 
         if button == RIGHT_BUTTON:
+            _set_context_menu_links_for_hit(STATE["last_context"], x, y)
             consumed = False
         elif button == LEFT_BUTTON:
             notes_selectable = _selection_enabled("notes")
             anchor_placement_enabled = bool(STATE.get("anchor_placement_enabled", False))
             host_select_passthrough = bool(is_select_mode and notes_selectable)
-            if host_select_passthrough:
+            blank_hit = hidx < 0 and aidx < 0 and seg_hit is None
+            had_selection = bool(STATE.get("selected_anchor_ids")) or bool(STATE.get("selected_links"))
+            if blank_hit and had_selection:
+                STATE["selected_anchor_ids"] = []
+                STATE["selected_links"] = []
+                STATE["pending_connect_anchor_id"] = -1
+                STATE["drag"] = {"mode": "", "index": -1}
+                status = tr(STATE["last_context"], "status_selection_cleared")
+                consumed = True
+            elif host_select_passthrough:
                 consumed = False
             elif hidx >= 0:
                 STATE["drag"] = {"mode": hkind, "index": hidx}
@@ -2010,7 +2291,7 @@ def _handle_canvas_input(payload):
                 if ctrl:
                     _toggle_selected_anchor(anchor_id)
                 else:
-                    _set_single_selected_anchor(anchor_id)
+                    _add_selected_anchor(anchor_id)
                     STATE["selected_links"] = []
                 is_double = (STATE["last_click_anchor"] == aidx and ts - STATE["last_click_ms"] <= 280)
                 STATE["last_click_anchor"] = aidx
@@ -2056,12 +2337,6 @@ def _handle_canvas_input(payload):
                 consumed = True
                 status = tr(STATE["last_context"], "status_box_selecting")
             else:
-                had_selection = bool(STATE.get("selected_anchor_ids")) or bool(STATE.get("selected_links"))
-                if not anchor_placement_enabled and had_selection:
-                    STATE["selected_anchor_ids"] = []
-                    STATE["selected_links"] = []
-                    status = tr(STATE["last_context"], "status_selection_cleared")
-                    consumed = not notes_selectable
                 if notes_selectable and not anchor_placement_enabled:
                     consumed = False
                 elif not anchor_placement_enabled:
@@ -2349,6 +2624,24 @@ def _list_tool_actions():
             "checked": bool(STATE.get("curve_visible", True)),
         },
         {
+            "action_id": "toggle_polyline_mode",
+            "title": tr(STATE.get("last_context", {}), "action_polyline_mode"),
+            "description": tr(STATE.get("last_context", {}), "action_polyline_mode_desc"),
+            "placement": "right_note_panel",
+            "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": _selected_links_all_polyline(),
+        },
+        {
+            "action_id": "toggle_note_curve_snap",
+            "title": tr(STATE.get("last_context", {}), "action_note_curve_snap"),
+            "description": tr(STATE.get("last_context", {}), "action_note_curve_snap_desc"),
+            "placement": "right_note_panel",
+            "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": _note_curve_snap_enabled(),
+        },
+        {
             "action_id": "toggle_select_anchors",
             "title": tr(STATE.get("last_context", {}), "action_toggle_select_anchors"),
             "description": tr(STATE.get("last_context", {}), "action_toggle_select_anchors_desc"),
@@ -2381,6 +2674,22 @@ def _list_tool_actions():
             "description": tr(STATE.get("last_context", {}), "action_commit_curve_desc"),
             "placement": "left_sidebar",
             "requires_undo_snapshot": True,
+        },
+        {
+            "action_id": "commit_context_segments_to_notes",
+            "title": tr(STATE.get("last_context", {}), "action_commit_context_segments"),
+            "description": tr(STATE.get("last_context", {}), "action_commit_context_segments_desc"),
+            "placement": "plugin_context_menu",
+            "requires_undo_snapshot": True,
+        },
+        {
+            "action_id": "toggle_context_polyline_mode",
+            "title": tr(STATE.get("last_context", {}), "action_toggle_context_shape"),
+            "description": tr(STATE.get("last_context", {}), "action_polyline_context_desc"),
+            "placement": "plugin_context_menu",
+            "requires_undo_snapshot": False,
+            "checkable": True,
+            "checked": _context_links_all_polyline(),
         },
         {
             "action_id": "reset_curve",
@@ -2418,13 +2727,6 @@ def _list_tool_actions():
             "requires_undo_snapshot": False,
         },
         {
-            "action_id": "cycle_density_style",
-            "title": tr(STATE.get("last_context", {}), "action_cycle_density"),
-            "description": tr(STATE.get("last_context", {}), "action_cycle_density_desc"),
-            "placement": "plugin_context_menu",
-            "requires_undo_snapshot": False,
-        },
-        {
             "action_id": "export_style_preset",
             "title": tr(STATE.get("last_context", {}), "action_export_style"),
             "description": tr(STATE.get("last_context", {}), "action_export_style_desc"),
@@ -2451,7 +2753,7 @@ def _run_tool_action(payload):
     if action_id == "reset_curve":
         _reset_anchors(context)
         return True
-    if action_id in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar"):
+    if action_id in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar", "commit_context_segments_to_notes"):
         if STATE["project_path"] and STATE["project_dirty"]:
             _save_project(STATE["project_path"], context)
         return True
@@ -2461,6 +2763,14 @@ def _run_tool_action(payload):
         return True
     if action_id == "toggle_curve_visible":
         STATE["curve_visible"] = not bool(STATE.get("curve_visible", True))
+        _record_history_state(context)
+        return True
+    if action_id == "toggle_polyline_mode":
+        return _toggle_polyline_for_active_or_selected(context)
+    if action_id == "toggle_context_polyline_mode":
+        return _toggle_polyline_for_context_links(context)
+    if action_id == "toggle_note_curve_snap":
+        STATE["note_curve_snap_enabled"] = not _note_curve_snap_enabled()
         _record_history_state(context)
         return True
     if action_id == "toggle_select_anchors":
@@ -2481,9 +2791,6 @@ def _run_tool_action(payload):
         cur = bool(STATE.get("selection_targets", {}).get("notes", False))
         STATE["selection_targets"]["notes"] = not cur
         _record_history_state(context)
-        return True
-    if action_id == "cycle_density_style":
-        _cycle_density_style(context)
         return True
     if action_id == "set_segment_density_follow":
         return _set_density_for_selected_segments(context, 0)
@@ -2527,8 +2834,10 @@ def _build_batch_edit(payload):
     context = (payload or {}).get("context", {}) or {}
     _ensure_project_context(context)
     _seed_missing_segment_denominators(context)
-    if action_id not in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar"):
+    if action_id not in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar", "commit_context_segments_to_notes"):
         return {"add": [], "remove": [], "move": []}
+    if action_id == "commit_context_segments_to_notes":
+        return _build_batch_from_curve(context, _context_menu_target_links())
     return _build_batch_from_curve(context)
 
 
@@ -2540,12 +2849,15 @@ def run_one_shot(action_id):
         "reset_curve",
         "commit_curve_to_notes",
         "commit_curve_to_notes_sidebar",
+        "commit_context_segments_to_notes",
         "toggle_anchor_placement",
         "toggle_curve_visible",
+        "toggle_polyline_mode",
+        "toggle_context_polyline_mode",
+        "toggle_note_curve_snap",
         "toggle_select_anchors",
         "toggle_select_segments",
         "toggle_select_notes",
-        "cycle_density_style",
         "connect_selected_nodes",
         "disconnect_selected_segments",
         "connect_selected_nodes_ctx",

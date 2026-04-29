@@ -14,6 +14,9 @@ class QMenu;
 class QScrollBar;
 class QKeySequence;
 class QCloseEvent;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
 class ChartCanvas;
 class NoteEditPanel;
 class BPMTimePanel;
@@ -39,6 +42,9 @@ public:
 protected:
     void changeEvent(QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
 private slots:
     void openChart();

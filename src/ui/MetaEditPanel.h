@@ -21,6 +21,9 @@ public:
     void setSelectionController(SelectionController *controller) override;
     void retranslateUi();
 
+signals:
+    void backgroundResourceChanged();
+
 private slots:
     void refreshMeta();
     void onSaveClicked();
@@ -29,6 +32,7 @@ private slots:
 
 private:
     void setupUi();
+    QString importResourceToChartDirectory(const QString &sourcePath) const;
     MetaData collectMetaFromUi() const;
     bool isSameMeta(const MetaData &a, const MetaData &b) const;
     bool applyMetaAndPersist(bool persistToDisk);

@@ -803,6 +803,7 @@ QList<PluginInterface::CanvasOverlayItem> ExternalProcessPlugin::parseOverlayIte
             item.width = obj.value("width").toDouble(item.width);
         if (obj.contains("font_px"))
             item.fontPx = obj.value("font_px").toInt(item.fontPx);
+        item.noteSnapReference = obj.value("note_snap_reference").toBool(false);
 
         const QString coordSpace = obj.value("coord_space").toString().trimmed().toLower();
         if (coordSpace == "chart")

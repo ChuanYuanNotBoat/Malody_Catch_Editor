@@ -181,6 +181,98 @@ void ChartCanvas::prepareMoveChanges()
     }
 }
 
+bool ChartCanvas::hasNoteSnapReferenceOverlays() const
+{
+    for (const PluginInterface::CanvasOverlayItem &item : m_overlayCache)
+    {
+        if (!item.noteSnapReference)
+            continue;
+        if (item.kind == PluginInterface::CanvasOverlayItem::Line && item.chartSpace)
+            return true;
+    }
+    return false;
+}
+
+void ChartCanvas::refreshPluginOverlayCacheForSnap()
+{
+    if (!m_pluginToolModeActive)
+        return;
+
+    PluginManager *pm = activePluginManager();
+    if (!pm)
+        return;
+
+    QVariantMap overlayContext = buildPluginCanvasContext();
+    overlayContext.insert("left_margin", leftMargin());
+    overlayContext.insert("right_margin", rightMargin());
+    m_overlayCache = pm->canvasOverlays(overlayContext);
+    m_lastOverlayQueryMs = QDateTime::currentMSecsSinceEpoch();
+}
+
+bool ChartCanvas::curveSnapXForBeat(double beat, int currentX, int *outX) const
+{
+    if (!outX)
+        return false;
+
+    constexpr double kSnapRangePx = 16.0;
+    constexpr double kBeatEpsilon = 1e-7;
+    bool found = false;
+    double bestDistancePx = kSnapRangePx + 1.0;
+    double bestLaneX = currentX;
+    const double currentCanvasX = laneXToCanvasX(currentX);
+
+    for (const PluginInterface::CanvasOverlayItem &item : m_overlayCache)
+    {
+        if (item.kind != PluginInterface::CanvasOverlayItem::Line || !item.chartSpace)
+            continue;
+        if (!item.noteSnapReference)
+            continue;
+
+        const double b0 = item.chartFrom.y();
+        const double b1 = item.chartTo.y();
+        const double lo = qMin(b0, b1) - kBeatEpsilon;
+        const double hi = qMax(b0, b1) + kBeatEpsilon;
+        if (beat < lo || beat > hi)
+            continue;
+
+        double laneX = item.chartFrom.x();
+        const double span = b1 - b0;
+        if (qAbs(span) > kBeatEpsilon)
+        {
+            const double t = qBound(0.0, (beat - b0) / span, 1.0);
+            laneX = item.chartFrom.x() + (item.chartTo.x() - item.chartFrom.x()) * t;
+        }
+        else if (qAbs(beat - b0) > kBeatEpsilon)
+        {
+            continue;
+        }
+
+        const double distancePx = qAbs(laneXToCanvasX(laneX) - currentCanvasX);
+        if (distancePx <= kSnapRangePx && distancePx < bestDistancePx)
+        {
+            bestDistancePx = distancePx;
+            bestLaneX = laneX;
+            found = true;
+        }
+    }
+
+    if (!found)
+        return false;
+
+    *outX = qBound(0, qRound(bestLaneX), kLaneWidth);
+    return true;
+}
+
+void ChartCanvas::applyCurveSnapToMovedNote(Note *note, double beat) const
+{
+    if (!note || !m_noteSnapReferenceActiveForMove || note->type == NoteType::SOUND)
+        return;
+
+    int snappedX = note->x;
+    if (curveSnapXForBeat(beat, note->x, &snappedX))
+        note->x = snappedX;
+}
+
 void ChartCanvas::beginMoveSelection(const QPointF &startPos, int referenceIndex)
 {
     m_isMovingSelection = true;
@@ -197,6 +289,8 @@ void ChartCanvas::beginMoveSelection(const QPointF &startPos, int referenceIndex
     m_gridSnapBackup = m_gridSnap;
     m_wasGridSnapEnabled = m_gridSnap;
     m_gridSnap = false;
+    refreshPluginOverlayCacheForSnap();
+    m_noteSnapReferenceActiveForMove = hasNoteSnapReferenceOverlays();
 
     prepareMoveChanges();
     update();
@@ -245,7 +339,13 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
 
     for (int idx : selectedList)
     {
-        const Note &original = m_moveChanges[idx].first;
+        if (idx < 0 || idx >= notes->size())
+            continue;
+        auto it = m_moveChanges.constFind(idx);
+        if (it == m_moveChanges.constEnd())
+            continue;
+
+        const Note &original = it->first;
         Note newNote = original;
 
         double originalBeat = MathUtils::beatToFloat(original.beatNum, original.numerator, original.denominator);
@@ -265,6 +365,7 @@ void ChartCanvas::updateMoveSelection(const QPointF &currentPos)
             MathUtils::floatToBeat(newEndBeat, newNote.endBeatNum, newNote.endNumerator, newNote.endDenominator);
         }
 
+        applyCurveSnapToMovedNote(&newNote, newBeat);
         (*notes)[idx] = newNote;
     }
 
@@ -330,6 +431,7 @@ void ChartCanvas::endMoveSelection()
             MathUtils::floatToBeat(newEndBeat, snappedNote.endBeatNum, snappedNote.endNumerator, snappedNote.endDenominator);
         }
 
+        applyCurveSnapToMovedNote(&snappedNote, newBeat);
         (*notes)[idx] = snappedNote;
     }
 
@@ -337,6 +439,8 @@ void ChartCanvas::endMoveSelection()
     const auto &notesNow = chart()->notes();
     for (int idx : m_originalSelectedIndices)
     {
+        if (idx < 0 || idx >= notesNow.size())
+            continue;
         const Note &currentNote = notesNow[idx];
         auto it = m_moveChanges.find(idx);
         if (it != m_moveChanges.end())
@@ -348,12 +452,21 @@ void ChartCanvas::endMoveSelection()
     }
 
     if (!finalChanges.isEmpty())
+    {
+        for (int idx : m_originalSelectedIndices)
+        {
+            auto it = m_moveChanges.find(idx);
+            if (it != m_moveChanges.end() && idx >= 0 && idx < notes->size())
+                (*notes)[idx] = it->first;
+        }
         m_chartController->moveNotes(finalChanges);
+    }
 
     m_originalSelectedIndices.clear();
     m_dragReferenceIndex = -1;
     m_moveDeltaBeatRaw = 0.0;
     m_moveDeltaXRaw = 0.0;
+    m_noteSnapReferenceActiveForMove = false;
     m_moveChanges.clear();
     m_moveStartPos = QPointF();
 
