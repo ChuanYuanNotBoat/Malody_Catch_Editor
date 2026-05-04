@@ -152,8 +152,6 @@ private:
     double yToBeat(double y) const;
     int hitTestNote(const QPointF &pos) const;
     QRectF getRainNoteRect(const Note &note) const;
-    void invalidateCache();
-    void updateNotePosCacheIfNeeded(); // Deprecated; kept as a no-op for compatibility.
     void updateBackgroundCache();
 
     void beginMoveSelection(const QPointF &startPos, int referenceIndex = -1);

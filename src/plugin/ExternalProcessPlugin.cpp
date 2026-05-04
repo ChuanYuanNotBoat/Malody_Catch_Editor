@@ -72,6 +72,26 @@ int requestTimeoutMsForMethod(const QString &method)
     return 5000;
 }
 
+constexpr int kHealthProbeTimeoutMs = 300;
+constexpr int kMaxNoteIdLength = 256;
+constexpr int kMaxSoundPathLength = 1024;
+constexpr int kMaxAbsBeatComponent = 1000000;
+constexpr int kMaxDenominator = 8192;
+constexpr int kMaxAbsOffsetMs = 3600000;
+constexpr int kMaxAbsVolume = 1000;
+
+QJsonObject initializePayloadFor(const ExternalProcessPlugin::Manifest &manifest)
+{
+    QString locale = Settings::instance().language().trimmed();
+    if (locale.isEmpty())
+        locale = QLocale::system().name();
+    return QJsonObject{
+        {"plugin_id", manifest.pluginId},
+        {"locale", locale},
+        {"host_api_version", PluginInterface::kHostApiVersion},
+    };
+}
+
 }
 
 ExternalProcessPlugin::ExternalProcessPlugin(Manifest manifest)
@@ -143,15 +163,10 @@ bool ExternalProcessPlugin::initialize(QWidget *mainWindow)
     if (!ensureProcessRunning())
         return false;
 
-    QString locale = Settings::instance().language().trimmed();
-    if (locale.isEmpty())
-        locale = QLocale::system().name();
-    const QJsonObject payload{
-        {"plugin_id", m_manifest.pluginId},
-        {"locale", locale},
-        {"host_api_version", PluginInterface::kHostApiVersion},
-    };
+    const QJsonObject payload = initializePayloadFor(m_manifest);
     m_initialized = sendNotification("initialize", payload);
+    if (m_initialized)
+        m_needsReinitialize = false;
     return m_initialized;
 }
 
@@ -172,6 +187,7 @@ void ExternalProcessPlugin::shutdown()
             m_process.waitForFinished(1000);
         }
     }
+    m_needsReinitialize = false;
 }
 
 void ExternalProcessPlugin::onChartChanged()
@@ -286,7 +302,11 @@ bool ExternalProcessPlugin::parseNoteJson(const QJsonObject &obj, Note *outNote)
 
     const int beatNum = beat[0].toInt();
     const int num = beat[1].toInt();
-    const int den = qMax(1, beat[2].toInt(1));
+    const int den = beat[2].toInt(1);
+    if (qAbs(beatNum) > kMaxAbsBeatComponent || qAbs(num) > kMaxAbsBeatComponent)
+        return false;
+    if (den <= 0 || den > kMaxDenominator)
+        return false;
     const int typeInt = obj.value("type").toInt(0);
     const NoteType type = Note::intToNoteType(typeInt);
 
@@ -297,7 +317,21 @@ bool ExternalProcessPlugin::parseNoteJson(const QJsonObject &obj, Note *outNote)
     note.type = type;
     note.isRain = (type == NoteType::RAIN);
     note.id = obj.value("id").toString();
+    if (note.id.size() > kMaxNoteIdLength)
+        return false;
+
     note.x = obj.value("x").toInt(256);
+    note.sound = obj.value("sound").toString();
+    note.vol = obj.value("vol").toInt(note.vol);
+    note.offset = obj.value("offset").toInt(note.offset);
+    if (note.sound.size() > kMaxSoundPathLength)
+        return false;
+    if (qAbs(note.offset) > kMaxAbsOffsetMs)
+        return false;
+    if (qAbs(note.vol) > kMaxAbsVolume)
+        return false;
+    if (type != NoteType::SOUND)
+        note.x = qBound(0, note.x, 512);
 
     if (type == NoteType::RAIN && obj.contains("endbeat") && obj.value("endbeat").isArray())
     {
@@ -306,7 +340,11 @@ bool ExternalProcessPlugin::parseNoteJson(const QJsonObject &obj, Note *outNote)
         {
             note.endBeatNum = endBeat[0].toInt();
             note.endNumerator = endBeat[1].toInt();
-            note.endDenominator = qMax(1, endBeat[2].toInt(1));
+            note.endDenominator = endBeat[2].toInt(1);
+            if (qAbs(note.endBeatNum) > kMaxAbsBeatComponent || qAbs(note.endNumerator) > kMaxAbsBeatComponent)
+                return false;
+            if (note.endDenominator <= 0 || note.endDenominator > kMaxDenominator)
+                return false;
         }
     }
     else
@@ -441,10 +479,13 @@ bool ExternalProcessPlugin::requestJson(const QString &method, const QJsonObject
         *result = QJsonValue();
     if (m_process.state() != QProcess::Running)
     {
-        Logger::warn(QString("Process plugin '%1' request '%2' skipped: process not running.")
-                         .arg(m_manifest.pluginId)
-                         .arg(method));
-        return false;
+        if (!const_cast<ExternalProcessPlugin *>(this)->ensureProcessRunning())
+        {
+            Logger::warn(QString("Process plugin '%1' request '%2' skipped: process not running.")
+                             .arg(m_manifest.pluginId)
+                             .arg(method));
+            return false;
+        }
     }
 
     const QString requestId = QString::number(QDateTime::currentMSecsSinceEpoch());
@@ -460,6 +501,8 @@ bool ExternalProcessPlugin::requestJson(const QString &method, const QJsonObject
         Logger::warn(QString("Process plugin '%1' request '%2' failed: writeLine error.")
                          .arg(m_manifest.pluginId)
                          .arg(method));
+        const_cast<ExternalProcessPlugin *>(this)->forceRestartProcess(
+            QString("writeLine failed for request '%1'").arg(method));
         return false;
     }
 
@@ -504,6 +547,19 @@ bool ExternalProcessPlugin::requestJson(const QString &method, const QJsonObject
                          .arg(m_manifest.pluginId)
                          .arg(method));
     }
+
+    if (!probeProcessHealth(kHealthProbeTimeoutMs))
+    {
+        const_cast<ExternalProcessPlugin *>(this)->forceRestartProcess(
+            QString("health probe failed after request timeout '%1'").arg(method));
+    }
+    else
+    {
+        Logger::warn(QString("Process plugin '%1' request '%2' timeout recovered: process replied to health probe.")
+                         .arg(m_manifest.pluginId)
+                         .arg(method));
+    }
+
     return false;
 }
 
@@ -622,10 +678,95 @@ bool ExternalProcessPlugin::runToolActionOneShot(const QString &actionId, const 
     return ok;
 }
 
+bool ExternalProcessPlugin::probeProcessHealth(int timeoutMs) const
+{
+    if (m_process.state() != QProcess::Running)
+        return false;
+
+    const QString probeId = QString("health_%1").arg(QDateTime::currentMSecsSinceEpoch());
+    const QJsonObject req{
+        {"type", "request"},
+        {"id", probeId},
+        {"method", "__hostPing"},
+        {"payload", QJsonObject()},
+    };
+    const QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact) + "\n";
+    if (!const_cast<ExternalProcessPlugin *>(this)->writeLine(line))
+        return false;
+
+    const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + timeoutMs;
+    while (QDateTime::currentMSecsSinceEpoch() < deadline)
+    {
+        const int remaining = static_cast<int>(deadline - QDateTime::currentMSecsSinceEpoch());
+        const int waitSlice = qMax(1, qMin(remaining, 50));
+        if (!m_process.waitForReadyRead(waitSlice))
+            continue;
+
+        const QString responseLine = QString::fromUtf8(m_process.readLine()).trimmed();
+        if (responseLine.isEmpty())
+            continue;
+
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(responseLine.toUtf8(), &err);
+        if (err.error != QJsonParseError::NoError || !doc.isObject())
+            continue;
+
+        const QJsonObject obj = doc.object();
+        if (obj.value("type").toString() != "response")
+            continue;
+        if (obj.value("id").toString() != probeId)
+            continue;
+        return true;
+    }
+    return false;
+}
+
+void ExternalProcessPlugin::forceRestartProcess(const QString &reason)
+{
+    const bool wasInitialized = m_initialized;
+    Logger::warn(QString("Process plugin '%1' restarting process: %2")
+                     .arg(m_manifest.pluginId)
+                     .arg(reason));
+
+    if (m_process.state() != QProcess::NotRunning)
+    {
+        m_process.terminate();
+        if (!m_process.waitForFinished(800))
+        {
+            m_process.kill();
+            m_process.waitForFinished(800);
+        }
+    }
+    m_process.readAllStandardOutput();
+    m_process.readAllStandardError();
+    m_needsReinitialize = wasInitialized;
+}
+
+bool ExternalProcessPlugin::sendInitializeNotification()
+{
+    const QJsonObject msg{
+        {"type", "notify"},
+        {"event", "initialize"},
+        {"payload", initializePayloadFor(m_manifest)},
+    };
+    const QByteArray line = QJsonDocument(msg).toJson(QJsonDocument::Compact) + "\n";
+    if (!writeLine(line))
+        return false;
+    m_needsReinitialize = false;
+    return true;
+}
+
 bool ExternalProcessPlugin::ensureProcessRunning()
 {
     if (m_process.state() == QProcess::Running)
+    {
+        if (m_needsReinitialize && !sendInitializeNotification())
+        {
+            forceRestartProcess("failed to reinitialize running process");
+            return false;
+        }
         return true;
+    }
 
     const QFileInfo manifestInfo(m_manifest.manifestPath);
     const QString baseDir = manifestInfo.absolutePath();
@@ -674,6 +815,11 @@ bool ExternalProcessPlugin::ensureProcessRunning()
         Logger::warn(QString("Failed to start process plugin '%1' (%2)")
                          .arg(m_manifest.pluginId)
                          .arg(executable));
+        return false;
+    }
+    if (m_needsReinitialize && !sendInitializeNotification())
+    {
+        forceRestartProcess("failed to send initialize after restart");
         return false;
     }
     return true;

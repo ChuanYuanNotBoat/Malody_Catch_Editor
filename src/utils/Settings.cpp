@@ -309,6 +309,66 @@ void Settings::setAutoSaveIntervalSec(int seconds)
     m_settings.setValue("editor/autoSaveIntervalSec", qMax(15, seconds));
 }
 
+bool Settings::qtMessageFilterEnabled() const
+{
+    return m_settings.value("logging/qtMessageFilterEnabled", false).toBool();
+}
+
+void Settings::setQtMessageFilterEnabled(bool enabled)
+{
+    m_settings.setValue("logging/qtMessageFilterEnabled", enabled);
+}
+
+QStringList Settings::qtMessageFilterCategories() const
+{
+    const QStringList raw = m_settings.value("logging/qtMessageFilterCategories", QStringList()).toStringList();
+    QStringList out;
+    for (const QString &entry : raw)
+    {
+        const QString trimmed = entry.trimmed();
+        if (!trimmed.isEmpty() && !out.contains(trimmed))
+            out.append(trimmed);
+    }
+    return out;
+}
+
+void Settings::setQtMessageFilterCategories(const QStringList &categories)
+{
+    QStringList cleaned;
+    for (const QString &entry : categories)
+    {
+        const QString trimmed = entry.trimmed();
+        if (!trimmed.isEmpty() && !cleaned.contains(trimmed))
+            cleaned.append(trimmed);
+    }
+    m_settings.setValue("logging/qtMessageFilterCategories", cleaned);
+}
+
+QStringList Settings::qtMessageFilterPrefixes() const
+{
+    const QStringList raw = m_settings.value("logging/qtMessageFilterPrefixes", QStringList()).toStringList();
+    QStringList out;
+    for (const QString &entry : raw)
+    {
+        const QString trimmed = entry.trimmed();
+        if (!trimmed.isEmpty() && !out.contains(trimmed))
+            out.append(trimmed);
+    }
+    return out;
+}
+
+void Settings::setQtMessageFilterPrefixes(const QStringList &prefixes)
+{
+    QStringList cleaned;
+    for (const QString &entry : prefixes)
+    {
+        const QString trimmed = entry.trimmed();
+        if (!trimmed.isEmpty() && !cleaned.contains(trimmed))
+            cleaned.append(trimmed);
+    }
+    m_settings.setValue("logging/qtMessageFilterPrefixes", cleaned);
+}
+
 int Settings::chartPickerPrimaryColumnWidth() const
 {
     return qMax(320, m_settings.value("ui/chartPickerPrimaryColumnWidth", 500).toInt());

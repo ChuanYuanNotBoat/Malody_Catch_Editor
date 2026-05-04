@@ -93,6 +93,9 @@ bool Application::initialize()
 
         Settings::instance();
         Logger::info("Settings loaded.");
+        Logger::setQtMessageFilterEnabled(Settings::instance().qtMessageFilterEnabled());
+        Logger::setQtMessageFilterCategories(Settings::instance().qtMessageFilterCategories());
+        Logger::setQtMessageFilterPrefixes(Settings::instance().qtMessageFilterPrefixes());
 
         MobileResourcePaths::ensureBundledResourcesReady();
         Logger::info("Mobile bundled resources prepared.");

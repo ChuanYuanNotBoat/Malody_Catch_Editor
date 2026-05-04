@@ -86,6 +86,13 @@ public:
     int autoSaveIntervalSec() const;
     void setAutoSaveIntervalSec(int seconds);
 
+    bool qtMessageFilterEnabled() const;
+    void setQtMessageFilterEnabled(bool enabled);
+    QStringList qtMessageFilterCategories() const;
+    void setQtMessageFilterCategories(const QStringList &categories);
+    QStringList qtMessageFilterPrefixes() const;
+    void setQtMessageFilterPrefixes(const QStringList &prefixes);
+
     int chartPickerPrimaryColumnWidth() const;
     void setChartPickerPrimaryColumnWidth(int width);
 

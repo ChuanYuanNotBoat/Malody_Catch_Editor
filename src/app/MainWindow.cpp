@@ -71,6 +71,8 @@
 #include <QListWidget>
 #include <QComboBox>
 #include <QPushButton>
+#include <QProgressDialog>
+#include <QThread>
 #include <QTreeWidget>
 #include <QSet>
 #include <QTimer>
@@ -86,9 +88,11 @@
 #include <QRegularExpression>
 #include <QStringConverter>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QUuid>
 #include <QDirIterator>
 #include <algorithm>
+#include <atomic>
 
 namespace
 {
@@ -587,12 +591,25 @@ void removePathRecursively(const QString &path)
     QFile::remove(path);
 }
 
-bool copyDirectoryRecursively(const QString &sourceDirPath, const QString &targetDirPath, QString *errorOut)
+struct CopyProgressState
+{
+    std::atomic<qint64> totalFiles{0};
+    std::atomic<qint64> copiedFiles{0};
+    std::atomic<qint64> totalBytes{0};
+    std::atomic<qint64> copiedBytes{0};
+    std::atomic<qint64> maxSingleFileMs{0};
+    std::atomic<bool> cancelRequested{false};
+};
+
+bool copyDirectoryRecursively(const QString &sourceDirPath,
+                              const QString &targetDirPath,
+                              QString *errorOut,
+                              CopyProgressState *progress)
 {
     if (errorOut)
         errorOut->clear();
 
-    QDir sourceDir(sourceDirPath);
+    const QDir sourceDir(sourceDirPath);
     if (!sourceDir.exists())
     {
         if (errorOut)
@@ -607,39 +624,91 @@ bool copyDirectoryRecursively(const QString &sourceDirPath, const QString &targe
         return false;
     }
 
-    QDirIterator it(sourceDirPath,
-                    QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext())
-    {
-        it.next();
-        const QFileInfo entry = it.fileInfo();
-        const QString relPath = sourceDir.relativeFilePath(entry.absoluteFilePath());
-        const QString targetPath = QDir(targetDirPath).filePath(relPath);
+    QVector<QFileInfo> directories;
+    QVector<QFileInfo> files;
+    qint64 totalBytes = 0;
 
+    QDirIterator scanIt(sourceDirPath,
+                        QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden | QDir::System,
+                        QDirIterator::Subdirectories);
+    while (scanIt.hasNext())
+    {
+        scanIt.next();
+        const QFileInfo entry = scanIt.fileInfo();
         if (entry.isDir() && !entry.isSymLink())
         {
-            if (!QDir().mkpath(targetPath))
-            {
-                if (errorOut)
-                    *errorOut = QObject::tr("Failed to create working subdirectory:\n%1").arg(targetPath);
-                return false;
-            }
+            directories.append(entry);
             continue;
         }
+        files.append(entry);
+        totalBytes += qMax<qint64>(0, entry.size());
+    }
 
+    if (progress)
+    {
+        progress->totalFiles.store(files.size());
+        progress->totalBytes.store(totalBytes);
+        progress->copiedFiles.store(0);
+        progress->copiedBytes.store(0);
+        progress->maxSingleFileMs.store(0);
+    }
+
+    for (const QFileInfo &entry : directories)
+    {
+        if (progress && progress->cancelRequested.load())
+        {
+            if (errorOut)
+                *errorOut = QObject::tr("Copy cancelled by user.");
+            return false;
+        }
+
+        const QString relPath = sourceDir.relativeFilePath(entry.absoluteFilePath());
+        const QString targetPath = QDir(targetDirPath).filePath(relPath);
+        if (!QDir().mkpath(targetPath))
+        {
+            if (errorOut)
+                *errorOut = QObject::tr("Failed to create working subdirectory:\n%1").arg(targetPath);
+            return false;
+        }
+    }
+
+    for (const QFileInfo &entry : files)
+    {
+        if (progress && progress->cancelRequested.load())
+        {
+            if (errorOut)
+                *errorOut = QObject::tr("Copy cancelled by user.");
+            return false;
+        }
+
+        const QString relPath = sourceDir.relativeFilePath(entry.absoluteFilePath());
+        const QString targetPath = QDir(targetDirPath).filePath(relPath);
         if (!QDir().mkpath(QFileInfo(targetPath).absolutePath()))
         {
             if (errorOut)
                 *errorOut = QObject::tr("Failed to prepare working file path:\n%1").arg(targetPath);
             return false;
         }
+
+        QElapsedTimer fileTimer;
+        fileTimer.start();
         QFile::remove(targetPath);
         if (!QFile::copy(entry.absoluteFilePath(), targetPath))
         {
             if (errorOut)
                 *errorOut = QObject::tr("Failed to copy required file:\n%1").arg(entry.absoluteFilePath());
             return false;
+        }
+
+        if (progress)
+        {
+            progress->copiedFiles.fetch_add(1);
+            progress->copiedBytes.fetch_add(qMax<qint64>(0, entry.size()));
+            const qint64 fileMs = fileTimer.elapsed();
+            qint64 expected = progress->maxSingleFileMs.load();
+            while (fileMs > expected && !progress->maxSingleFileMs.compare_exchange_weak(expected, fileMs))
+            {
+            }
         }
     }
 
@@ -739,7 +808,7 @@ void copyReferencedExternalResources(const QString &sourceChartPath, const QStri
         if (sourceFi.isDir() && !sourceFi.isSymLink())
         {
             QString copyError;
-            if (!copyDirectoryRecursively(sourceAbs, targetAbs, &copyError))
+            if (!copyDirectoryRecursively(sourceAbs, targetAbs, &copyError, nullptr))
             {
                 Logger::warn(QString("Failed to copy referenced resource directory: %1 (%2)").arg(resource, copyError));
             }
@@ -773,7 +842,7 @@ void syncSidecarDirectoryForChart(const QString &sourceChartPath, const QString 
 
     const QString targetSidecar = QDir(targetDir).filePath(".mcce-plugin");
     QString copyError;
-    if (!copyDirectoryRecursively(sourceSidecar, targetSidecar, &copyError))
+    if (!copyDirectoryRecursively(sourceSidecar, targetSidecar, &copyError, nullptr))
     {
         Logger::warn(QString("Failed to sync sidecar directory: %1 -> %2 (%3)")
                          .arg(sourceSidecar, targetSidecar, copyError));
@@ -862,7 +931,7 @@ bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPath
     QString workingSessionDir;
     const QString workingPath = buildWorkingCopyPath(sourcePath, &workingSessionDir);
     removePathRecursively(workingSessionDir);
-    if (!copyDirectoryRecursively(sourceInfo.absolutePath(), QFileInfo(workingPath).absoluteDir().absolutePath(), errorOut))
+    if (!copyDirectoryRecursively(sourceInfo.absolutePath(), QFileInfo(workingPath).absoluteDir().absolutePath(), errorOut, nullptr))
     {
         removePathRecursively(workingSessionDir);
         return false;
@@ -876,6 +945,146 @@ bool createWorkingCopyFromSource(const QString &sourcePath, QString *workingPath
 
     copyReferencedExternalResources(sourcePath, workingPath);
     syncSidecarDirectoryForChart(sourcePath, workingPath);
+
+    if (workingPathOut)
+        *workingPathOut = workingPath;
+    return true;
+}
+
+bool createWorkingCopyFromSourceWithProgress(QWidget *parent,
+                                             const QString &sourcePath,
+                                             QString *workingPathOut,
+                                             QString *errorOut)
+{
+    if (workingPathOut)
+        workingPathOut->clear();
+    if (errorOut)
+        errorOut->clear();
+
+    if (sourcePath.isEmpty())
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Source chart path is empty.");
+        return false;
+    }
+
+    const QString rootDir = sessionWorkingCopyRootDir();
+    if (!QDir().mkpath(rootDir))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Failed to create working copy directory:\n%1").arg(rootDir);
+        return false;
+    }
+
+    const QFileInfo sourceInfo(sourcePath);
+    if (!sourceInfo.exists() || !sourceInfo.isFile())
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Source chart does not exist:\n%1").arg(sourcePath);
+        return false;
+    }
+
+    QString workingSessionDir;
+    const QString workingPath = buildWorkingCopyPath(sourcePath, &workingSessionDir);
+    removePathRecursively(workingSessionDir);
+
+    CopyProgressState progress;
+    std::atomic<bool> finished{false};
+    std::atomic<bool> success{false};
+    QString asyncError;
+
+    QElapsedTimer timer;
+    timer.start();
+    QThread *worker = QThread::create([&]()
+    {
+        QString localError;
+        const bool copied = copyDirectoryRecursively(sourceInfo.absolutePath(),
+                                                     QFileInfo(workingPath).absoluteDir().absolutePath(),
+                                                     &localError,
+                                                     &progress);
+        if (copied)
+        {
+            copyReferencedExternalResources(sourcePath, workingPath);
+            syncSidecarDirectoryForChart(sourcePath, workingPath);
+            if (!QFile::exists(workingPath))
+                localError = QObject::tr("Working copy chart file is missing:\n%1").arg(workingPath);
+        }
+
+        if (!localError.isEmpty())
+            asyncError = localError;
+        success.store(localError.isEmpty() && copied);
+        finished.store(true);
+    });
+    worker->start();
+
+    QProgressDialog progressDialog(QObject::tr("Preparing working copy..."),
+                                   QObject::tr("Cancel"),
+                                   0,
+                                   100,
+                                   parent);
+    progressDialog.setWindowModality(Qt::ApplicationModal);
+    progressDialog.setAutoClose(false);
+    progressDialog.setAutoReset(false);
+    progressDialog.show();
+
+    while (!finished.load())
+    {
+        const qint64 totalFiles = qMax<qint64>(1, progress.totalFiles.load());
+        const qint64 copiedFiles = qBound<qint64>(0, progress.copiedFiles.load(), totalFiles);
+        const qint64 copiedBytes = qMax<qint64>(0, progress.copiedBytes.load());
+        const qint64 totalBytes = qMax<qint64>(0, progress.totalBytes.load());
+        const int percent = static_cast<int>((copiedFiles * 100) / totalFiles);
+        progressDialog.setValue(qBound(0, percent, 100));
+        progressDialog.setLabelText(QObject::tr("Preparing working copy...\n%1/%2 files, %3/%4 MB")
+                                        .arg(copiedFiles)
+                                        .arg(totalFiles)
+                                        .arg(QString::number(copiedBytes / 1024.0 / 1024.0, 'f', 1))
+                                        .arg(QString::number(totalBytes / 1024.0 / 1024.0, 'f', 1)));
+
+        if (progressDialog.wasCanceled())
+            progress.cancelRequested.store(true);
+
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QThread::msleep(15);
+    }
+
+    worker->wait();
+    delete worker;
+    progressDialog.setValue(100);
+
+    const qint64 elapsedMs = timer.elapsed();
+    Logger::logStructured(Logger::Info,
+                          QString("Working copy completed in %1 ms").arg(elapsedMs),
+                          "WorkingCopy",
+                          QMap<QString, QString>{
+                              {"source_path", sourcePath},
+                              {"working_path", workingPath},
+                              {"elapsed_ms", QString::number(elapsedMs)},
+                              {"files_total", QString::number(progress.totalFiles.load())},
+                              {"files_copied", QString::number(progress.copiedFiles.load())},
+                              {"bytes_total", QString::number(progress.totalBytes.load())},
+                              {"bytes_copied", QString::number(progress.copiedBytes.load())},
+                              {"max_file_ms", QString::number(progress.maxSingleFileMs.load())},
+                              {"success", success.load() ? "true" : "false"},
+                          });
+
+    if (progress.cancelRequested.load())
+    {
+        removePathRecursively(workingSessionDir);
+        if (errorOut)
+            *errorOut = QObject::tr("Copy cancelled by user.");
+        return false;
+    }
+
+    if (!success.load())
+    {
+        removePathRecursively(workingSessionDir);
+        if (errorOut)
+            *errorOut = asyncError.isEmpty()
+                            ? QObject::tr("Failed to create working copy.")
+                            : asyncError;
+        return false;
+    }
 
     if (workingPathOut)
         *workingPathOut = workingPath;
@@ -968,6 +1177,26 @@ MainWindow::MainWindow(ChartController *chartCtrl,
             {
         statusBar()->showMessage(msg, 3000);
         Logger::error("PlaybackController error: " + msg); });
+    if (d->playbackController && d->playbackController->audioPlayer())
+    {
+        connect(d->playbackController->audioPlayer(),
+                &AudioPlayer::errorOccurred,
+                this,
+                [this](const QString &error)
+                {
+                    updatePlaybackAvailability(false);
+                    statusBar()->showMessage(error, 5000);
+                    QMessageBox::warning(this, tr("Audio Load Error"), error);
+                });
+        connect(d->playbackController->audioPlayer(),
+                &AudioPlayer::loadingStateChanged,
+                this,
+                [this](AudioPlayer::LoadingState state)
+                {
+                    updatePlaybackAvailability(state == AudioPlayer::LoadingState::Loaded);
+                });
+        updatePlaybackAvailability(d->playbackController->audioPlayer()->canPlay());
+    }
     connect(d->playbackController, &PlaybackController::speedChanged, this, [this](double speed)
             {
         if (!d->speedActionGroup)
@@ -1222,6 +1451,7 @@ void MainWindow::createMenus()
 
     QMenu *playMenu = menuBar()->addMenu(tr("&Playback"));
     d->playAction = playMenu->addAction(tr("&Play/Pause"), this, &MainWindow::togglePlayback);
+    d->playAction->setEnabled(d->audioPlaybackReady);
     registerShortcutAction(d->playAction, "playback.play_pause", QKeySequence(Qt::Key_Space));
     playMenu->addSeparator();
     QMenu *speedMenu = playMenu->addMenu(tr("&Speed"));
@@ -1990,7 +2220,7 @@ void MainWindow::loadChartFile(const QString &filePath)
 
     QString workingChartPath;
     QString workingCopyError;
-    if (!createWorkingCopyFromSource(actualChartPath, &workingChartPath, &workingCopyError))
+    if (!createWorkingCopyFromSourceWithProgress(this, actualChartPath, &workingChartPath, &workingCopyError))
     {
         QMessageBox::critical(this, tr("Error"), workingCopyError);
         return;
@@ -2017,12 +2247,19 @@ void MainWindow::loadChartFile(const QString &filePath)
 
     QString chartDir = QFileInfo(actualChartPath).absolutePath();
     QString audioFile = d->chartController->chart()->meta().audioFile;
+    updatePlaybackAvailability(false);
     if (!audioFile.isEmpty())
     {
         QString audioPath = chartDir + "/" + audioFile;
         if (QFile::exists(audioPath))
         {
             d->playbackController->audioPlayer()->load(audioPath);
+        }
+        else
+        {
+            const QString msg = tr("Audio file not found: %1").arg(audioPath);
+            statusBar()->showMessage(msg, 5000);
+            QMessageBox::warning(this, tr("Audio Load Error"), msg);
         }
     }
 
@@ -2669,8 +2906,20 @@ void MainWindow::toggleVerticalFlip(bool flipped)
     d->canvas->setVerticalFlip(flipped);
 }
 
+void MainWindow::updatePlaybackAvailability(bool canPlay)
+{
+    d->audioPlaybackReady = canPlay;
+    if (d->playAction)
+        d->playAction->setEnabled(canPlay);
+}
+
 void MainWindow::togglePlayback()
 {
+    if (!d->audioPlaybackReady)
+    {
+        statusBar()->showMessage(tr("Audio is not ready. Please reload a valid audio file."), 3000);
+        return;
+    }
     if (d->playbackController->state() == PlaybackController::Playing)
     {
         Logger::debug("Playback paused");

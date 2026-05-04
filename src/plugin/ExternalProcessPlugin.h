@@ -63,6 +63,9 @@ private:
     bool requestBool(const QString &method, const QJsonObject &payload, bool defaultValue) const;
     bool requestJson(const QString &method, const QJsonObject &payload, QJsonValue *result) const;
     bool runToolActionOneShot(const QString &actionId, const QVariantMap &context) const;
+    bool probeProcessHealth(int timeoutMs) const;
+    void forceRestartProcess(const QString &reason);
+    bool sendInitializeNotification();
     bool ensureProcessRunning();
     QString resolveLocalizedValue(const QJsonObject &table, const QString &locale, const QString &fallback) const;
     QString readSingleLine(int timeoutMs) const;
@@ -75,4 +78,5 @@ private:
     Manifest m_manifest;
     mutable QProcess m_process;
     bool m_initialized = false;
+    bool m_needsReinitialize = false;
 };

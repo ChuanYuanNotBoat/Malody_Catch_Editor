@@ -6,6 +6,7 @@
 #include <QTextStream>
 #include <QtMessageHandler>
 #include <QMap>
+#include <QStringList>
 
 class Logger
 {
@@ -92,6 +93,13 @@ public:
      */
     static QString jsonLogFilePath();
 
+    static void setQtMessageFilterEnabled(bool enabled);
+    static bool isQtMessageFilterEnabled();
+    static void setQtMessageFilterCategories(const QStringList &categories);
+    static QStringList qtMessageFilterCategories();
+    static void setQtMessageFilterPrefixes(const QStringList &prefixes);
+    static QStringList qtMessageFilterPrefixes();
+
     /**
      * @brief 输出结构化日志消息（包含额外的上下文元数据）
      * @param level 日志级别
@@ -115,4 +123,7 @@ private:
     static bool s_jsonLoggingEnabled;
     static QFile m_jsonFile;
     static QTextStream m_jsonStream;
+    static bool s_qtMessageFilterEnabled;
+    static QStringList s_qtMessageFilterCategories;
+    static QStringList s_qtMessageFilterPrefixes;
 };

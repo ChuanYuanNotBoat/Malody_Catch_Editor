@@ -1,11 +1,15 @@
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QtGlobal>
+#include <algorithm>
 #include <cstdio>
 
 #include "file/ProjectIO.h"
+#include "file/ChartIO.h"
 #include "controller/ChartController.h"
 #include "model/Chart.h"
 #include "utils/MathUtils.h"
@@ -67,6 +71,83 @@ bool testMathUtilsCacheConsistency()
         const double byList = MathUtils::beatToMs(p.beatNum, p.num, p.den, bpmList, 120);
         const double byCache = MathUtils::beatToMs(p.beatNum, p.num, p.den, cache);
         if (!nearlyEqual(byList, byCache))
+            return false;
+    }
+    return true;
+}
+
+bool testMathUtilsEmptyBpmBoundary()
+{
+    const QVector<BpmEntry> bpmList;
+    if (!nearlyEqual(MathUtils::beatToMs(2, 0, 1, bpmList, 1234), -1234.0))
+        return false;
+
+    int beatNum = -1;
+    int num = -1;
+    int den = -1;
+    MathUtils::msToBeat(500.0, bpmList, 0, beatNum, num, den);
+    return beatNum == 0 && num == 1 && den == 1;
+}
+
+bool testMathUtilsZeroBpmBoundary()
+{
+    const QVector<BpmEntry> bpmList = {BpmEntry(0, 0, 1, 0.0)};
+    if (!nearlyEqual(MathUtils::beatToMs(8, 0, 1, bpmList, 250), -250.0))
+        return false;
+
+    int beatNum = -1;
+    int num = -1;
+    int den = -1;
+    MathUtils::msToBeat(2000.0, bpmList, 0, beatNum, num, den);
+    return beatNum == 0 && num == 0 && den == 1;
+}
+
+bool testMathUtilsExtremeOffsetBoundary()
+{
+    const QVector<BpmEntry> bpmList = {BpmEntry(0, 0, 1, 120.0)};
+    const int positiveOffset = 1000000;
+    const int negativeOffset = -1000000;
+
+    if (!nearlyEqual(MathUtils::beatToMs(0, 0, 1, bpmList, positiveOffset), -1000000.0))
+        return false;
+    if (!nearlyEqual(MathUtils::beatToMs(0, 0, 1, bpmList, negativeOffset), 1000000.0))
+        return false;
+
+    int beatNum = -1;
+    int num = -1;
+    int den = -1;
+    MathUtils::msToBeat(-1000001.0, bpmList, positiveOffset, beatNum, num, den);
+    return beatNum == 0 && num == 0 && den == 1;
+}
+
+bool testMathUtilsCrossSegmentRoundTripBoundary()
+{
+    const QVector<BpmEntry> bpmList = {
+        BpmEntry(0, 0, 1, 120.0),
+        BpmEntry(4, 0, 1, 240.0)};
+
+    const struct BeatProbe
+    {
+        int beatNum;
+        int num;
+        int den;
+    } probes[] = {
+        {3, 999, 1000},
+        {4, 1, 1000},
+        {7, 1, 2},
+    };
+
+    for (const BeatProbe &probe : probes)
+    {
+        const double beatIn = MathUtils::beatToFloat(probe.beatNum, probe.num, probe.den);
+        const double ms = MathUtils::beatToMs(probe.beatNum, probe.num, probe.den, bpmList, 0);
+
+        int outBeatNum = 0;
+        int outNum = 0;
+        int outDen = 1;
+        MathUtils::msToBeat(ms, bpmList, 0, outBeatNum, outNum, outDen);
+        const double beatOut = MathUtils::beatToFloat(outBeatNum, outNum, outDen);
+        if (!nearlyEqual(beatIn, beatOut, 1e-4))
             return false;
     }
     return true;
@@ -255,6 +336,186 @@ bool testChartControllerApplyBatchEditRejectsMissingMoveSource()
     return notes.size() == 1 && notes.first().id == "seed-a";
 }
 
+struct RenderBenchmarkResult
+{
+    int notesTotal = 0;
+    int sampleCount = 0;
+    qint64 elapsedNs = 0;
+    double avgVisibleNotes = 0.0;
+    int maxVisibleNotes = 0;
+};
+
+RenderBenchmarkResult runRenderVisibilityBenchmark(const QVector<Note> &inputNotes, int sampleCount)
+{
+    RenderBenchmarkResult result;
+    result.notesTotal = inputNotes.size();
+    result.sampleCount = qMax(1, sampleCount);
+    if (inputNotes.isEmpty())
+        return result;
+
+    struct NoteCache
+    {
+        NoteType type = NoteType::NORMAL;
+        double beat = 0.0;
+        double endBeat = 0.0;
+    };
+
+    QVector<NoteCache> cache(inputNotes.size());
+    QVector<int> normalIndices;
+    QVector<int> rainIndices;
+    normalIndices.reserve(inputNotes.size());
+    rainIndices.reserve(inputNotes.size());
+
+    double maxBeat = 0.0;
+    for (int i = 0; i < inputNotes.size(); ++i)
+    {
+        const Note &note = inputNotes[i];
+        const double beat = MathUtils::beatToFloat(note.beatNum, note.numerator, note.denominator);
+        double endBeat = beat;
+        if (note.type == NoteType::RAIN)
+            endBeat = MathUtils::beatToFloat(note.endBeatNum, note.endNumerator, note.endDenominator);
+
+        cache[i].type = note.type;
+        cache[i].beat = beat;
+        cache[i].endBeat = endBeat;
+        maxBeat = qMax(maxBeat, qMax(beat, endBeat));
+
+        if (note.type == NoteType::RAIN)
+            rainIndices.append(i);
+        else if (note.type == NoteType::NORMAL)
+            normalIndices.append(i);
+    }
+
+    auto byBeat = [&cache](int lhs, int rhs) {
+        if (cache[lhs].beat == cache[rhs].beat)
+            return lhs < rhs;
+        return cache[lhs].beat < cache[rhs].beat;
+    };
+    std::sort(normalIndices.begin(), normalIndices.end(), byBeat);
+    std::sort(rainIndices.begin(), rainIndices.end(), byBeat);
+
+    constexpr double visibleRange = 8.0;
+    QElapsedTimer timer;
+    timer.start();
+    qint64 totalVisible = 0;
+
+    for (int s = 0; s < result.sampleCount; ++s)
+    {
+        const double t = (result.sampleCount == 1) ? 0.0 : static_cast<double>(s) / (result.sampleCount - 1);
+        const double scrollBeat = qMax(0.0, (maxBeat + 1.0) * t - (visibleRange * 0.5));
+        const double startBeat = scrollBeat;
+        const double endBeat = scrollBeat + visibleRange;
+
+        int visibleCount = 0;
+
+        auto rainBegin = std::lower_bound(
+            rainIndices.begin(),
+            rainIndices.end(),
+            startBeat,
+            [&cache](int idx, double beatValue) {
+                return cache[idx].beat < beatValue;
+            });
+        auto rainStartIt = rainBegin;
+        while (rainStartIt != rainIndices.begin())
+        {
+            auto prev = rainStartIt - 1;
+            const int idx = *prev;
+            if (cache[idx].endBeat <= startBeat)
+                break;
+            rainStartIt = prev;
+        }
+        for (auto it = rainStartIt; it != rainIndices.end(); ++it)
+        {
+            const int idx = *it;
+            if (cache[idx].beat >= endBeat)
+                break;
+            if (cache[idx].endBeat > startBeat)
+                ++visibleCount;
+        }
+
+        auto normalStart = std::lower_bound(
+            normalIndices.begin(),
+            normalIndices.end(),
+            startBeat - 0.5,
+            [&cache](int idx, double beatValue) {
+                return cache[idx].beat < beatValue;
+            });
+        for (auto it = normalStart; it != normalIndices.end(); ++it)
+        {
+            const int idx = *it;
+            if (cache[idx].beat > endBeat + 0.5)
+                break;
+            ++visibleCount;
+        }
+
+        totalVisible += visibleCount;
+        if (visibleCount > result.maxVisibleNotes)
+            result.maxVisibleNotes = visibleCount;
+    }
+
+    result.elapsedNs = timer.nsecsElapsed();
+    result.avgVisibleNotes = static_cast<double>(totalVisible) / result.sampleCount;
+    return result;
+}
+
+bool testKedamonoRenderBaseline()
+{
+    const QString chartPath =
+        QStringLiteral("C:/Users/boatnotcy/AppData/Local/CatchEditor/Malody Catch Chart Editor/beatmap/KEDAMONO Drop-out/0/1737904376.mc");
+    if (!QFileInfo::exists(chartPath))
+    {
+        std::fprintf(stdout, "SKIPPED: KEDAMONO baseline (chart not found at %s)\n", chartPath.toUtf8().constData());
+        return true;
+    }
+
+    Chart chart;
+    if (!ChartIO::load(chartPath, chart, false))
+    {
+        std::fprintf(stderr, "FAILED: KEDAMONO baseline (load failed)\n");
+        return false;
+    }
+
+    QVector<Note> notes = chart.notes();
+    if (notes.isEmpty())
+    {
+        std::fprintf(stderr, "FAILED: KEDAMONO baseline (no notes)\n");
+        return false;
+    }
+
+    std::sort(notes.begin(), notes.end(), [](const Note &a, const Note &b) {
+        const double beatA = MathUtils::beatToFloat(a.beatNum, a.numerator, a.denominator);
+        const double beatB = MathUtils::beatToFloat(b.beatNum, b.numerator, b.denominator);
+        if (beatA == beatB)
+            return a.x < b.x;
+        return beatA < beatB;
+    });
+
+    const int total = notes.size();
+    const int sample5k = qMin(5000, total);
+    const int sample10k = qMin(10000, total);
+
+    const RenderBenchmarkResult baseline5k = runRenderVisibilityBenchmark(notes.mid(0, sample5k), 200000);
+    const RenderBenchmarkResult baseline10k = runRenderVisibilityBenchmark(notes.mid(0, sample10k), 200000);
+
+    std::fprintf(stdout,
+                 "KEDAMONO_BASELINE total=%d notes, sample5k=%d, sample10k=%d\n",
+                 total,
+                 sample5k,
+                 sample10k);
+    std::fprintf(stdout,
+                 "KEDAMONO_BASELINE 5k elapsed_ms=%.3f avg_visible=%.2f max_visible=%d\n",
+                 baseline5k.elapsedNs / 1000000.0,
+                 baseline5k.avgVisibleNotes,
+                 baseline5k.maxVisibleNotes);
+    std::fprintf(stdout,
+                 "KEDAMONO_BASELINE 10k elapsed_ms=%.3f avg_visible=%.2f max_visible=%d\n",
+                 baseline10k.elapsedNs / 1000000.0,
+                 baseline10k.avgVisibleNotes,
+                 baseline10k.maxVisibleNotes);
+
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -270,6 +531,10 @@ int main(int argc, char **argv)
     const Case cases[] = {
         {"MathUtils round-trip", &testMathUtilsRoundTrip},
         {"MathUtils cache consistency", &testMathUtilsCacheConsistency},
+        {"MathUtils empty BPM boundary", &testMathUtilsEmptyBpmBoundary},
+        {"MathUtils zero BPM boundary", &testMathUtilsZeroBpmBoundary},
+        {"MathUtils extreme offset boundary", &testMathUtilsExtremeOffsetBoundary},
+        {"MathUtils cross-segment round-trip boundary", &testMathUtilsCrossSegmentRoundTripBoundary},
         {"Chart removeNote by id", &testChartRemoveById},
         {"Chart BPM sorting", &testChartBpmSort},
         {"ProjectIO scan + difficulty", &testProjectIoReadDifficultyAndScan},
@@ -277,6 +542,7 @@ int main(int argc, char **argv)
         {"ChartController applyBatchEdit invalid add", &testChartControllerApplyBatchEditRejectsInvalidAddNote},
         {"ChartController applyBatchEdit conflict remove+move", &testChartControllerApplyBatchEditRejectsConflictingMoveAndRemove},
         {"ChartController applyBatchEdit missing move source", &testChartControllerApplyBatchEditRejectsMissingMoveSource},
+        {"KEDAMONO render baseline", &testKedamonoRenderBaseline},
     };
 
     int failed = 0;

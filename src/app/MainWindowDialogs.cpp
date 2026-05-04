@@ -781,6 +781,24 @@ void MainWindow::openLogSettings()
     verboseCheck->setChecked(Logger::isVerbose());
     layout->addWidget(verboseCheck);
 
+    QCheckBox *qtFilterCheck = new QCheckBox(tr("Enable Qt Noise Filter"));
+    qtFilterCheck->setChecked(Settings::instance().qtMessageFilterEnabled());
+    layout->addWidget(qtFilterCheck);
+
+    QLabel *categoryLabel = new QLabel(tr("Qt Categories (comma-separated):"));
+    QLineEdit *categoryEdit = new QLineEdit;
+    categoryEdit->setText(Settings::instance().qtMessageFilterCategories().join(","));
+    categoryEdit->setPlaceholderText("qt.multimedia.ffmpeg,qt.qpa.fonts");
+    layout->addWidget(categoryLabel);
+    layout->addWidget(categoryEdit);
+
+    QLabel *prefixLabel = new QLabel(tr("Message Prefixes (comma-separated):"));
+    QLineEdit *prefixEdit = new QLineEdit;
+    prefixEdit->setText(Settings::instance().qtMessageFilterPrefixes().join(","));
+    prefixEdit->setPlaceholderText("QFont::setPixelSize,QWindowsWindow::setGeometry");
+    layout->addWidget(prefixLabel);
+    layout->addWidget(prefixEdit);
+
     QHBoxLayout *logPathLayout = new QHBoxLayout;
     QLabel *pathLabel = new QLabel(tr("Log File:"));
     QLineEdit *pathEdit = new QLineEdit;
@@ -811,11 +829,33 @@ void MainWindow::openLogSettings()
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]()
             {
+        const auto parseCsv = [](const QString &text) -> QStringList
+        {
+            QStringList out;
+            const QStringList parts = text.split(',', Qt::SkipEmptyParts);
+            for (const QString &part : parts)
+            {
+                const QString trimmed = part.trimmed();
+                if (!trimmed.isEmpty() && !out.contains(trimmed))
+                    out.append(trimmed);
+            }
+            return out;
+        };
+
+        const QStringList categories = parseCsv(categoryEdit->text());
+        const QStringList prefixes = parseCsv(prefixEdit->text());
         Logger::setJsonLoggingEnabled(jsonLoggingCheck->isChecked());
         Logger::setVerbose(verboseCheck->isChecked());
-        Logger::info(QString("Log settings changed - JSON logging: %1, Verbose: %2")
+        Logger::setQtMessageFilterEnabled(qtFilterCheck->isChecked());
+        Logger::setQtMessageFilterCategories(categories);
+        Logger::setQtMessageFilterPrefixes(prefixes);
+        Settings::instance().setQtMessageFilterEnabled(qtFilterCheck->isChecked());
+        Settings::instance().setQtMessageFilterCategories(categories);
+        Settings::instance().setQtMessageFilterPrefixes(prefixes);
+        Logger::info(QString("Log settings changed - JSON: %1, Verbose: %2, Qt filter: %3")
                      .arg(jsonLoggingCheck->isChecked() ? "enabled" : "disabled")
-                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled"));
+                     .arg(verboseCheck->isChecked() ? "enabled" : "disabled")
+                     .arg(qtFilterCheck->isChecked() ? "enabled" : "disabled"));
         dialog.accept(); });
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);

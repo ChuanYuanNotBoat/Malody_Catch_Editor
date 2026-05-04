@@ -407,57 +407,105 @@ void ChartCanvas::endMoveSelection()
     QVector<Note> *notes = mutableNotes();
     if (!notes)
         return;
-    QList<int> selectedList = m_originalSelectedIndices.values();
-    for (int idx : selectedList)
+
+    QList<QPair<Note, Note>> finalChanges;
+    const auto &notesNow = chart()->notes();
+    QHash<QString, int> indexById;
+    indexById.reserve(notesNow.size());
+    for (int i = 0; i < notesNow.size(); ++i)
     {
-        if (!m_moveChanges.contains(idx))
-            continue;
+        if (!notesNow[i].id.isEmpty() && !indexById.contains(notesNow[i].id))
+            indexById.insert(notesNow[i].id, i);
+    }
 
-        const Note &original = m_moveChanges[idx].first;
-        Note snappedNote = original;
+    QSet<int> consumedFallbackIndices;
+    auto findIdentityIndex = [&notesNow, &indexById, &consumedFallbackIndices](const Note &originalNote,
+                                                                                const Note &expectedMovedNote,
+                                                                                int sourceIndex) -> int
+    {
+        if (!originalNote.id.isEmpty())
+            return indexById.value(originalNote.id, -1);
 
+        for (int i = 0; i < notesNow.size(); ++i)
+        {
+            if (consumedFallbackIndices.contains(i))
+                continue;
+            if (notesNow[i] == expectedMovedNote)
+            {
+                consumedFallbackIndices.insert(i);
+                return i;
+            }
+        }
+
+        for (int i = 0; i < notesNow.size(); ++i)
+        {
+            if (consumedFallbackIndices.contains(i))
+                continue;
+            if (notesNow[i] == originalNote)
+            {
+                consumedFallbackIndices.insert(i);
+                return i;
+            }
+        }
+
+        if (sourceIndex >= 0 &&
+            sourceIndex < notesNow.size() &&
+            !consumedFallbackIndices.contains(sourceIndex) &&
+            (notesNow[sourceIndex] == expectedMovedNote || notesNow[sourceIndex] == originalNote))
+        {
+            consumedFallbackIndices.insert(sourceIndex);
+            return sourceIndex;
+        }
+        return -1;
+    };
+
+    const auto buildFinalMovedNote = [this, finalAppliedDeltaBeat, finalAppliedDeltaX](const Note &original) -> Note
+    {
+        Note moved = original;
         double newBeat = MathUtils::beatToFloat(original.beatNum, original.numerator, original.denominator) + finalAppliedDeltaBeat;
         if (newBeat < 0.0)
             newBeat = 0.0;
-        MathUtils::floatToBeat(newBeat, snappedNote.beatNum, snappedNote.numerator, snappedNote.denominator);
+        MathUtils::floatToBeat(newBeat, moved.beatNum, moved.numerator, moved.denominator);
 
-        snappedNote.x = qBound(0, qRound(original.x + finalAppliedDeltaX), kLaneWidth);
+        moved.x = qBound(0, qRound(original.x + finalAppliedDeltaX), kLaneWidth);
 
         if (original.type == NoteType::RAIN)
         {
             double newEndBeat = MathUtils::beatToFloat(original.endBeatNum, original.endNumerator, original.endDenominator) + finalAppliedDeltaBeat;
             if (newEndBeat < newBeat)
                 newEndBeat = newBeat;
-            MathUtils::floatToBeat(newEndBeat, snappedNote.endBeatNum, snappedNote.endNumerator, snappedNote.endDenominator);
+            MathUtils::floatToBeat(newEndBeat, moved.endBeatNum, moved.endNumerator, moved.endDenominator);
         }
 
-        applyCurveSnapToMovedNote(&snappedNote, newBeat);
-        (*notes)[idx] = snappedNote;
-    }
+        applyCurveSnapToMovedNote(&moved, newBeat);
+        return moved;
+    };
 
-    QList<QPair<Note, Note>> finalChanges;
-    const auto &notesNow = chart()->notes();
-    for (int idx : m_originalSelectedIndices)
+    QList<QPair<int, Note>> rollbackPairs;
+    rollbackPairs.reserve(m_moveChanges.size());
+    for (auto it = m_moveChanges.constBegin(); it != m_moveChanges.constEnd(); ++it)
     {
-        if (idx < 0 || idx >= notesNow.size())
+        const int sourceIndex = it.key();
+        const Note &originalNote = it.value().first;
+        const Note movedNote = buildFinalMovedNote(originalNote);
+        if (originalNote == movedNote)
             continue;
-        const Note &currentNote = notesNow[idx];
-        auto it = m_moveChanges.find(idx);
-        if (it != m_moveChanges.end())
-        {
-            const Note &originalNote = it->first;
-            if (!(originalNote == currentNote))
-                finalChanges.append(qMakePair(originalNote, currentNote));
-        }
+
+        const int identityIndex = findIdentityIndex(originalNote, movedNote, sourceIndex);
+        if (identityIndex < 0 || identityIndex >= notesNow.size())
+            continue;
+
+        finalChanges.append(qMakePair(originalNote, movedNote));
+        rollbackPairs.append(qMakePair(identityIndex, originalNote));
     }
 
     if (!finalChanges.isEmpty())
     {
-        for (int idx : m_originalSelectedIndices)
+        for (const auto &rollback : rollbackPairs)
         {
-            auto it = m_moveChanges.find(idx);
-            if (it != m_moveChanges.end() && idx >= 0 && idx < notes->size())
-                (*notes)[idx] = it->first;
+            const int idx = rollback.first;
+            if (idx >= 0 && idx < notes->size())
+                (*notes)[idx] = rollback.second;
         }
         m_chartController->moveNotes(finalChanges);
     }

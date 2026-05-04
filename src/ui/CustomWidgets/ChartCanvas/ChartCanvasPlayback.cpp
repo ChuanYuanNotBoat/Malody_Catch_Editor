@@ -356,14 +356,6 @@ void ChartCanvas::timerEvent(QTimerEvent *event)
     QWidget::timerEvent(event);
 }
 
-void ChartCanvas::invalidateCache()
-{
-}
-
-void ChartCanvas::updateNotePosCacheIfNeeded()
-{
-}
-
 void ChartCanvas::resizeEvent(QResizeEvent *event)
 {
     m_backgroundCacheDirty = true;

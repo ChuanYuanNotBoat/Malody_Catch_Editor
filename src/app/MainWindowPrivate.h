@@ -114,4 +114,5 @@ public:
     QString sourceChartPath;
     QString workingChartPath;
     bool isModified = false;
+    bool audioPlaybackReady = false;
 };
