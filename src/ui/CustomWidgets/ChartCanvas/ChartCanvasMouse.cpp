@@ -1185,7 +1185,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
     if (delta != 0)
     {
         double step = effectiveVisibleBeatRange() * kWheelScrollBeatStepRatio;
-        double newPos = m_scrollBeat - (delta / 120.0) * step;
+        double newPos = m_scrollBeat + (delta / 120.0) * step;
         if (newPos < 0)
             newPos = 0;
         const bool scrollChanged = qAbs(newPos - m_scrollBeat) >= 1e-6;

@@ -8,7 +8,6 @@
 class ChartController;
 class PlaybackController;
 class ChartCanvas;
-class DensityCurve;
 class QPushButton;
 class QDoubleSpinBox;
 class QLabel;
@@ -51,7 +50,6 @@ private:
     ChartController *m_chartController = nullptr;
     PlaybackController *m_playbackController = nullptr;
     ChartCanvas *m_chartCanvas = nullptr;
-    DensityCurve *m_densityCurve = nullptr;
     QPushButton *m_playPauseBtn = nullptr;
     QPushButton *m_zoomInBtn = nullptr;
     QPushButton *m_zoomOutBtn = nullptr;

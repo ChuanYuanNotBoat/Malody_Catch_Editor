@@ -1,66 +1,214 @@
 #include "DensityCurve.h"
+#include "audio/AudioPlayer.h"
+#include "controller/ChartController.h"
+#include "controller/PlaybackController.h"
 #include "model/Chart.h"
+#include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "utils/MathUtils.h"
 #include "utils/Settings.h"
-#include <QPainter>
+
+#include <QEvent>
 #include <QMouseEvent>
-#include <QDebug>
+#include <QPainter>
+#include <QtMath>
 
 DensityCurve::DensityCurve(QWidget *parent)
-    : QWidget(parent), m_chart(nullptr)
+    : QWidget(parent),
+      m_chartController(nullptr),
+      m_playbackController(nullptr),
+      m_canvas(nullptr),
+      m_chart(nullptr),
+      m_currentTimeMs(0),
+      m_durationMs(60000.0),
+      m_tipTimeMs(0),
+      m_dragging(false),
+      m_showTip(false)
 {
-    setMinimumWidth(40);
-    setMaximumWidth(80);
+    setFixedWidth(58);
+    setMouseTracking(true);
+    m_densityData.fill(0, kBinCount);
 }
 
-void DensityCurve::setChart(const Chart *chart)
+void DensityCurve::setChartController(ChartController *controller)
 {
-    m_chart = chart;
+    if (m_chartController)
+    {
+        disconnect(m_chartController, &ChartController::chartChanged, this, nullptr);
+        disconnect(m_chartController, &ChartController::chartLoaded, this, nullptr);
+    }
+    m_chartController = controller;
+    m_chart = (m_chartController ? m_chartController->chart() : nullptr);
+    if (m_chartController)
+    {
+        connect(m_chartController, &ChartController::chartChanged, this, &DensityCurve::refreshFromChart, Qt::UniqueConnection);
+        connect(m_chartController, &ChartController::chartLoaded, this, &DensityCurve::refreshFromChart, Qt::UniqueConnection);
+    }
+    refreshFromChart();
+}
+
+void DensityCurve::setPlaybackController(PlaybackController *controller)
+{
+    if (m_playbackController)
+    {
+        disconnect(m_playbackController, &PlaybackController::positionChanged, this, nullptr);
+        if (m_playbackController->audioPlayer())
+            disconnect(m_playbackController->audioPlayer(), &AudioPlayer::durationChanged, this, nullptr);
+    }
+    m_playbackController = controller;
+    if (m_playbackController)
+    {
+        connect(m_playbackController, &PlaybackController::positionChanged, this, [this](double timeMs) {
+            if (!m_dragging)
+                syncCurrentTime(timeMs);
+        });
+        if (m_playbackController->audioPlayer())
+        {
+            connect(m_playbackController->audioPlayer(), &AudioPlayer::durationChanged, this, [this](qint64) {
+                syncDuration();
+                computeDensity();
+                update();
+            });
+        }
+    }
+    syncDuration();
     computeDensity();
     update();
 }
 
+void DensityCurve::setCanvas(ChartCanvas *canvas)
+{
+    if (m_canvas)
+        disconnect(m_canvas, &ChartCanvas::scrollPositionChanged, this, nullptr);
+    m_canvas = canvas;
+    if (m_canvas)
+    {
+        connect(m_canvas, &ChartCanvas::scrollPositionChanged, this, [this](double beat) {
+            if (m_dragging)
+                return;
+            if (m_playbackController && m_playbackController->state() == PlaybackController::Playing)
+                return;
+            updateFromCanvasBeat(beat);
+        });
+    }
+}
+
+QString DensityCurve::formatTimeMs(double timeMs)
+{
+    const qint64 clamped = qMax<qint64>(0, static_cast<qint64>(qRound64(timeMs)));
+    const int ms = static_cast<int>(clamped % 1000);
+    const int sec = static_cast<int>((clamped / 1000) % 60);
+    const int min = static_cast<int>(clamped / 60000);
+    return QStringLiteral("%1:%2:%3")
+        .arg(min, 2, 10, QChar('0'))
+        .arg(sec, 2, 10, QChar('0'))
+        .arg(ms, 3, 10, QChar('0'));
+}
+
+void DensityCurve::syncDuration()
+{
+    double duration = 0.0;
+    if (m_playbackController && m_playbackController->audioPlayer())
+        duration = static_cast<double>(m_playbackController->audioPlayer()->duration());
+
+    if (duration <= 0.0 && m_chart)
+    {
+        double maxNoteMs = 0.0;
+        const auto &notes = m_chart->notes();
+        for (const Note &note : notes)
+        {
+            const double t = MathUtils::beatToMs(
+                note.beatNum, note.numerator, note.denominator, m_chart->bpmList(), m_chart->meta().offset);
+            if (t > maxNoteMs)
+                maxNoteMs = t;
+        }
+        duration = maxNoteMs + 1000.0;
+    }
+
+    if (duration <= 0.0)
+        duration = 60000.0;
+    m_durationMs = duration;
+    if (m_currentTimeMs > m_durationMs)
+        m_currentTimeMs = m_durationMs;
+}
+
+void DensityCurve::syncCurrentTime(double timeMs)
+{
+    if (m_durationMs <= 0.0)
+        syncDuration();
+    const double clamped = qBound(0.0, timeMs, m_durationMs);
+    if (qAbs(clamped - m_currentTimeMs) < 0.05)
+        return;
+    m_currentTimeMs = clamped;
+    update();
+}
+
+void DensityCurve::refreshFromChart()
+{
+    m_chart = (m_chartController ? m_chartController->chart() : nullptr);
+    syncDuration();
+    computeDensity();
+    update();
+}
+
+void DensityCurve::updateFromCanvasBeat(double beat)
+{
+    if (!m_chart)
+        return;
+    int beatNum = 0;
+    int numerator = 0;
+    int denominator = 1;
+    MathUtils::floatToBeat(beat, beatNum, numerator, denominator);
+    const double timeMs = MathUtils::beatToMs(beatNum, numerator, denominator, m_chart->bpmList(), m_chart->meta().offset);
+    syncCurrentTime(timeMs);
+}
+
 void DensityCurve::computeDensity()
 {
-    if (!m_chart || m_chart->notes().isEmpty())
-    {
-        m_densityData.clear();
+    m_densityData.fill(0, kBinCount);
+    if (!m_chart || m_durationMs <= 0.0)
         return;
-    }
-    // 简单实现：根据时间范围均匀采样
-    double totalDuration = 0;
+
     const auto &notes = m_chart->notes();
-    // 粗略计算总时长（最后一个音符时间 + 1秒）
-    double lastTime = 0;
     for (const Note &note : notes)
     {
-        double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator,
-                                       m_chart->bpmList(), m_chart->meta().offset);
-        if (t > lastTime)
-            lastTime = t;
+        const double t = MathUtils::beatToMs(
+            note.beatNum, note.numerator, note.denominator, m_chart->bpmList(), m_chart->meta().offset);
+        const double clamped = qBound(0.0, t, m_durationMs);
+        int bin = static_cast<int>(qFloor((clamped / m_durationMs) * kBinCount));
+        if (bin >= kBinCount)
+            bin = kBinCount - 1;
+        if (bin < 0)
+            bin = 0;
+        m_densityData[bin] += 1;
     }
-    totalDuration = lastTime + 1000;
-    int numBins = width();
-    m_densityData.resize(numBins, 0);
-    if (totalDuration <= 0)
+}
+
+void DensityCurve::updateFromPointer(const QPoint &pos)
+{
+    if (height() <= 0 || m_durationMs <= 0.0)
         return;
-    for (const Note &note : notes)
+    const int y = qBound(0, pos.y(), height());
+    const double ratio = 1.0 - (static_cast<double>(y) / static_cast<double>(height()));
+    const double timeMs = qBound(0.0, ratio * m_durationMs, m_durationMs);
+    m_tipTimeMs = timeMs;
+    m_currentTimeMs = timeMs;
+    emit seekRequested(timeMs);
+    update();
+}
+
+void DensityCurve::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    update();
+}
+
+void DensityCurve::leaveEvent(QEvent *event)
+{
+    QWidget::leaveEvent(event);
+    if (!m_dragging && m_showTip)
     {
-        double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator,
-                                       m_chart->bpmList(), m_chart->meta().offset);
-        int bin = static_cast<int>((t / totalDuration) * numBins);
-        if (bin >= 0 && bin < numBins)
-            m_densityData[bin]++;
-    }
-    // 归一化
-    double maxDensity = 1;
-    for (double v : m_densityData)
-        if (v > maxDensity)
-            maxDensity = v;
-    if (maxDensity > 0)
-    {
-        for (double &v : m_densityData)
-            v /= maxDensity;
+        m_showTip = false;
+        update();
     }
 }
 
@@ -72,37 +220,98 @@ void DensityCurve::paintEvent(QPaintEvent *event)
     const double luminance = 0.2126 * baseBg.redF() + 0.7152 * baseBg.greenF() + 0.0722 * baseBg.blueF();
     const bool darkTheme = (luminance < 0.5);
     const QColor curveBg = darkTheme ? baseBg.lighter(118) : baseBg.darker(106);
-    const QColor barColor = darkTheme ? QColor(235, 238, 245) : QColor(35, 35, 35);
+    const QColor barColor = darkTheme ? QColor(235, 238, 245, 220) : QColor(35, 35, 35, 210);
+    const QColor playheadColor = darkTheme ? QColor(255, 112, 87) : QColor(219, 68, 55);
+    const QColor borderColor = darkTheme ? QColor(255, 255, 255, 36) : QColor(0, 0, 0, 50);
+
     painter.fillRect(rect(), curveBg);
-    if (m_densityData.isEmpty())
-        return;
-    int w = width();
-    int h = height();
-    for (int i = 0; i < m_densityData.size(); ++i)
+    painter.setPen(borderColor);
+    painter.drawRect(rect().adjusted(0, 0, -1, -1));
+
+    int maxCount = 0;
+    for (int val : m_densityData)
     {
-        int barHeight = static_cast<int>(m_densityData[i] * h);
-        painter.fillRect(i, h - barHeight, 1, barHeight, barColor);
+        if (val > maxCount)
+            maxCount = val;
+    }
+    maxCount = qMax(maxCount, kRefMaxCount);
+
+    const int fullWidth = qMax(1, width() - 4);
+    const int h = qMax(1, height());
+    for (int i = 0; i < kBinCount; ++i)
+    {
+        const int rowIndex = (kBinCount - 1 - i);
+        const int y0 = (rowIndex * h) / kBinCount;
+        const int y1 = ((rowIndex + 1) * h) / kBinCount;
+        const int rowH = qMax(1, y1 - y0);
+        const int gap = (rowH >= 3) ? 1 : 0; // leave a subtle seam between bins
+        const int drawY = y0 + gap;
+        const int drawH = qMax(1, rowH - gap);
+        const int barW = (m_densityData[i] * fullWidth) / qMax(1, maxCount);
+        if (barW <= 0)
+            continue;
+        painter.fillRect(width() - 2 - barW, drawY, barW, drawH, barColor);
+    }
+
+    const double clampedTime = qBound(0.0, m_currentTimeMs, m_durationMs);
+    const int playY = static_cast<int>((1.0 - (clampedTime / qMax(1.0, m_durationMs))) * h);
+    painter.setPen(QPen(playheadColor, 2));
+    painter.drawLine(0, playY, width(), playY);
+
+    if (m_showTip)
+    {
+        const QString text = formatTimeMs(m_tipTimeMs);
+        const QFontMetrics fm(font());
+        const int padX = 8;
+        const int padY = 4;
+        const int tipW = fm.horizontalAdvance(text) + padX * 2;
+        const int tipH = fm.height() + padY * 2;
+        int tipY = playY - tipH / 2;
+        tipY = qBound(2, tipY, qMax(2, height() - tipH - 2));
+        QRect tipRect(-tipW - 8, tipY, tipW, tipH);
+        const QColor tipBg = darkTheme ? QColor(16, 18, 24, 220) : QColor(245, 246, 248, 232);
+        const QColor tipFg = darkTheme ? QColor(242, 244, 248) : QColor(34, 34, 34);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(tipBg);
+        painter.drawRoundedRect(tipRect, 6, 6);
+        painter.setPen(tipFg);
+        painter.drawText(tipRect, Qt::AlignCenter, text);
     }
 }
 
 void DensityCurve::mousePressEvent(QMouseEvent *event)
 {
-    if (!m_chart || m_densityData.isEmpty())
+    if (!event || event->button() != Qt::LeftButton)
         return;
-    double yRatio = static_cast<double>(event->pos().y()) / height();
-    // 粗略映射到时间：密度图 y 轴对应时间，但实际需要更精确
-    // 简单发出信号，由外部处理
-    double totalDuration = 0;
-    const auto &notes = m_chart->notes();
-    double lastTime = 0;
-    for (const Note &note : notes)
-    {
-        double t = MathUtils::beatToMs(note.beatNum, note.numerator, note.denominator,
-                                       m_chart->bpmList(), m_chart->meta().offset);
-        if (t > lastTime)
-            lastTime = t;
-    }
-    totalDuration = lastTime + 1000;
-    double clickTime = totalDuration * yRatio;
-    emit timeClicked(clickTime);
+    m_dragging = true;
+    m_showTip = true;
+    emit seekGestureStarted();
+    updateFromPointer(event->pos());
+    event->accept();
 }
+
+void DensityCurve::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!event)
+        return;
+    if (!m_dragging || !(event->buttons() & Qt::LeftButton))
+        return;
+    updateFromPointer(event->pos());
+    event->accept();
+}
+
+void DensityCurve::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (!event || event->button() != Qt::LeftButton)
+        return;
+    if (m_dragging)
+    {
+        updateFromPointer(event->pos());
+        m_dragging = false;
+        m_showTip = false;
+        emit seekGestureFinished();
+        update();
+    }
+    event->accept();
+}
+

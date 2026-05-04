@@ -15,7 +15,7 @@ class PlaybackController;
 class Skin;
 class RightPanel;
 class LeftPanel;
-class QScrollBar;
+class DensityCurve;
 class QSplitter;
 class QWidget;
 class NoteEditPanel;
@@ -44,7 +44,7 @@ public:
     Skin *skin = nullptr;
     ChartCanvas *canvas = nullptr;
     RealtimePreviewWidget *previewWidget = nullptr;
-    QScrollBar *verticalScrollBar = nullptr;
+    DensityCurve *rightDensityBar = nullptr;
     QSplitter *splitter = nullptr;
     QWidget *rightPanelContainer = nullptr;
     RightPanel *currentRightPanel = nullptr;

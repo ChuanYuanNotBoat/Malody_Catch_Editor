@@ -1,5 +1,4 @@
 #include "LeftPanel.h"
-#include "DensityCurve.h"
 #include "controller/ChartController.h"
 #include "controller/PlaybackController.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
@@ -19,9 +18,6 @@ LeftPanel::LeftPanel(QWidget *parent)
 void LeftPanel::setupUi()
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
-
-    m_densityCurve = new DensityCurve(this);
-    layout->addWidget(m_densityCurve);
 
     m_playPauseBtn = new QPushButton(tr("Play"), this);
     layout->addWidget(m_playPauseBtn);
@@ -111,8 +107,6 @@ void LeftPanel::onTimeScaleChanged(double scale)
 void LeftPanel::setChartController(ChartController *controller)
 {
     m_chartController = controller;
-    if (m_densityCurve && controller)
-        m_densityCurve->setChart(controller->chart());
 }
 
 void LeftPanel::setPlaybackController(PlaybackController *controller)

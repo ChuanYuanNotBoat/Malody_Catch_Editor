@@ -4,6 +4,7 @@
 #include "ui/NoteEditPanel.h"
 #include "ui/BPMTimePanel.h"
 #include "ui/MetaEditPanel.h"
+#include "ui/DensityCurve.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
@@ -94,8 +95,8 @@ void MainWindow::setupMobileCentralArea(QWidget *canvasContainer)
         d->canvas->setMinimumSize(0, 0);
         d->canvas->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
-    if (d->verticalScrollBar)
-        d->verticalScrollBar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    if (d->rightDensityBar)
+        d->rightDensityBar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 
     if (d->leftPanel)
     {

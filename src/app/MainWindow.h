@@ -11,7 +11,6 @@ class RightPanel;
 class LeftPanel;
 class QSplitter;
 class QMenu;
-class QScrollBar;
 class QKeySequence;
 class QCloseEvent;
 class QDragEnterEvent;

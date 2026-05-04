@@ -1,6 +1,6 @@
 import json
-import math
 import locale
+import math
 import os
 import sys
 import time

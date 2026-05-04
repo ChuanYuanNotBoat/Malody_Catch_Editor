@@ -1,4 +1,4 @@
-﻿#include "app/Application.h"
+#include "app/Application.h"
 #include "utils/Logger.h"
 #include <QDebug>
 #include <iostream>
@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
     {
         // Set application name and version.
         QCoreApplication::setApplicationName("Malody Catch Chart Editor");
-        QCoreApplication::setApplicationVersion("Beta v1.9.2");
+        QCoreApplication::setApplicationVersion("Beta v1.9.3");
 
         Application app(argc, argv);
 

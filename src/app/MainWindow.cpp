@@ -5,6 +5,7 @@
 #include "plugin/PluginManager.h"
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "ui/CustomWidgets/RealtimePreviewWidget.h"
+#include "ui/DensityCurve.h"
 #include "ui/NoteEditPanel.h"
 #include "ui/BPMTimePanel.h"
 #include "ui/MetaEditPanel.h"
@@ -71,7 +72,6 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QTreeWidget>
-#include <QScrollBar>
 #include <QSet>
 #include <QTimer>
 #include <QScreen>
@@ -897,7 +897,7 @@ MainWindow::MainWindow(ChartController *chartCtrl,
     d->playbackController = playCtrl;
     d->skin = skin;
     d->canvas = nullptr;
-    d->verticalScrollBar = nullptr;
+    d->rightDensityBar = nullptr;
     d->splitter = nullptr;
     d->rightPanelContainer = nullptr;
     d->currentRightPanel = nullptr;
@@ -1459,69 +1459,39 @@ void MainWindow::createCentralArea()
 
     d->leftPanel->setChartCanvas(d->canvas);
 
-    d->verticalScrollBar = new QScrollBar(Qt::Vertical);
-    d->verticalScrollBar->setRange(0, 100000);
-    d->verticalScrollBar->setValue(0);
-    d->verticalScrollBar->setSingleStep(100);
-    d->verticalScrollBar->setPageStep(5000);
+    d->rightDensityBar = new DensityCurve(this);
+    d->rightDensityBar->setChartController(d->chartController);
+    d->rightDensityBar->setPlaybackController(d->playbackController);
+    d->rightDensityBar->setCanvas(d->canvas);
 
     QWidget *canvasContainer = new QWidget(this);
     QHBoxLayout *canvasLayout = new QHBoxLayout(canvasContainer);
     canvasLayout->setContentsMargins(0, 0, 0, 0);
     canvasLayout->setSpacing(0);
     canvasLayout->addWidget(d->canvas, 1);
-    canvasLayout->addWidget(d->verticalScrollBar, 0);
+    canvasLayout->addWidget(d->rightDensityBar, 0);
 
-    auto updateScrollPos = [this](int value)
-    {
-        if (d->canvas && d->chartController && d->chartController->chart())
+    connect(d->rightDensityBar, &DensityCurve::seekGestureStarted, this, [this]() {
+        if (d->playbackController && d->playbackController->state() == PlaybackController::Playing)
         {
-            if (d->verticalScrollBar && d->verticalScrollBar->isSliderDown() &&
-                d->playbackController && d->playbackController->state() == PlaybackController::Playing)
-            {
-                Logger::debug("Playback paused due to timeline slider interaction");
-                d->playbackController->pause();
-            }
-
-            qint64 duration = 300000;
-            if (d->playbackController && d->playbackController->audioPlayer())
-            {
-                duration = d->playbackController->audioPlayer()->duration();
-                if (duration <= 0)
-                    duration = 300000;
-            }
-            double scrollPos = (value / 100000.0) * duration;
-            d->canvas->setScrollPos(scrollPos);
+            Logger::debug("Playback paused due to density bar drag interaction");
+            d->playbackController->pause();
         }
-    };
-    connect(d->verticalScrollBar, QOverload<int>::of(&QScrollBar::valueChanged), this, updateScrollPos);
+    });
 
-    connect(d->canvas, &ChartCanvas::scrollPositionChanged, this, [this](double beat)
-            {
-        if (d->playbackController && d->playbackController->audioPlayer()) {
-            qint64 duration = d->playbackController->audioPlayer()->duration();
-            if (duration > 0 && d->chartController && d->chartController->chart()) {
-                const auto& bpmList = d->chartController->chart()->bpmList();
-                int offset = d->chartController->chart()->meta().offset;
-                int beatNum, numerator, denominator;
-                MathUtils::floatToBeat(beat, beatNum, numerator, denominator);
-                double timeMs = MathUtils::beatToMs(beatNum, numerator, denominator, bpmList, offset);
-                int value = static_cast<int>((timeMs / duration) * 100000);
-                d->verticalScrollBar->blockSignals(true);
-                d->verticalScrollBar->setValue(value);
-                d->verticalScrollBar->blockSignals(false);
-            }
-        } });
-
-    if (d->playbackController && d->playbackController->audioPlayer())
-    {
-        connect(d->playbackController->audioPlayer(), &AudioPlayer::durationChanged, this, [this](qint64 duration)
-                {
-            if (duration > 0) {
-                Logger::debug(QString("Audio duration changed: %1 ms").arg(duration));
-                d->verticalScrollBar->setValue(0);
-            } });
-    }
+    connect(d->rightDensityBar, &DensityCurve::seekRequested, this, [this](double targetTimeMs) {
+        if (!d->playbackController || !d->canvas)
+            return;
+        double clamped = qMax(0.0, targetTimeMs);
+        if (d->playbackController->audioPlayer())
+        {
+            const qint64 duration = d->playbackController->audioPlayer()->duration();
+            if (duration > 0)
+                clamped = qBound(0.0, clamped, static_cast<double>(duration));
+        }
+        d->playbackController->seekTo(clamped);
+        d->canvas->setScrollPos(clamped);
+    });
 
     d->rightPanelContainer = new QWidget(this);
     d->rightPanelContainer->setObjectName("rightPanelRoot");
@@ -3260,17 +3230,8 @@ void MainWindow::applySidebarTheme()
         d->splitter->setStyleSheet(QString("QSplitter::handle { background-color: %1; }").arg(panelBorder.name()));
     }
 
-    if (d->verticalScrollBar)
-    {
-        const QString scrollCss = QString(
-                                      "QScrollBar:vertical { background: %1; width: 12px; margin: 0; }"
-                                      "QScrollBar::handle:vertical { background: %2; min-height: 24px; border-radius: 5px; }"
-                                      "QScrollBar::handle:vertical:hover { background: %3; }"
-                                      "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
-                                      "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }")
-                                      .arg(panelBg.name(), panelButtonBg.name(), panelInputBg.name());
-        d->verticalScrollBar->setStyleSheet(scrollCss);
-    }
+    if (d->rightDensityBar)
+        d->rightDensityBar->update();
 
     // Global dialog/message box theming. This keeps popups readable on dark backgrounds.
     const QString dialogCss = QString(
