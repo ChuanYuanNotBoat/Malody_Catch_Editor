@@ -1090,6 +1090,96 @@ bool createWorkingCopyFromSourceWithProgress(QWidget *parent,
         *workingPathOut = workingPath;
     return true;
 }
+
+bool loadWorkingChartWithProgress(QWidget *parent,
+                                  ChartController *chartController,
+                                  const QString &workingChartPath,
+                                  QString *errorOut)
+{
+    if (errorOut)
+        errorOut->clear();
+    if (!chartController)
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Chart controller is not available.");
+        return false;
+    }
+
+    std::atomic<bool> finished{false};
+    std::atomic<bool> success{false};
+    QString asyncError;
+    Chart loadedChart;
+
+    QElapsedTimer timer;
+    timer.start();
+    QThread *worker = QThread::create([&]()
+    {
+        QString localError;
+        Chart parsedChart;
+        const bool loaded = ChartIO::load(workingChartPath, parsedChart, false);
+        if (!loaded)
+        {
+            localError = QObject::tr("Failed to parse chart data:\n%1").arg(workingChartPath);
+        }
+        else
+        {
+            loadedChart = std::move(parsedChart);
+        }
+
+        if (!localError.isEmpty())
+            asyncError = localError;
+        success.store(localError.isEmpty() && loaded);
+        finished.store(true);
+    });
+    worker->start();
+
+    QProgressDialog progressDialog(QObject::tr("Loading chart data..."),
+                                   QString(),
+                                   0,
+                                   0,
+                                   parent);
+    progressDialog.setWindowModality(Qt::ApplicationModal);
+    progressDialog.setCancelButton(nullptr);
+    progressDialog.setMinimumDuration(0);
+    progressDialog.show();
+
+    while (!finished.load())
+    {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        QThread::msleep(15);
+    }
+
+    worker->wait();
+    delete worker;
+
+    const qint64 elapsedMs = timer.elapsed();
+    Logger::logStructured(Logger::Info,
+                          QString("Working chart parsed in %1 ms").arg(elapsedMs),
+                          "WorkingCopy",
+                          QMap<QString, QString>{
+                              {"working_path", workingChartPath},
+                              {"elapsed_ms", QString::number(elapsedMs)},
+                              {"notes", success.load() ? QString::number(loadedChart.notes().size()) : QString("0")},
+                              {"success", success.load() ? "true" : "false"},
+                          });
+
+    if (!success.load())
+    {
+        if (errorOut)
+            *errorOut = asyncError.isEmpty()
+                            ? QObject::tr("Failed to parse chart data.")
+                            : asyncError;
+        return false;
+    }
+
+    if (!chartController->loadChartFromData(workingChartPath, std::move(loadedChart)))
+    {
+        if (errorOut)
+            *errorOut = QObject::tr("Failed to apply loaded chart.");
+        return false;
+    }
+    return true;
+}
 }
 
 MainWindow::MainWindow(ChartController *chartCtrl,
@@ -2226,10 +2316,13 @@ void MainWindow::loadChartFile(const QString &filePath)
         return;
     }
 
-    if (!d->chartController->loadChart(workingChartPath))
+    QString loadChartError;
+    if (!loadWorkingChartWithProgress(this, d->chartController, workingChartPath, &loadChartError))
     {
         removePathRecursively(workingSessionDirFromWorkingPath(workingChartPath));
-        QMessageBox::critical(this, tr("Error"), tr("Failed to load chart."));
+        QMessageBox::critical(this,
+                              tr("Error"),
+                              loadChartError.isEmpty() ? tr("Failed to load chart.") : loadChartError);
         return;
     }
 

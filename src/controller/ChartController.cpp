@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace
 {
@@ -654,20 +655,7 @@ bool ChartController::loadChart(const QString &path)
         {
             Logger::debug("ChartController::loadChart: ChartIO::load completed successfully");
             Logger::debug(QString("ChartController::loadChart: Chart has %1 notes").arg(newChart.notes().size()));
-
-            m_chart = newChart;
-            m_currentChartPath = path;
-            Logger::debug("ChartController::loadChart: Chart assigned to m_chart, path saved");
-
-            m_undoStack->clear();
-            Logger::debug("ChartController::loadChart: Undo stack cleared");
-
-            emit chartChanged();
-            emit chartLoaded();
-            Logger::info("ChartController::loadChart: Signals emitted");
-
-            Logger::info(QString("ChartController::loadChart: Successfully loaded chart with %1 notes").arg(newChart.notes().size()));
-            return true;
+            return loadChartFromData(path, std::move(newChart));
         }
         Logger::error(QString("ChartController::loadChart: ChartIO::load failed for %1").arg(path));
         emit errorOccurred("Failed to load chart: " + path);
@@ -683,6 +671,43 @@ bool ChartController::loadChart(const QString &path)
     {
         Logger::error("ChartController::loadChart: Unknown exception");
         emit errorOccurred("Unknown exception loading chart");
+        return false;
+    }
+}
+
+bool ChartController::loadChartFromData(const QString &path, Chart loadedChart)
+{
+    PerformanceTimer loadTimer("ChartController::loadChartFromData", "ui_operations");
+
+    Logger::info(QString("ChartController::loadChartFromData: Applying loaded chart for %1").arg(path));
+    try
+    {
+        Logger::debug(QString("ChartController::loadChartFromData: Chart has %1 notes").arg(loadedChart.notes().size()));
+
+        m_chart = std::move(loadedChart);
+        m_currentChartPath = path;
+        Logger::debug("ChartController::loadChartFromData: Chart assigned to m_chart, path saved");
+
+        m_undoStack->clear();
+        Logger::debug("ChartController::loadChartFromData: Undo stack cleared");
+
+        emit chartChanged();
+        emit chartLoaded();
+        Logger::info("ChartController::loadChartFromData: Signals emitted");
+
+        Logger::info(QString("ChartController::loadChartFromData: Successfully applied chart for %1").arg(path));
+        return true;
+    }
+    catch (const std::exception &e)
+    {
+        Logger::error(QString("ChartController::loadChartFromData: Exception - %1").arg(e.what()));
+        emit errorOccurred("Exception applying loaded chart: " + QString::fromStdString(std::string(e.what())));
+        return false;
+    }
+    catch (...)
+    {
+        Logger::error("ChartController::loadChartFromData: Unknown exception");
+        emit errorOccurred("Unknown exception applying loaded chart");
         return false;
     }
 }

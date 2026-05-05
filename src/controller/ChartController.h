@@ -48,6 +48,7 @@ public:
 
     // 保存/加载
     bool loadChart(const QString &path);
+    bool loadChartFromData(const QString &path, Chart loadedChart);
     bool saveChart(const QString &path);
     bool applyExternalChartMutation(const QString &actionName, const Chart &mutatedChart);
     bool applyBatchEdit(const QString &actionName,
