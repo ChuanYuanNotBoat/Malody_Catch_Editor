@@ -3,7 +3,7 @@
 A desktop chart editor for Malody Catch mode, developed to fill the feature gaps of the official charting tool.
 为 Malody Catch 模式开发的谱面编辑器，弥补官方制谱器功能的缺失。
 
-当前版本 / Current Version: **Beta v1.9.3**
+当前版本 / Current Version: **Beta v1.10.1**
 
 > ⚠️ **Early Stage Notice / 早期状态说明**
 > This project is in a very early stage of development. It is not yet ready for production use. Features may be incomplete, unstable, or subject to change.
@@ -14,7 +14,7 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## 📥 下载
 
-点击下载最新版本：[CatchChartEditor Beta v1.9.3 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
+点击下载最新版本：[CatchChartEditor Beta v1.10.1 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
 
 文档导航：
 - 帮助文档：[docs/help.md](docs/help.md)
@@ -42,6 +42,13 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## Recent Updates / 近期特性
 
+- `Beta v1.10.1`
+  - Added density preview for the timeline/navigation flow, with smoother large-chart seek feedback.
+  - 新增密度预览，提升时间导航与大谱面跳转时的可视反馈。
+  - Added async parse stage after working-copy preparation to prevent post-copy UI freeze.
+  - 在工作副本准备后加入异步解析阶段，避免复制完成后的界面卡顿。
+  - Strengthened plugin self-heal and logging chain (UTF-8/filter), and expanded boundary-focused automated tests.
+  - 强化插件自愈与日志链路（UTF-8/过滤），并补充边界导向自动化测试。
 - `Beta v1.9.3`
   - Refactored right-side density timeline widget with chart-linked density bins, drag seek, and live playhead/time tooltip.
   - 重构右侧密度时间条，接入谱面密度分桶、拖拽跳转与实时播放指示/时间提示。
@@ -187,3 +194,4 @@ This project is licensed under the GPL-3.0 License — see the [LICENSE](LICENSE
 
 - Runtime plugin directory is resolved as `<appDir>/plugins`.
 - 构建后会复制默认皮肤、插件与文档到可执行文件目录，便于开箱即用。
+
