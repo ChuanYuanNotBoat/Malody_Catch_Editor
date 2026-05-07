@@ -3015,12 +3015,11 @@ void MainWindow::togglePlayback()
     }
     if (d->playbackController->state() == PlaybackController::Playing)
     {
-        Logger::debug("Playback paused");
         d->playbackController->pause();
+        Logger::debug("Playback paused");
     }
     else
     {
-        Logger::debug("Playback started");
         double startTime = d->canvas->currentPlayTime();
         const Chart *chart = d->chartController->chart();
         if (chart)
@@ -3031,6 +3030,10 @@ void MainWindow::togglePlayback()
             startTime = MathUtils::snapTimeToGrid(startTime, bpmList, offset, timeDivision);
         }
         d->playbackController->playFromTime(startTime);
+        if (d->playbackController->state() == PlaybackController::Playing)
+            Logger::debug(QString("Playback started from %1ms").arg(startTime));
+        else
+            Logger::warn(QString("Playback start request rejected at %1ms").arg(startTime));
     }
 }
 

@@ -31,6 +31,7 @@ public:
     double currentTime() const;
 
     void setNoteSoundEnabled(bool enabled);
+    bool autoPausedAtEnd() const;
 
 signals:
     void stateChanged(State newState);
@@ -40,6 +41,7 @@ signals:
     void errorOccurred(const QString &error);
 private slots:
     void onAudioPositionChanged(qint64 position);
+    void onAudioStateChanged(QMediaPlayer::PlaybackState state);
     void onAudioError(const QString &error);
 
 private:
@@ -47,4 +49,5 @@ private:
     State m_state;
     double m_speed;
     bool m_noteSoundEnabled;
+    bool m_autoPausedAtEnd;
 };

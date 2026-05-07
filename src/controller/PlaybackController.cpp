@@ -5,9 +5,10 @@
 #include <QTimer>
 
 PlaybackController::PlaybackController(AudioPlayer *audioPlayer, QObject *parent)
-    : QObject(parent), m_audioPlayer(audioPlayer), m_state(Stopped), m_speed(1.0), m_noteSoundEnabled(true)
+    : QObject(parent), m_audioPlayer(audioPlayer), m_state(Stopped), m_speed(1.0), m_noteSoundEnabled(true), m_autoPausedAtEnd(false)
 {
     connect(m_audioPlayer, &AudioPlayer::positionChanged, this, &PlaybackController::onAudioPositionChanged);
+    connect(m_audioPlayer, &AudioPlayer::stateChanged, this, &PlaybackController::onAudioStateChanged);
     connect(m_audioPlayer, &AudioPlayer::errorOccurred, this, &PlaybackController::onAudioError);
 }
 
@@ -20,12 +21,21 @@ void PlaybackController::play()
 {
     if (m_state == Stopped || m_state == Paused)
     {
-        // 检查音频是否可播放
+        if (m_autoPausedAtEnd)
+        {
+            m_audioPlayer->setAdjustedPosition(0);
+            m_autoPausedAtEnd = false;
+            emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
+            Logger::info("PlaybackController::play - Restarting from beginning after end-of-media auto pause");
+        }
+
         if (!m_audioPlayer->canPlay())
         {
-            QString errorMsg = QString("Cannot play audio: %1").arg(m_audioPlayer->lastError());
+            const QString playerError = m_audioPlayer->lastError().trimmed();
+            QString errorMsg = playerError.isEmpty()
+                                   ? QString("Cannot play audio")
+                                   : QString("Cannot play audio: %1").arg(playerError);
             Logger::error(QString("PlaybackController::play - %1").arg(errorMsg));
-            // 发出错误信号以便UI显示用户提示
             emit errorOccurred(errorMsg);
             return;
         }
@@ -46,6 +56,14 @@ void PlaybackController::playFromTime(double timeMs)
     {
         pause();
     }
+
+    if (m_autoPausedAtEnd)
+    {
+        timeMs = 0.0;
+        m_autoPausedAtEnd = false;
+        Logger::info("PlaybackController::playFromTime - End-of-media replay requested, forcing restart from 0ms");
+    }
+
     seekTo(timeMs);
     play();
 }
@@ -54,6 +72,7 @@ void PlaybackController::pause()
 {
     if (m_state == Playing)
     {
+        m_autoPausedAtEnd = false;
         m_audioPlayer->pause();
         m_state = Paused;
         Logger::debug(QString("PlaybackController::pause - Paused at position %1ms").arg(m_audioPlayer->position()));
@@ -65,6 +84,7 @@ void PlaybackController::stop()
 {
     if (m_state != Stopped)
     {
+        m_autoPausedAtEnd = false;
         m_audioPlayer->stop();
         m_state = Stopped;
         Logger::debug("PlaybackController::stop - Playback stopped");
@@ -91,6 +111,7 @@ double PlaybackController::speed() const
 
 void PlaybackController::seekTo(double timeMs)
 {
+    m_autoPausedAtEnd = false;
     Logger::debug(QString("PlaybackController::seekTo - Seeking to %1ms (adjusted)").arg(timeMs));
     m_audioPlayer->setAdjustedPosition(static_cast<qint64>(timeMs));
 }
@@ -116,22 +137,39 @@ void PlaybackController::setNoteSoundEnabled(bool enabled)
     m_noteSoundEnabled = enabled;
 }
 
+bool PlaybackController::autoPausedAtEnd() const
+{
+    return m_autoPausedAtEnd;
+}
+
 void PlaybackController::onAudioPositionChanged(qint64 position)
 {
     Q_UNUSED(position);
-    // 使用调整后的位置发出信号
     emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
+}
+
+void PlaybackController::onAudioStateChanged(QMediaPlayer::PlaybackState state)
+{
+    if (m_state == Playing && state == QMediaPlayer::StoppedState)
+    {
+        m_autoPausedAtEnd = true;
+        m_audioPlayer->setAdjustedPosition(0);
+        m_state = Paused;
+        Logger::info("PlaybackController::onAudioStateChanged - Reached end of media, auto-paused at beginning");
+        emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
+        emit stateChanged(m_state);
+    }
 }
 
 void PlaybackController::onAudioError(const QString &error)
 {
     Logger::error(QString("PlaybackController::onAudioError - Audio error: %1").arg(error));
-    // Optionally stop playback and reset state.
+    m_autoPausedAtEnd = false;
     if (m_state != Stopped)
     {
         m_state = Stopped;
         emit stateChanged(m_state);
     }
-    // 将错误信号转发给UI
     emit errorOccurred(error);
 }
+

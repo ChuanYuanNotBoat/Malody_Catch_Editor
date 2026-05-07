@@ -1237,6 +1237,11 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
         if (newPos < 0)
             newPos = 0;
         const bool scrollChanged = qAbs(newPos - m_scrollBeat) >= 1e-6;
+        if (scrollChanged && m_playbackController &&
+            m_playbackController->state() == PlaybackController::Playing)
+        {
+            m_playbackController->pause();
+        }
         m_scrollBeat = newPos;
         m_autoScrollEnabled = false;
         if (scrollChanged)
