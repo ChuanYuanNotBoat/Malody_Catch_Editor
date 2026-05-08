@@ -9,7 +9,7 @@
 - `tests/minimal_tests.cpp`
 - `docs/desktop_todo_implementation_2026-05-05.md`
 
-未改动 mobile 路径。
+
 
 ## 2) 建议提交标题
 `desktop: finish TODO set (async working-copy open, plugin self-heal, log utf8/filter, boundary tests)`
@@ -56,3 +56,4 @@ git commit -m "desktop: finish TODO set (async working-copy open, plugin self-he
 ## 6) 备注
 - `TODO.md` 已在本地更新，但该文件当前不受 git 跟踪（仓库配置导致），不会进入提交。
 - 若希望把 TODO 文档也纳入版本控制，需要先调整仓库忽略规则。
+

@@ -6,13 +6,11 @@
 #include "plugin/PluginManager.h"
 #include "model/Skin.h"
 #include "file/SkinIO.h"
-#include "app/mobile/MobileResourcePaths.h"
 #include "utils/Settings.h"
 #include "utils/Translator.h"
 #include "utils/Logger.h"
 #include <QDir>
 #include <QDebug>
-#include <QStandardPaths>
 
 namespace
 {
@@ -21,8 +19,7 @@ QStringList availableSkinBaseDirs()
     const QString appDir = QCoreApplication::applicationDirPath();
     QStringList candidates;
     candidates << (appDir + "/skins")
-               << (appDir + "/resources/default_skin")
-               << MobileResourcePaths::additionalSkinBaseDirs();
+               << (appDir + "/resources/default_skin");
 
     QStringList result;
     for (const QString &dir : candidates)
@@ -40,23 +37,8 @@ QStringList availableSkinBaseDirs()
 
 QString resolvePluginsDir()
 {
-#if defined(Q_OS_ANDROID)
-    const QStringList candidates = {
-        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/plugins",
-        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/plugins"};
-
-    for (const QString &candidate : candidates)
-    {
-        if (candidate.isEmpty())
-            continue;
-        if (QDir().mkpath(candidate))
-            return QDir(candidate).absolutePath();
-    }
-    return QString();
-#else
     const QString appDir = QCoreApplication::applicationDirPath();
     return QDir(appDir).filePath("plugins");
-#endif
 }
 } // namespace
 
@@ -96,9 +78,6 @@ bool Application::initialize()
         Logger::setQtMessageFilterEnabled(Settings::instance().qtMessageFilterEnabled());
         Logger::setQtMessageFilterCategories(Settings::instance().qtMessageFilterCategories());
         Logger::setQtMessageFilterPrefixes(Settings::instance().qtMessageFilterPrefixes());
-
-        MobileResourcePaths::ensureBundledResourcesReady();
-        Logger::info("Mobile bundled resources prepared.");
 
         loadLanguage();
         Logger::info("Language loaded.");

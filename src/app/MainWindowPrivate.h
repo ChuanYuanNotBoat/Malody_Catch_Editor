@@ -8,6 +8,7 @@
 #include <QSet>
 #include <QString>
 #include <QVariantMap>
+#include <limits>
 
 class ChartController;
 class SelectionController;
@@ -27,11 +28,6 @@ class QMenu;
 class ChartCanvas;
 class QToolBar;
 class QDialog;
-class QDockWidget;
-class QTabWidget;
-class QScrollArea;
-class QQuickWidget;
-class QObject;
 class QTimer;
 class RealtimePreviewWidget;
 
@@ -78,7 +74,6 @@ public:
     QAction *notePanelAction = nullptr;
     QAction *bpmPanelAction = nullptr;
     QAction *metaPanelAction = nullptr;
-    QAction *mobileUiTestAction = nullptr;
     QAction *checkUpdatesAction = nullptr;
     QAction *helpDocAction = nullptr;
     QAction *aboutAction = nullptr;
@@ -86,18 +81,7 @@ public:
     QAction *logsAction = nullptr;
     QToolBar *mainToolBar = nullptr;
     QToolBar *pluginToolBar = nullptr;
-    QWidget *mobileShell = nullptr;
-    QQuickWidget *mobilePrimaryBar = nullptr;
-    QObject *mobilePrimaryBarRoot = nullptr;
-    QDockWidget *leftDock = nullptr;
-    QDockWidget *rightDock = nullptr;
-    QTabWidget *mobileTabs = nullptr;
-    QWidget *mobileCanvasHost = nullptr;
-    QScrollArea *mobileLeftPanelHost = nullptr;
-    QScrollArea *mobileRightPanelHost = nullptr;
-    QTimer *mobileSplitterSettleTimer = nullptr;
     QTimer *autoSaveTimer = nullptr;
-    bool mobileSplitterSuppressCanvasUpdates = false;
     bool compactUiMode = false;
     QMenu *languageMenu = nullptr;
     QActionGroup *languageActionGroup = nullptr;
@@ -115,4 +99,8 @@ public:
     QString workingChartPath;
     bool isModified = false;
     bool audioPlaybackReady = false;
+
+    // Density bar scrub state: preview updates canvas only; commit seeks audio once.
+    bool densitySeekGestureActive = false;
+    double densityPendingSeekMs = std::numeric_limits<double>::quiet_NaN();
 };

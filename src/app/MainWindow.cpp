@@ -36,7 +36,6 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
-#include <QGuiApplication>
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QDir>
@@ -60,7 +59,6 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QSysInfo>
-#include <QProcess>
 #include <QGroupBox>
 #include <QFile>
 #include <QTextStream>
@@ -76,7 +74,6 @@
 #include <QTreeWidget>
 #include <QSet>
 #include <QTimer>
-#include <QScreen>
 #include <QTextBrowser>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -93,6 +90,8 @@
 #include <QDirIterator>
 #include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <limits>
 
 namespace
 {
@@ -1321,19 +1320,7 @@ MainWindow::~MainWindow()
 void MainWindow::setupUi()
 {
     setWindowTitle(tr("Catch Chart Editor"));
-    if (useCompactMobileLayout())
-    {
-        const QScreen *screen = QGuiApplication::primaryScreen();
-        if (screen)
-            resize(screen->availableGeometry().size());
-        else
-            resize(1080, 1920);
-        setMinimumSize(0, 0);
-    }
-    else
-    {
-        resize(1200, 800);
-    }
+    resize(1200, 800);
     Logger::debug("MainWindow UI setup completed");
 }
 
@@ -1515,13 +1502,6 @@ void MainWindow::createMenus()
     settingsMenu->addSeparator();
     QAction *shortcutSettingsAction = settingsMenu->addAction(tr("Keyboard Shortcuts..."));
     connect(shortcutSettingsAction, &QAction::triggered, this, &MainWindow::configureShortcuts);
-#if !defined(Q_OS_ANDROID)
-    settingsMenu->addSeparator();
-    d->mobileUiTestAction = settingsMenu->addAction(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
-    d->mobileUiTestAction->setCheckable(true);
-    d->mobileUiTestAction->setChecked(Settings::instance().mobileUiTestMode());
-    connect(d->mobileUiTestAction, &QAction::toggled, this, &MainWindow::toggleMobileUiTestMode);
-#endif
     settingsMenu->addSeparator();
     d->languageMenu = settingsMenu->addMenu(tr("Language"));
     d->languageActionGroup = new QActionGroup(this);
@@ -1607,10 +1587,6 @@ void MainWindow::createMenus()
     d->aboutAction = d->helpMenu->addAction(tr("About..."), this, &MainWindow::showAboutPage);
     d->versionAction = d->helpMenu->addAction(tr("Version Information..."), this, &MainWindow::showVersionPage);
     d->logsAction = d->helpMenu->addAction(tr("Logs..."), this, &MainWindow::showLogsPage);
-    if (useCompactMobileLayout() && menuBar())
-    {
-        menuBar()->setVisible(false);
-    }
     applySidebarTheme();
 
     Logger::debug("Menus created");
@@ -1733,7 +1709,6 @@ void MainWindow::createCentralArea()
 {
     Logger::debug("Creating central area...");
 
-    d->mobileTabs = nullptr;
     d->leftPanel = new LeftPanel(this);
     d->leftPanel->setObjectName("leftPanelRoot");
     d->leftPanel->setAttribute(Qt::WA_StyledBackground, true);
@@ -1792,6 +1767,8 @@ void MainWindow::createCentralArea()
     canvasLayout->addWidget(d->rightDensityBar, 0);
 
     connect(d->rightDensityBar, &DensityCurve::seekGestureStarted, this, [this]() {
+        d->densitySeekGestureActive = true;
+        d->densityPendingSeekMs = std::numeric_limits<double>::quiet_NaN();
         if (d->playbackController && d->playbackController->state() == PlaybackController::Playing)
         {
             Logger::debug("Playback paused due to density bar drag interaction");
@@ -1799,18 +1776,41 @@ void MainWindow::createCentralArea()
         }
     });
 
-    connect(d->rightDensityBar, &DensityCurve::seekRequested, this, [this](double targetTimeMs) {
-        if (!d->playbackController || !d->canvas)
-            return;
+    const auto clampSeekMs = [this](double targetTimeMs) -> double {
         double clamped = qMax(0.0, targetTimeMs);
-        if (d->playbackController->audioPlayer())
+        if (d->playbackController && d->playbackController->audioPlayer())
         {
             const qint64 duration = d->playbackController->audioPlayer()->duration();
             if (duration > 0)
                 clamped = qBound(0.0, clamped, static_cast<double>(duration));
         }
-        d->playbackController->seekTo(clamped);
+        return clamped;
+    };
+
+    connect(d->rightDensityBar, &DensityCurve::seekPreviewRequested, this, [this, clampSeekMs](double targetTimeMs) {
+        if (!d->canvas)
+            return;
+        const double clamped = clampSeekMs(targetTimeMs);
+        d->densityPendingSeekMs = clamped;
+        // Preview path: update visual playhead only; defer real seek to gesture end.
         d->canvas->setScrollPos(clamped);
+    });
+
+    connect(d->rightDensityBar, &DensityCurve::seekRequested, this, [this, clampSeekMs](double targetTimeMs) {
+        if (!d->playbackController || !d->canvas)
+            return;
+        const double clamped = clampSeekMs(targetTimeMs);
+        d->densityPendingSeekMs = clamped;
+        d->canvas->setScrollPos(clamped);
+        // Fallback for non-gesture calls.
+        if (!d->densitySeekGestureActive)
+            d->playbackController->seekTo(clamped);
+    });
+
+    connect(d->rightDensityBar, &DensityCurve::seekGestureFinished, this, [this]() {
+        if (d->playbackController && std::isfinite(d->densityPendingSeekMs))
+            d->playbackController->seekTo(d->densityPendingSeekMs);
+        d->densitySeekGestureActive = false;
     });
 
     d->rightPanelContainer = new QWidget(this);
@@ -1871,38 +1871,30 @@ void MainWindow::createCentralArea()
     connect(d->notePanel, &NoteEditPanel::pluginPlacementActionTriggered, this, &MainWindow::triggerPluginQuickAction);
     connect(d->canvas, &ChartCanvas::mirrorAxisChanged, d->notePanel, &NoteEditPanel::setMirrorAxisValue);
 
-    if (useCompactMobileLayout())
-    {
-        setupMobileCentralArea(canvasContainer);
-        populateMobilePrimaryToolbar();
-    }
-    else
-    {
-        d->splitter = new QSplitter(Qt::Horizontal, this);
-        d->splitter->addWidget(d->leftPanel);
-        d->splitter->addWidget(d->previewWidget);
-        d->splitter->addWidget(canvasContainer);
-        d->splitter->addWidget(d->rightPanelContainer);
-        d->splitter->setSizes({150, 200, 700, 300});
-        setCentralWidget(d->splitter);
-        d->mainToolBar = addToolBar(tr("Tools"));
-        d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
-                                                       {
+    d->splitter = new QSplitter(Qt::Horizontal, this);
+    d->splitter->addWidget(d->leftPanel);
+    d->splitter->addWidget(d->previewWidget);
+    d->splitter->addWidget(canvasContainer);
+    d->splitter->addWidget(d->rightPanelContainer);
+    d->splitter->setSizes({150, 200, 700, 300});
+    setCentralWidget(d->splitter);
+    d->mainToolBar = addToolBar(tr("Tools"));
+    d->notePanelAction = d->mainToolBar->addAction(tr("Note"), [this]()
+                                                   {
         showEditorPanel(d->notePanel); });
-        d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
-                                                      {
+    d->bpmPanelAction = d->mainToolBar->addAction(tr("BPM"), [this]()
+                                                  {
         showEditorPanel(d->bpmPanel); });
-        d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
-                                                       {
+    d->metaPanelAction = d->mainToolBar->addAction(tr("Meta"), [this]()
+                                                   {
         showEditorPanel(d->metaPanel); });
-        addToolBarBreak(Qt::TopToolBarArea);
-        d->pluginToolBar = addToolBar(tr("Plugins"));
-        d->pluginManagerToolbarAction = d->pluginToolBar->addAction(tr("Plugins"), this, &MainWindow::openPluginManager);
-        d->pluginToolModeToolbarAction = d->pluginToolBar->addAction(tr("Launch Curve Tool"));
-        d->pluginToolModeToolbarAction->setCheckable(true);
-        d->pluginToolModeToolbarAction->setEnabled(false);
-        connect(d->pluginToolModeToolbarAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
-    }
+    addToolBarBreak(Qt::TopToolBarArea);
+    d->pluginToolBar = addToolBar(tr("Plugins"));
+    d->pluginManagerToolbarAction = d->pluginToolBar->addAction(tr("Plugins"), this, &MainWindow::openPluginManager);
+    d->pluginToolModeToolbarAction = d->pluginToolBar->addAction(tr("Launch Curve Tool"));
+    d->pluginToolModeToolbarAction->setCheckable(true);
+    d->pluginToolModeToolbarAction->setEnabled(false);
+    connect(d->pluginToolModeToolbarAction, &QAction::toggled, this, &MainWindow::togglePluginEnhancedToolMode);
     showEditorPanel(d->notePanel);
     applySidebarTheme();
 
@@ -3072,9 +3064,6 @@ void MainWindow::retranslateUi()
         d->bpmPanel->retranslateUi();
     if (d->metaPanel)
         d->metaPanel->retranslateUi();
-    if (d->mobileUiTestAction)
-        d->mobileUiTestAction->setText(tr("[Debug] Mobile UI Test Mode (Restart Required)"));
-    retranslateMobileUi();
     applySidebarTheme();
     Logger::debug("UI retranslated");
 }
@@ -3094,12 +3083,8 @@ void MainWindow::showEditorPanel(QWidget *panel)
     else if (panel == d->metaPanel)
         d->currentRightPanel = d->metaPanel;
 
-    if (useCompactMobileLayout())
-    {
-        if (d->rightPanelContainer)
-            d->rightPanelContainer->setVisible(true);
-        retranslateMobileUi();
-    }
+    if (d->rightPanelContainer)
+        d->rightPanelContainer->setVisible(true);
 }
 
 // ==================== Paste 288 division option slot ====================
@@ -3107,52 +3092,6 @@ void MainWindow::togglePaste288Division(bool enabled)
 {
     Settings::instance().setPasteUse288Division(enabled);
     Logger::info(QString("Paste 288 division: %1").arg(enabled ? "enabled" : "disabled"));
-}
-
-void MainWindow::toggleMobileUiTestMode(bool enabled)
-{
-#if defined(Q_OS_ANDROID)
-    Q_UNUSED(enabled);
-    return;
-#else
-    if (Settings::instance().mobileUiTestMode() == enabled)
-        return;
-
-    Settings::instance().setMobileUiTestMode(enabled);
-    Logger::info(QString("Mobile UI test mode toggled to %1").arg(enabled ? "enabled" : "disabled"));
-
-    QMessageBox prompt(this);
-    prompt.setIcon(QMessageBox::Question);
-    prompt.setWindowTitle(tr("Restart Required"));
-    prompt.setText(tr("Mobile UI test mode was %1.")
-                       .arg(enabled ? tr("enabled") : tr("disabled")));
-    prompt.setInformativeText(tr("This debug option applies after restart. Restart now?"));
-
-    QPushButton *restartNowBtn = prompt.addButton(tr("Restart Now"), QMessageBox::AcceptRole);
-    QPushButton *laterBtn = prompt.addButton(tr("Later"), QMessageBox::RejectRole);
-    Q_UNUSED(laterBtn);
-    prompt.exec();
-
-    if (prompt.clickedButton() != restartNowBtn)
-    {
-        statusBar()->showMessage(tr("Mobile UI test mode will apply after restart."), 3000);
-        return;
-    }
-
-    QStringList args = QCoreApplication::arguments();
-    if (!args.isEmpty())
-        args.removeFirst();
-
-    const QString executable = QCoreApplication::applicationFilePath();
-    const QString workDir = QFileInfo(executable).absolutePath();
-    if (!QProcess::startDetached(executable, args, workDir))
-    {
-        QMessageBox::warning(this, tr("Restart Failed"), tr("Unable to restart automatically. Please relaunch manually."));
-        return;
-    }
-
-    qApp->quit();
-#endif
 }
 
 void MainWindow::changeLanguage()

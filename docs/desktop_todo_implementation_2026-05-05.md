@@ -1,7 +1,7 @@
 ﻿# 桌面 TODO 实施与验收文档（2026-05-05）
 
 ## 1. 本轮目标
-- 全量完成 `TODO.md` 桌面项（P0/P1/P2），不包含 mobile。
+- 全量完成 `TODO.md` 桌面项（P0/P1/P2）。
 - 新增并完成：Qt 控制台中文乱码修复。
 - 打开大谱面卡顿专项：采用“异步复制 + 进度窗”，保证 UI 不出现“未响应”。
 - 性能验收基准固定为：
@@ -125,4 +125,5 @@
 - `src/utils/Settings.h`
 - `src/utils/Settings.cpp`
 - `tests/minimal_tests.cpp`
+
 

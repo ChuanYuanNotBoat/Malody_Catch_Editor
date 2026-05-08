@@ -279,16 +279,6 @@ void Settings::setDisabledPluginIds(const QStringList &pluginIds)
     m_settings.setValue("plugins/disabledIds", pluginIds);
 }
 
-bool Settings::mobileUiTestMode() const
-{
-    return m_settings.value("debug/mobileUiTestMode", false).toBool();
-}
-
-void Settings::setMobileUiTestMode(bool enabled)
-{
-    m_settings.setValue("debug/mobileUiTestMode", enabled);
-}
-
 bool Settings::autoSaveEnabled() const
 {
     return m_settings.value("editor/autoSaveEnabled", true).toBool();

@@ -78,14 +78,6 @@ private slots:
     void changeNoteSound(const QString &soundPath);
     void changeLanguage();
     void configureShortcuts();
-    void toggleMobileUiTestMode(bool enabled);
-    void openMobileFunctionHub();
-    void toggleMobileLeftPanel();
-    void toggleMobileRightPanel();
-    void showMobileNotePanel();
-    void showMobileBpmPanel();
-    void showMobileMetaPanel();
-    void showMobileEditor();
     void checkForUpdates();
     void showHelpPage();
     void showAboutPage();
@@ -121,11 +113,7 @@ private:
     QString beatmapRootPath() const; // Return beatmap root directory.
     void showInfoCenter(int initialTab);
     void applySidebarTheme();
-    bool useCompactMobileLayout() const;
-    void setupMobileCentralArea(QWidget *canvasContainer);
-    void populateMobilePrimaryToolbar();
     void showEditorPanel(QWidget *panel);
-    void retranslateMobileUi();
 
     class Private;
     Private *d;

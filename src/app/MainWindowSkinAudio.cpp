@@ -3,7 +3,6 @@
 #include "ui/CustomWidgets/ChartCanvas/ChartCanvas.h"
 #include "ui/CustomWidgets/RealtimePreviewWidget.h"
 #include "file/SkinIO.h"
-#include "app/mobile/MobileResourcePaths.h"
 #include "model/Skin.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
@@ -25,8 +24,7 @@ QStringList skinBaseDirs()
     const QString appDir = QCoreApplication::applicationDirPath();
     QStringList candidates;
     candidates << (appDir + "/skins")
-               << (appDir + "/resources/default_skin")
-               << MobileResourcePaths::additionalSkinBaseDirs();
+               << (appDir + "/resources/default_skin");
 
     QStringList result;
     for (const QString &dir : candidates)
@@ -110,8 +108,7 @@ QStringList noteSoundBaseDirs()
     const QString appDir = QCoreApplication::applicationDirPath();
     QStringList candidates;
     candidates << (appDir + "/note_sounds")
-               << (appDir + "/resources/note_sounds")
-               << MobileResourcePaths::additionalNoteSoundBaseDirs();
+               << (appDir + "/resources/note_sounds");
 
     QStringList result;
     for (const QString &dir : candidates)

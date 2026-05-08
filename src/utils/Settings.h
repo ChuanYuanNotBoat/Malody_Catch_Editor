@@ -78,9 +78,6 @@ public:
     QStringList disabledPluginIds() const;
     void setDisabledPluginIds(const QStringList &pluginIds);
 
-    bool mobileUiTestMode() const;
-    void setMobileUiTestMode(bool enabled);
-
     bool autoSaveEnabled() const;
     void setAutoSaveEnabled(bool enabled);
     int autoSaveIntervalSec() const;

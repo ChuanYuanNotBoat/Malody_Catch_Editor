@@ -62,7 +62,6 @@
 - `Settings -> Note Sound`：选择编辑音符时播放的按键音；选择 `None` 可关闭音效。
 - `Settings -> Keyboard Shortcuts...`：自定义可配置快捷键。清空输入框可禁用对应快捷键，`Reset` 恢复单项默认值，`Reset All` 恢复全部默认值。当前更稳定支持 `Ctrl` / `Shift` 参与的双键组合。
 - `Settings -> Language`：切换界面语言。
-- `Settings -> [Debug] Mobile UI Test Mode (Restart Required)`：桌面端调试移动布局的开关，需重启生效，不建议使用。
 
 ### Playback 播放菜单
 

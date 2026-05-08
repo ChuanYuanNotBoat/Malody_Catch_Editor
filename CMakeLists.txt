@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Multimedia Quick QuickWidgets Qml LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Multimedia LinguistTools)
 
 if(COMMAND qt_standard_project_setup)
     qt_standard_project_setup()
@@ -17,8 +17,6 @@ set(SOURCES
     src/main.cpp
     src/app/Application.cpp
     src/app/MainWindow.cpp
-    src/app/mobile/MainWindowMobile.cpp
-    src/app/mobile/MobileResourcePaths.cpp
     src/app/MainWindowDialogs.cpp
     src/app/MainWindowSkinAudio.cpp
     src/model/Note.cpp
@@ -74,44 +72,12 @@ qt_add_executable(${PROJECT_NAME}
     ${SOURCES}
 )
 
-if(ANDROID)
-    file(GLOB_RECURSE MOBILE_BUNDLED_ASSETS
-        RELATIVE ${CMAKE_SOURCE_DIR}
-        resources/default_skin/*
-        resources/note_sounds/*
-        plugins/*
-    )
-    qt_add_resources(${PROJECT_NAME} mobile_bundled_assets
-        PREFIX "/mobile_assets"
-        FILES ${MOBILE_BUNDLED_ASSETS}
-    )
-endif()
-
-qt_add_resources(${PROJECT_NAME} mobile_qml_ui
-    PREFIX "/qml/mobile"
-    BASE "resources/qml/mobile"
-    FILES
-        resources/qml/mobile/MobilePrimaryBar.qml
-)
-
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::Multimedia
-    Qt6::Quick
-    Qt6::QuickWidgets
-    Qt6::Qml
 )
-
-if(ANDROID)
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        QT_ANDROID_SCREEN_ORIENTATION "landscape"
-        QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/android")
-endif()
-
-# Keep existing desktop packaging flow (windeployqt/copy commands), while
-# enabling Qt's Android packaging targets (apk/aab) when building for Android.
 if(COMMAND qt_finalize_executable)
     qt_finalize_executable(${PROJECT_NAME})
 endif()
