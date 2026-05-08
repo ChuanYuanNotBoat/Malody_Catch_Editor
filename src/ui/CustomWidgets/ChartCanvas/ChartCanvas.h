@@ -4,7 +4,6 @@
 #include <QWidget>
 #include <QPointF>
 #include <QSet>
-#include <QTimer>
 #include <QDateTime>
 #include <QVector>
 #include <QElapsedTimer>
@@ -117,18 +116,21 @@ protected:
 private:
     static constexpr int kLaneWidth = 512;
     static constexpr double kReferenceLineRatio = 0.8;
-    static constexpr int kPlaybackFrameIntervalMs = 16;
     static constexpr int kScrollSignalIntervalMs = 33;
     static constexpr double kWheelScrollBeatStepRatio = 0.1;
     static constexpr int kSideMarginDivisor = 20;
     static constexpr int kOverlayQueryIntervalMsToolMode = 33;
     static constexpr int kOverlayQueryIntervalMsToolModePlaying = 16;
+    static constexpr int kOverlayQueryIntervalMsToolModePlayingMedium = 33;
+    static constexpr int kOverlayQueryIntervalMsToolModePlayingSlow = 50;
     static constexpr int kOverlayQueryIntervalMsIdle = 800;
+    static constexpr int kOverlayPlaybackQueryBudgetMs = 3;
     static constexpr int kOverlaySlowCallThresholdMs = 40;
     static constexpr int kOverlaySlowCallBackoffMs = 1000;
 
     void drawBackground(QPainter &painter);
     void drawGrid(QPainter &painter);
+    void invalidateGridCache();
     void drawPastePreview(QPainter &painter,
                           int canvasHeight,
                           int lmargin,
@@ -316,7 +318,6 @@ private:
     int m_snapTimerId;
     bool m_isScrolling;
 
-    QTimer *m_playbackTimer; // Playback tick timer (~16ms).
     QList<PluginInterface::CanvasOverlayItem> m_overlayCache;
     QList<PluginInterface::CanvasOverlayItem> m_eventOverlayCache;
     qint64 m_lastOverlayQueryMs;
@@ -339,10 +340,6 @@ private:
 
     bool m_isPlaying;
     qint64 m_lastScrollSignalTimeMs;
-    bool m_hasPlaybackAnchor;
-    double m_playbackAnchorMs;
-    qint64 m_playbackAnchorMonoMs;
-    QElapsedTimer m_playbackMonoClock;
     NoteSoundPlayer *m_noteSoundPlayer;
     QVector<double> m_playableNoteTimesMs;
     int m_nextPlayableNoteIndex;
@@ -356,5 +353,22 @@ private:
 private slots:
     void onSelectionChanged();
     void requestNextFrame();
+    void onPlaybackFrameTick(double predictedTimeMs, qint64 frameSeq);
+
+private:
+    QPixmap m_gridCache;
+    QRect m_gridCacheRect;
+    double m_gridCacheStartTime;
+    double m_gridCacheEndTime;
+    int m_gridCacheDivision;
+    int m_gridCacheTimeDivision;
+    bool m_gridCacheVerticalFlip;
+    bool m_gridCacheColorEnabled;
+    QString m_gridCacheColorPreset;
+    QList<int> m_gridCacheColorCustomDivisions;
+    bool m_gridCacheValid;
+    int m_gridCachePadPx;
+    qint64 m_lastPlaybackFrameSeq;
+    int m_overlayPlaybackIntervalMs;
 };
 

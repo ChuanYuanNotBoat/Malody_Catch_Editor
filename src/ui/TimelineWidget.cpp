@@ -7,7 +7,7 @@
 #include <QStyleOption>
 
 TimelineWidget::TimelineWidget(QWidget *parent)
-    : QWidget(parent), m_chartController(nullptr), m_playbackController(nullptr), m_currentTime(0), m_totalDuration(0), m_offset(0)
+    : QWidget(parent), m_chartController(nullptr), m_playbackController(nullptr), m_currentTime(0), m_totalDuration(0), m_offset(0), m_dragging(false)
 {
     setFixedHeight(30);
 }
@@ -46,12 +46,24 @@ void TimelineWidget::setChartController(ChartController *controller)
 
 void TimelineWidget::setPlaybackController(PlaybackController *controller)
 {
+    if (m_playbackController)
+    {
+        disconnect(m_playbackController, &PlaybackController::positionChanged, this, &TimelineWidget::updateFromPlayback);
+        disconnect(this, &TimelineWidget::seekRequested, m_playbackController, &PlaybackController::seekTo);
+    }
+
     m_playbackController = controller;
-    connect(controller, &PlaybackController::positionChanged, this, &TimelineWidget::updateFromPlayback);
+    if (!m_playbackController)
+        return;
+
+    connect(m_playbackController, &PlaybackController::positionChanged, this, &TimelineWidget::updateFromPlayback);
+    connect(this, &TimelineWidget::seekRequested, m_playbackController, &PlaybackController::seekTo);
 }
 
 void TimelineWidget::updateFromPlayback(double timeMs)
 {
+    if (m_dragging)
+        return;
     // 音频位置转谱面时间：减去offset
     m_currentTime = timeMs - m_offset;
     if (m_currentTime < 0)
@@ -86,27 +98,52 @@ void TimelineWidget::paintEvent(QPaintEvent *event)
 
 void TimelineWidget::mousePressEvent(QMouseEvent *event)
 {
-    if (!m_playbackController)
+    if (!event || event->button() != Qt::LeftButton || !m_playbackController)
         return;
-    double ratio = static_cast<double>(event->pos().x()) / width();
-    // 谱面时间 = 比例 * (总时长 - offset)
-    double chartTime = ratio * (m_totalDuration - m_offset);
-    // 音频位置 = 谱面时间 + offset
-    double audioPos = chartTime + m_offset;
-    m_playbackController->seekTo(audioPos);
-    update();
+    m_dragging = true;
+    emit seekGestureStarted();
+    updateFromPointer(event->pos().x(), false);
+    event->accept();
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    if (event->buttons() & Qt::LeftButton)
+    if (!event || !m_dragging || !(event->buttons() & Qt::LeftButton) || !m_playbackController)
+        return;
+    updateFromPointer(event->pos().x(), false);
+    event->accept();
+}
+
+void TimelineWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (!event || event->button() != Qt::LeftButton)
+        return;
+    if (m_dragging)
     {
-        double ratio = static_cast<double>(event->pos().x()) / width();
-        // 谱面时间 = 比例 * (总时长 - offset)
-        double chartTime = ratio * (m_totalDuration - m_offset);
-        // 音频位置 = 谱面时间 + offset
-        double audioPos = chartTime + m_offset;
-        m_playbackController->seekTo(audioPos);
-        update();
+        updateFromPointer(event->pos().x(), true);
+        m_dragging = false;
+        emit seekGestureFinished();
     }
+    event->accept();
+}
+
+double TimelineWidget::pointerToAudioPositionMs(int x) const
+{
+    if (width() <= 0 || m_totalDuration <= 0.0)
+        return 0.0;
+    const double ratio = qBound(0.0, static_cast<double>(x) / static_cast<double>(width()), 1.0);
+    const double chartTime = ratio * qMax(0.0, m_totalDuration - m_offset);
+    const double audioPos = chartTime + m_offset;
+    return qBound(0.0, audioPos, m_totalDuration);
+}
+
+void TimelineWidget::updateFromPointer(int x, bool commitSeek)
+{
+    const double audioPos = pointerToAudioPositionMs(x);
+    m_currentTime = qMax(0.0, audioPos - m_offset);
+    if (commitSeek)
+        emit seekRequested(audioPos);
+    else
+        emit seekPreviewRequested(audioPos);
+    update();
 }

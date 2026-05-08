@@ -1,7 +1,10 @@
 #pragma once
 
 #include <QObject>
+#include <QElapsedTimer>
 #include "audio/AudioPlayer.h"
+
+class QTimer;
 
 class PlaybackController : public QObject
 {
@@ -36,6 +39,7 @@ public:
 signals:
     void stateChanged(State newState);
     void positionChanged(double timeMs);
+    void playbackFrameTick(double predictedTimeMs, qint64 frameSeq);
     void speedChanged(double speed);
     void beatReached(int beatNum, int num, int den);
     void errorOccurred(const QString &error);
@@ -43,11 +47,31 @@ private slots:
     void onAudioPositionChanged(qint64 position);
     void onAudioStateChanged(QMediaPlayer::PlaybackState state);
     void onAudioError(const QString &error);
+    void onFramePulseTimeout();
 
 private:
+    static constexpr int kFramePulseIntervalMs = 16;
+    static constexpr double kAnchorDeadZoneMs = 2.0;
+    static constexpr double kAnchorModerateWindowMs = 48.0;
+    static constexpr double kAnchorModerateGain = 0.04;
+    static constexpr double kAnchorLargeWindowMs = 220.0;
+    static constexpr double kAnchorLargeGain = 0.10;
+
+    qint64 clampSeekTargetMs(qint64 timeMs) const;
+    void applySeekNow(qint64 targetMs, const char *reason);
+    void resetFrameAnchor(double timeMs, qint64 nowMs);
+    void applyObservedTimeToAnchor(double observedMs, qint64 nowMs);
+
     AudioPlayer *m_audioPlayer;
     State m_state;
     double m_speed;
     bool m_noteSoundEnabled;
     bool m_autoPausedAtEnd;
+    QTimer *m_framePulseTimer;
+    QElapsedTimer m_frameClock;
+    bool m_frameAnchorValid;
+    double m_frameAnchorTimeMs;
+    qint64 m_frameAnchorWallMs;
+    qint64 m_frameSeq;
+    double m_lastFrameTickMs;
 };

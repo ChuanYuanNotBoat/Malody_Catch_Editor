@@ -23,6 +23,22 @@
 
 namespace
 {
+double extractWheelDeltaY(const QWheelEvent *event)
+{
+    if (!event)
+        return 0.0;
+
+    const int angleDeltaY = event->angleDelta().y();
+    if (angleDeltaY != 0)
+        return static_cast<double>(angleDeltaY);
+
+    const int pixelDeltaY = event->pixelDelta().y();
+    if (pixelDeltaY != 0)
+        return static_cast<double>(pixelDeltaY);
+
+    return 0.0;
+}
+
 void fillPluginEventModifiers(PluginInterface::CanvasInputEvent *outEvent, Qt::KeyboardModifiers eventModifiers)
 {
     if (!outEvent)
@@ -1196,6 +1212,8 @@ void ChartCanvas::mouseReleaseEvent(QMouseEvent *event)
 
 void ChartCanvas::wheelEvent(QWheelEvent *event)
 {
+    const double wheelDeltaY = extractWheelDeltaY(event);
+
     PluginInterface::CanvasInputEvent pluginEvent;
     pluginEvent.type = "wheel";
     pluginEvent.x = event->position().x();
@@ -1203,7 +1221,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
     pluginEvent.button = static_cast<int>(Qt::NoButton);
     pluginEvent.buttons = static_cast<int>(event->buttons());
     fillPluginEventModifiers(&pluginEvent, event->modifiers());
-    pluginEvent.wheelDelta = static_cast<double>(event->angleDelta().y());
+    pluginEvent.wheelDelta = wheelDeltaY;
     pluginEvent.timestampMs = QDateTime::currentMSecsSinceEpoch();
     bool consumed = false;
     if (dispatchPluginCanvasInput(pluginEvent, &consumed) && consumed)
@@ -1214,7 +1232,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
 
     if (event->modifiers() & Qt::ControlModifier)
     {
-        double delta = event->angleDelta().y();
+        const double delta = wheelDeltaY;
         if (delta != 0)
         {
             double factor = (delta > 0) ? 1.2 : 1.0 / 1.2;
@@ -1229,7 +1247,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
     m_isScrolling = true;
     stopSnapTimer();
 
-    double delta = event->angleDelta().y();
+    const double delta = wheelDeltaY;
     if (delta != 0)
     {
         double step = effectiveVisibleBeatRange() * kWheelScrollBeatStepRatio;

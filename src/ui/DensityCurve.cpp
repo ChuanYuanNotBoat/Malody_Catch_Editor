@@ -171,6 +171,9 @@ void DensityCurve::computeDensity()
     const auto &notes = m_chart->notes();
     for (const Note &note : notes)
     {
+        if (note.type != NoteType::NORMAL && note.type != NoteType::RAIN)
+            continue;
+
         const double t = MathUtils::beatToMs(
             note.beatNum, note.numerator, note.denominator, m_chart->bpmList(), m_chart->meta().offset);
         const double clamped = qBound(0.0, t, m_durationMs);
@@ -183,7 +186,7 @@ void DensityCurve::computeDensity()
     }
 }
 
-void DensityCurve::updateFromPointer(const QPoint &pos)
+void DensityCurve::updateFromPointer(const QPoint &pos, bool commitSeek)
 {
     if (height() <= 0 || m_durationMs <= 0.0)
         return;
@@ -192,7 +195,10 @@ void DensityCurve::updateFromPointer(const QPoint &pos)
     const double timeMs = qBound(0.0, ratio * m_durationMs, m_durationMs);
     m_tipTimeMs = timeMs;
     m_currentTimeMs = timeMs;
-    emit seekRequested(timeMs);
+    if (commitSeek)
+        emit seekRequested(timeMs);
+    else
+        emit seekPreviewRequested(timeMs);
     update();
 }
 
@@ -286,7 +292,7 @@ void DensityCurve::mousePressEvent(QMouseEvent *event)
     m_dragging = true;
     m_showTip = true;
     emit seekGestureStarted();
-    updateFromPointer(event->pos());
+    updateFromPointer(event->pos(), false);
     event->accept();
 }
 
@@ -296,7 +302,7 @@ void DensityCurve::mouseMoveEvent(QMouseEvent *event)
         return;
     if (!m_dragging || !(event->buttons() & Qt::LeftButton))
         return;
-    updateFromPointer(event->pos());
+    updateFromPointer(event->pos(), false);
     event->accept();
 }
 
@@ -306,7 +312,7 @@ void DensityCurve::mouseReleaseEvent(QMouseEvent *event)
         return;
     if (m_dragging)
     {
-        updateFromPointer(event->pos());
+        updateFromPointer(event->pos(), true);
         m_dragging = false;
         m_showTip = false;
         emit seekGestureFinished();

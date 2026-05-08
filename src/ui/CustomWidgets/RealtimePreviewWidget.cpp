@@ -17,8 +17,7 @@ RealtimePreviewWidget::RealtimePreviewWidget(QWidget *parent)
     : QWidget(parent),
       m_noteRenderer(new NoteRenderer()),
       m_hyperfruitDetector(new HyperfruitDetector()),
-      m_deferredUpdateTimer(new QTimer(this)),
-      m_playbackFrameTimer(new QTimer(this))
+      m_deferredUpdateTimer(new QTimer(this))
 {
     setMinimumWidth(170);
     setMaximumWidth(260);
@@ -29,6 +28,7 @@ RealtimePreviewWidget::RealtimePreviewWidget(QWidget *parent)
     m_noteRenderer->setShowColors(false);
 
     m_deferredUpdateTimer->setSingleShot(true);
+    m_deferredUpdateTimer->setTimerType(Qt::PreciseTimer);
     connect(m_deferredUpdateTimer, &QTimer::timeout, this, [this]() {
         m_updateScheduled = false;
         if (!isVisible())
@@ -36,11 +36,7 @@ RealtimePreviewWidget::RealtimePreviewWidget(QWidget *parent)
         update();
         m_frameTimer.restart();
     });
-    m_playbackFrameTimer->setInterval(kMinFrameIntervalMs);
-    m_playbackFrameTimer->setTimerType(Qt::PreciseTimer);
-    connect(m_playbackFrameTimer, &QTimer::timeout, this, &RealtimePreviewWidget::tickPlaybackFrame);
     m_frameTimer.start();
-    m_playbackClock.start();
 }
 
 RealtimePreviewWidget::~RealtimePreviewWidget()
@@ -79,62 +75,22 @@ void RealtimePreviewWidget::setPlaybackController(PlaybackController *controller
     if (m_playbackController)
         disconnect(m_playbackController, nullptr, this, nullptr);
 
-    if (m_playbackFrameTimer)
-        m_playbackFrameTimer->stop();
-    m_playbackAnchored = false;
+    m_lastPlaybackFrameSeq = -1;
 
     m_playbackController = controller;
     if (m_playbackController)
     {
         connect(m_playbackController, &PlaybackController::positionChanged, this, [this](double timeMs) {
             const double clamped = qMax(0.0, timeMs);
-            if (m_playbackController->state() != PlaybackController::Playing)
-            {
-                if (std::abs(clamped - m_currentTimeMs) < 0.05)
-                    return;
-                m_currentTimeMs = clamped;
-                m_playbackAnchored = false;
-                scheduleUpdate();
+            if (m_playbackController->state() == PlaybackController::Playing)
                 return;
-            }
-
-            const qint64 nowMs = m_playbackClock.elapsed();
-            if (!m_playbackAnchored)
-            {
-                m_playbackAnchorTimeMs = clamped;
-                m_playbackAnchorWallMs = nowMs;
-                m_playbackAnchored = true;
-            }
-            else
-            {
-                const double predicted = m_playbackAnchorTimeMs +
-                                         (nowMs - m_playbackAnchorWallMs) * m_playbackController->speed();
-                const double delta = clamped - predicted;
-                if (std::abs(delta) <= 2.0)
-                {
-                    m_playbackAnchorTimeMs = predicted;
-                    m_playbackAnchorWallMs = nowMs;
-                }
-                else if (std::abs(delta) < 48.0)
-                {
-                    m_playbackAnchorTimeMs = predicted + delta * 0.04;
-                    m_playbackAnchorWallMs = nowMs;
-                }
-                else if (std::abs(delta) < 220.0)
-                {
-                    m_playbackAnchorTimeMs = predicted + delta * 0.10;
-                    m_playbackAnchorWallMs = nowMs;
-                }
-                else
-                {
-                    m_playbackAnchorTimeMs = clamped;
-                    m_playbackAnchorWallMs = nowMs;
-                }
-            }
-
-            if (!m_playbackFrameTimer->isActive())
-                m_playbackFrameTimer->start();
+            if (std::abs(clamped - m_currentTimeMs) < 0.05)
+                return;
+            m_currentTimeMs = clamped;
+            scheduleUpdate();
         });
+        connect(m_playbackController, &PlaybackController::playbackFrameTick,
+                this, &RealtimePreviewWidget::handlePlaybackFrameTick);
         connect(m_playbackController, &PlaybackController::stateChanged, this, [this](PlaybackController::State) {
             onPlaybackStateChanged();
         });
@@ -232,6 +188,14 @@ void RealtimePreviewWidget::scheduleUpdate()
     if (!isVisible())
         return;
 
+    if (m_playbackController && m_playbackController->state() == PlaybackController::Playing)
+    {
+        if (m_deferredUpdateTimer->isActive())
+            m_deferredUpdateTimer->stop();
+        m_updateScheduled = false;
+        return;
+    }
+
     if (!m_frameTimer.isValid() || m_frameTimer.elapsed() >= kMinFrameIntervalMs)
     {
         if (m_deferredUpdateTimer->isActive())
@@ -257,43 +221,34 @@ void RealtimePreviewWidget::onPlaybackStateChanged()
 
     if (m_playbackController->state() == PlaybackController::Playing)
     {
-        m_playbackAnchorTimeMs = qMax(0.0, m_playbackController->currentTime());
-        m_playbackAnchorWallMs = m_playbackClock.elapsed();
-        m_playbackAnchored = true;
-        if (!m_playbackFrameTimer->isActive())
-            m_playbackFrameTimer->start();
+        if (m_deferredUpdateTimer->isActive())
+            m_deferredUpdateTimer->stop();
+        m_updateScheduled = false;
+        m_lastPlaybackFrameSeq = -1;
+        m_currentTimeMs = qMax(0.0, m_playbackController->currentTime());
+        update();
+        m_frameTimer.restart();
         return;
     }
 
-    if (m_playbackFrameTimer->isActive())
-        m_playbackFrameTimer->stop();
-    m_playbackAnchored = false;
+    m_lastPlaybackFrameSeq = -1;
     m_currentTimeMs = qMax(0.0, m_playbackController->currentTime());
     scheduleUpdate();
 }
 
-void RealtimePreviewWidget::tickPlaybackFrame()
+void RealtimePreviewWidget::handlePlaybackFrameTick(double predictedTimeMs, qint64 frameSeq)
 {
     if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing)
-    {
-        if (m_playbackFrameTimer->isActive())
-            m_playbackFrameTimer->stop();
         return;
-    }
-
-    if (!m_playbackAnchored)
-    {
-        m_playbackAnchorTimeMs = qMax(0.0, m_playbackController->currentTime());
-        m_playbackAnchorWallMs = m_playbackClock.elapsed();
-        m_playbackAnchored = true;
-    }
-
-    const qint64 nowMs = m_playbackClock.elapsed();
-    const double predicted = m_playbackAnchorTimeMs +
-                             (nowMs - m_playbackAnchorWallMs) * m_playbackController->speed();
-    if (predicted > m_currentTimeMs - 24.0)
-        m_currentTimeMs = qMax(0.0, predicted);
-    scheduleUpdate();
+    if (frameSeq <= m_lastPlaybackFrameSeq)
+        return;
+    m_lastPlaybackFrameSeq = frameSeq;
+    if (m_deferredUpdateTimer->isActive())
+        m_deferredUpdateTimer->stop();
+    m_updateScheduled = false;
+    m_currentTimeMs = qMax(0.0, predictedTimeMs);
+    update();
+    m_frameTimer.restart();
 }
 
 void RealtimePreviewWidget::invalidateHyperCache()

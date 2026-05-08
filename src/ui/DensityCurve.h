@@ -18,6 +18,7 @@ public:
     void setCanvas(ChartCanvas *canvas);
 
 signals:
+    void seekPreviewRequested(double timeMs);
     void seekRequested(double timeMs);
     void seekGestureStarted();
     void seekGestureFinished();
@@ -36,7 +37,7 @@ private:
     void syncCurrentTime(double timeMs);
     void refreshFromChart();
     void updateFromCanvasBeat(double beat);
-    void updateFromPointer(const QPoint &pos);
+    void updateFromPointer(const QPoint &pos, bool commitSeek);
     void computeDensity();
 
     static constexpr int kBinCount = 80;

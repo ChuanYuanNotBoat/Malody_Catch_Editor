@@ -78,7 +78,6 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_snapToGrid(true),
       m_snapTimerId(0),
       m_isScrolling(false),
-      m_playbackTimer(nullptr),
       m_lastOverlayQueryMs(0),
       m_overlayQueryBlockedUntilMs(0),
       m_pluginToolModeActive(false),
@@ -102,12 +101,19 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_pasteDragReferenceIndex(-1),
       m_pasteBaseOriginalTimeMs(std::numeric_limits<double>::max()),
       m_lastScrollSignalTimeMs(0),
-      m_hasPlaybackAnchor(false),
-      m_playbackAnchorMs(0.0),
-      m_playbackAnchorMonoMs(0),
       m_noteSoundPlayer(nullptr),
       m_nextPlayableNoteIndex(0),
-      m_lastNoteSoundTimeMs(0.0)
+      m_lastNoteSoundTimeMs(0.0),
+      m_gridCacheStartTime(0.0),
+      m_gridCacheEndTime(0.0),
+      m_gridCacheDivision(0),
+      m_gridCacheTimeDivision(0),
+      m_gridCacheVerticalFlip(false),
+      m_gridCacheColorEnabled(false),
+      m_gridCacheValid(false),
+      m_gridCachePadPx(0),
+      m_lastPlaybackFrameSeq(-1),
+      m_overlayPlaybackIntervalMs(kOverlayQueryIntervalMsToolModePlaying)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
@@ -122,13 +128,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     m_noteSoundPlayer->setSoundFile(noteSoundPath);
     m_noteSoundPlayer->setEnabled(!noteSoundPath.isEmpty());
 
-    m_playbackTimer = new QTimer(this);
-    m_playbackTimer->setInterval(kPlaybackFrameIntervalMs);
-    m_playbackTimer->setTimerType(Qt::PreciseTimer);
-    connect(m_playbackTimer, &QTimer::timeout, this, &ChartCanvas::requestNextFrame);
-
     m_fpsTimer.start();
-    m_playbackMonoClock.start();
     m_pluginOverlayToggles.insert("overlay_enabled", true);
     m_pluginOverlayToggles.insert("preview", true);
     m_pluginOverlayToggles.insert("control_points", true);
@@ -338,6 +338,7 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
     if (m_playbackController)
     {
         disconnect(m_playbackController, &PlaybackController::positionChanged, this, &ChartCanvas::playbackPositionChanged);
+        disconnect(m_playbackController, &PlaybackController::playbackFrameTick, this, &ChartCanvas::onPlaybackFrameTick);
         disconnect(m_playbackController, &PlaybackController::stateChanged, this, nullptr);
     }
 
@@ -347,6 +348,7 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
     if (m_playbackController)
     {
         connect(m_playbackController, &PlaybackController::positionChanged, this, &ChartCanvas::playbackPositionChanged);
+        connect(m_playbackController, &PlaybackController::playbackFrameTick, this, &ChartCanvas::onPlaybackFrameTick);
         connect(m_playbackController, &PlaybackController::stateChanged,
                 this, [this](PlaybackController::State state)
                 {
@@ -354,23 +356,19 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
                 m_autoScrollEnabled = true;
                 m_isPlaying = true;
                 m_lastScrollSignalTimeMs = 0;
-                m_hasPlaybackAnchor = false;
-                m_playbackAnchorMs = m_playbackController ? m_playbackController->currentTime() : m_currentPlayTime;
-                m_playbackAnchorMonoMs = m_playbackMonoClock.elapsed();
-                m_lastNoteSoundTimeMs = m_playbackAnchorMs;
+                m_lastPlaybackFrameSeq = -1;
+                const double startMs = m_playbackController ? m_playbackController->currentTime() : m_currentPlayTime;
+                m_currentPlayTime = qMax(0.0, startMs);
+                m_lastNoteSoundTimeMs = m_currentPlayTime;
                 m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
                     m_playableNoteTimesMs.begin(),
                     m_playableNoteTimesMs.end(),
                     m_lastNoteSoundTimeMs) - m_playableNoteTimesMs.begin());
-                if (m_playbackTimer)
-                    m_playbackTimer->start();
                 requestNextFrame();
             } else {
                 m_isPlaying = false;
-                m_hasPlaybackAnchor = false;
+                m_lastPlaybackFrameSeq = -1;
                 m_lastNoteSoundTimeMs = m_currentPlayTime;
-                if (m_playbackTimer)
-                    m_playbackTimer->stop();
                 snapPlayheadToGrid();
                 update();
             } });
@@ -430,6 +428,7 @@ void ChartCanvas::setVerticalFlip(bool flip)
     if (m_verticalFlip == flip)
         return;
     m_verticalFlip = flip;
+    invalidateGridCache();
     emit verticalFlipChanged(flip);
     update();
 }
@@ -439,6 +438,7 @@ void ChartCanvas::setTimeDivision(int division)
     if (division != m_timeDivision)
     {
         m_timeDivision = division;
+        invalidateGridCache();
         snapPlayheadToGrid();
         update();
     }
@@ -449,6 +449,7 @@ void ChartCanvas::setGridDivision(int division)
     if (m_gridDivision != division)
     {
         m_gridDivision = division;
+        invalidateGridCache();
         update();
     }
 }
@@ -465,18 +466,33 @@ void ChartCanvas::setScrollPos(double timeMs)
     if (!chart())
         return;
 
+    const double clampedTimeMs = qMax(0.0, timeMs);
+
     int beatNum, numerator, denominator;
-    MathUtils::msToBeat(timeMs, chart()->bpmList(),
+    MathUtils::msToBeat(clampedTimeMs, chart()->bpmList(),
                         chart()->meta().offset,
                         beatNum, numerator, denominator);
-    const double newScrollBeat = beatNum + static_cast<double>(numerator) / denominator;
-    if (qAbs(newScrollBeat - m_scrollBeat) < 1e-6)
+    const double targetBeat = beatNum + static_cast<double>(numerator) / denominator;
+
+    // Keep requested time aligned on the visual reference line, not on viewport start.
+    const double baselineRatio = kReferenceLineRatio;
+    const double baselineBeatOffset = m_verticalFlip
+                                          ? (1.0 - baselineRatio) * effectiveVisibleBeatRange()
+                                          : baselineRatio * effectiveVisibleBeatRange();
+    double newScrollBeat = targetBeat - baselineBeatOffset;
+    if (newScrollBeat < 0.0)
+        newScrollBeat = 0.0;
+
+    const bool scrollChanged = qAbs(newScrollBeat - m_scrollBeat) >= 1e-6;
+    const bool timeChanged = qAbs(clampedTimeMs - m_currentPlayTime) >= 0.05;
+    if (!scrollChanged && !timeChanged)
         return;
 
     m_scrollBeat = newScrollBeat;
-    syncCurrentPlayTimeToReferenceLine();
+    m_currentPlayTime = clampedTimeMs;
     update();
-    emit scrollPositionChanged(m_scrollBeat);
+    if (scrollChanged)
+        emit scrollPositionChanged(m_scrollBeat);
 }
 
 void ChartCanvas::syncCurrentPlayTimeToReferenceLine()
@@ -551,6 +567,7 @@ void ChartCanvas::invalidateChartCaches(bool includeBackground)
     m_noteDataDirty = true;
     m_timesDirty = true;
     m_bpmCacheDirty = true;
+    invalidateGridCache();
     if (includeBackground)
         m_backgroundCacheDirty = true;
     resetOverlayQueryState();
@@ -561,6 +578,7 @@ void ChartCanvas::resetOverlayQueryState()
     m_overlayCache.clear();
     m_lastOverlayQueryMs = 0;
     m_overlayQueryBlockedUntilMs = 0;
+    m_overlayPlaybackIntervalMs = kOverlayQueryIntervalMsToolModePlaying;
 }
 
 

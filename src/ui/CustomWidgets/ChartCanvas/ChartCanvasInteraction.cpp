@@ -139,6 +139,7 @@ void ChartCanvas::setTimeScale(double scale)
     if (m_scrollBeat < 0)
         m_scrollBeat = 0;
 
+    invalidateGridCache();
     update();
     emit scrollPositionChanged(m_scrollBeat);
     emit timeScaleChanged(m_timeScale);
@@ -222,6 +223,14 @@ void ChartCanvas::updateBackgroundCache()
     m_backgroundCacheDirty = true;
 }
 
+void ChartCanvas::invalidateGridCache()
+{
+    m_gridCacheValid = false;
+    m_gridCache = QPixmap();
+    m_gridCacheRect = QRect();
+    m_gridCachePadPx = 0;
+}
+
 void ChartCanvas::refreshBackground()
 {
     updateBackgroundCache();
@@ -238,33 +247,11 @@ void ChartCanvas::requestNextFrame()
 {
     constexpr double kScrollSignalEpsilonBeat = 1e-6;
 
-    if (!m_isPlaying)
-    {
-        if (m_playbackTimer && m_playbackTimer->isActive())
-            m_playbackTimer->stop();
+    if (!m_isPlaying || !chart())
         return;
-    }
 
-    if (m_autoScrollEnabled && chart())
+    if (m_autoScrollEnabled)
     {
-        if (m_playbackController)
-        {
-            const qint64 nowMs = m_playbackMonoClock.elapsed();
-            const double speed = m_playbackController->speed();
-            if (!m_hasPlaybackAnchor)
-            {
-                m_playbackAnchorMs = m_playbackController->currentTime();
-                m_playbackAnchorMonoMs = nowMs;
-                m_hasPlaybackAnchor = true;
-            }
-            double predicted = m_playbackAnchorMs +
-                               (nowMs - m_playbackAnchorMonoMs) * speed;
-            // Guard against tiny backwards jitter in source timestamps.
-            if (predicted < m_currentPlayTime)
-                predicted = m_currentPlayTime;
-            m_currentPlayTime = predicted;
-        }
-
         const QVector<MathUtils::BpmCacheEntry> &cache = bpmTimeCache();
         if (cache.isEmpty())
             return;
@@ -315,6 +302,18 @@ void ChartCanvas::requestNextFrame()
     update();
 }
 
+void ChartCanvas::onPlaybackFrameTick(double predictedTimeMs, qint64 frameSeq)
+{
+    if (!m_isPlaying)
+        return;
+    if (frameSeq <= m_lastPlaybackFrameSeq)
+        return;
+
+    m_lastPlaybackFrameSeq = frameSeq;
+    m_currentPlayTime = qMax(0.0, predictedTimeMs);
+    requestNextFrame();
+}
+
 void ChartCanvas::setPluginToolMode(bool enabled, const QString &pluginId)
 {
     m_pluginToolModeActive = enabled;
@@ -326,6 +325,7 @@ void ChartCanvas::setPluginToolMode(bool enabled, const QString &pluginId)
         m_eventOverlayCache.clear();
         m_lastOverlayQueryMs = 0;
         m_overlayQueryBlockedUntilMs = 0;
+        m_overlayPlaybackIntervalMs = kOverlayQueryIntervalMsToolModePlaying;
         applyPluginCursor(QString());
     }
     update();
@@ -395,6 +395,9 @@ QVariantMap ChartCanvas::buildPluginCanvasContext() const
     overlayContext.insert("note_type_scope", "normal_only");
     overlayContext.insert("overlay_toggles", m_pluginOverlayToggles);
     overlayContext.insert("plugin_time_division_override", m_pluginPlacementDensityOverride);
+    overlayContext.insert("is_playing", m_isPlaying);
+    overlayContext.insert("frame_seq", m_lastPlaybackFrameSeq);
+    overlayContext.insert("overlay_snapshot_requested_at_ms", m_lastOverlayQueryMs);
 
     QVariantMap hostSelectionTool;
     QString modeName = "place_note";

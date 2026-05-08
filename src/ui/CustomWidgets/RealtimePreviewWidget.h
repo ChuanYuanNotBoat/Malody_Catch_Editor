@@ -63,7 +63,7 @@ private:
     void invalidateHyperCache();
     void ensureHyperCache();
     void onPlaybackStateChanged();
-    void tickPlaybackFrame();
+    void handlePlaybackFrameTick(double predictedTimeMs, qint64 frameSeq);
 
     ChartController *m_chartController = nullptr;
     PlaybackController *m_playbackController = nullptr;
@@ -83,11 +83,7 @@ private:
     QVector<bool> m_hyperMask;
     bool m_hyperCacheValid = false;
     QTimer *m_deferredUpdateTimer = nullptr;
-    QTimer *m_playbackFrameTimer = nullptr;
     QElapsedTimer m_frameTimer;
-    QElapsedTimer m_playbackClock;
     bool m_updateScheduled = false;
-    bool m_playbackAnchored = false;
-    double m_playbackAnchorTimeMs = 0.0;
-    qint64 m_playbackAnchorWallMs = 0;
+    qint64 m_lastPlaybackFrameSeq = -1;
 };

@@ -19,6 +19,7 @@
 #include <QFileInfo>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <QCoreApplication>
 
 namespace
@@ -452,7 +453,7 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
                            m_playbackController->state() == PlaybackController::Playing;
     const bool allowQueryInCurrentState = true;
     const int queryIntervalMs = m_pluginToolModeActive
-                                    ? (isPlaying ? kOverlayQueryIntervalMsToolModePlaying
+                                    ? (isPlaying ? m_overlayPlaybackIntervalMs
                                                  : kOverlayQueryIntervalMsToolMode)
                                     : kOverlayQueryIntervalMsIdle;
 
@@ -467,6 +468,7 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
         QVariantMap overlayContext = buildPluginCanvasContext();
         overlayContext.insert("left_margin", lmargin);
         overlayContext.insert("right_margin", rmargin);
+        overlayContext.insert("overlay_snapshot_requested_at_ms", nowMs);
 
         QElapsedTimer requestTimer;
         requestTimer.start();
@@ -474,16 +476,37 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
         m_lastOverlayQueryMs = nowMs;
 
         const qint64 elapsedMs = requestTimer.elapsed();
-        if (elapsedMs > kOverlaySlowCallThresholdMs)
+        if (isPlaying)
         {
-            m_overlayQueryBlockedUntilMs = nowMs + kOverlaySlowCallBackoffMs;
-            Logger::warn(QString("Plugin overlay query is slow (%1 ms); temporarily throttling for %2 ms.")
-                             .arg(elapsedMs)
-                             .arg(kOverlaySlowCallBackoffMs));
+            if (elapsedMs > kOverlayPlaybackQueryBudgetMs)
+            {
+                if (m_overlayPlaybackIntervalMs < kOverlayQueryIntervalMsToolModePlayingMedium)
+                    m_overlayPlaybackIntervalMs = kOverlayQueryIntervalMsToolModePlayingMedium;
+                else if (m_overlayPlaybackIntervalMs < kOverlayQueryIntervalMsToolModePlayingSlow)
+                    m_overlayPlaybackIntervalMs = kOverlayQueryIntervalMsToolModePlayingSlow;
+            }
+            else if (m_overlayPlaybackIntervalMs > kOverlayQueryIntervalMsToolModePlaying)
+            {
+                m_overlayPlaybackIntervalMs = (m_overlayPlaybackIntervalMs > kOverlayQueryIntervalMsToolModePlayingMedium)
+                                                  ? kOverlayQueryIntervalMsToolModePlayingMedium
+                                                  : kOverlayQueryIntervalMsToolModePlaying;
+            }
+            m_overlayQueryBlockedUntilMs = 0;
         }
         else
         {
-            m_overlayQueryBlockedUntilMs = 0;
+            m_overlayPlaybackIntervalMs = kOverlayQueryIntervalMsToolModePlaying;
+            if (elapsedMs > kOverlaySlowCallThresholdMs)
+            {
+                m_overlayQueryBlockedUntilMs = nowMs + kOverlaySlowCallBackoffMs;
+                Logger::warn(QString("Plugin overlay query is slow (%1 ms); temporarily throttling for %2 ms.")
+                                 .arg(elapsedMs)
+                                 .arg(kOverlaySlowCallBackoffMs));
+            }
+            else
+            {
+                m_overlayQueryBlockedUntilMs = 0;
+            }
         }
     }
 
@@ -589,21 +612,97 @@ void ChartCanvas::drawGrid(QPainter &painter)
 
         const QVector<MathUtils::BpmCacheEntry> &bpmCache = bpmTimeCache();
         if (bpmCache.isEmpty())
+        {
+            invalidateGridCache();
             return;
+        }
 
         int startBeatNum, startNum, startDen;
         MathUtils::floatToBeat(m_scrollBeat, startBeatNum, startNum, startDen);
-        double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmCache);
+        const double startTime = MathUtils::beatToMs(startBeatNum, startNum, startDen, bpmCache);
         int endBeatNum, endNum, endDen;
         MathUtils::floatToBeat(m_scrollBeat + effectiveVisibleBeatRange(), endBeatNum, endNum, endDen);
-        double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmCache);
-        m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
-                                 startTime, endTime,
-                                 m_timeDivision, bpmCache,
-                                 m_verticalFlip,
-                                 Settings::instance().timelineDivisionColorEnabled(),
-                                 Settings::instance().timelineDivisionColorPreset(),
-                                 Settings::instance().timelineDivisionColorCustomDivisions());
+        const double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmCache);
+
+        const int viewportHeight = qMax(1, rect.height());
+        const double rawSpanMs = qMax(1.0, endTime - startTime);
+        const double msPerPixel = rawSpanMs / viewportHeight;
+        // Quantize the backing cache in larger vertical chunks and compensate
+        // draw position per-frame so playback scrolling can mostly reuse cache.
+        const double quantStepMs = qMax(1.0, msPerPixel * 24.0);
+        const auto quantizeDown = [quantStepMs](double value) -> double
+        {
+            return std::floor(value / quantStepMs) * quantStepMs;
+        };
+        const double renderStartTime = quantizeDown(startTime);
+        const double renderEndTime = renderStartTime + rawSpanMs;
+
+        const int cachePadPx = qMax(8, static_cast<int>(std::ceil((quantStepMs / rawSpanMs) * viewportHeight)) + 2);
+        const double cachePadMs = msPerPixel * static_cast<double>(cachePadPx);
+        const double cacheStartTime = renderStartTime - cachePadMs;
+        const double cacheEndTime = renderEndTime + cachePadMs;
+        const QSize cacheSize(rect.width(), viewportHeight + cachePadPx * 2);
+
+        const bool colorEnabled = Settings::instance().timelineDivisionColorEnabled();
+        const QString colorPreset = Settings::instance().timelineDivisionColorPreset();
+        const QList<int> colorCustom = Settings::instance().timelineDivisionColorCustomDivisions();
+        const bool needRebuild =
+            !m_gridCacheValid ||
+            m_gridCacheRect.size() != rect.size() ||
+            m_gridCacheRect.topLeft() != rect.topLeft() ||
+            m_gridCacheDivision != m_gridDivision ||
+            m_gridCacheTimeDivision != m_timeDivision ||
+            m_gridCacheVerticalFlip != m_verticalFlip ||
+            m_gridCacheColorEnabled != colorEnabled ||
+            m_gridCacheColorPreset != colorPreset ||
+            m_gridCacheColorCustomDivisions != colorCustom ||
+            m_gridCachePadPx != cachePadPx ||
+            std::abs(m_gridCacheStartTime - cacheStartTime) > 0.05 ||
+            std::abs(m_gridCacheEndTime - cacheEndTime) > 0.05;
+
+        if (needRebuild)
+        {
+            if (cacheSize.width() <= 0 || cacheSize.height() <= 0)
+            {
+                invalidateGridCache();
+                return;
+            }
+
+            m_gridCache = QPixmap(cacheSize);
+            m_gridCache.fill(Qt::transparent);
+            QPainter cachePainter(&m_gridCache);
+            const QRect cacheRect(0, 0, cacheSize.width(), cacheSize.height());
+            m_gridRenderer->drawGrid(cachePainter, cacheRect, m_gridDivision,
+                                     cacheStartTime, cacheEndTime,
+                                     m_timeDivision, bpmCache,
+                                     m_verticalFlip,
+                                     colorEnabled,
+                                     colorPreset,
+                                     colorCustom);
+            m_gridCacheRect = rect;
+            m_gridCacheStartTime = cacheStartTime;
+            m_gridCacheEndTime = cacheEndTime;
+            m_gridCacheDivision = m_gridDivision;
+            m_gridCacheTimeDivision = m_timeDivision;
+            m_gridCacheVerticalFlip = m_verticalFlip;
+            m_gridCacheColorEnabled = colorEnabled;
+            m_gridCacheColorPreset = colorPreset;
+            m_gridCacheColorCustomDivisions = colorCustom;
+            m_gridCachePadPx = cachePadPx;
+            m_gridCacheValid = true;
+        }
+
+        if (!m_gridCache.isNull())
+        {
+            const double shiftPx = (startTime - renderStartTime) / rawSpanMs * viewportHeight;
+            const double cacheTop = m_verticalFlip
+                                        ? static_cast<double>(rect.top()) - m_gridCachePadPx + shiftPx
+                                        : static_cast<double>(rect.top()) - m_gridCachePadPx - shiftPx;
+            painter.save();
+            painter.setClipRect(rect);
+            painter.drawPixmap(QPointF(rect.left(), cacheTop), m_gridCache);
+            painter.restore();
+        }
     }
     catch (const std::exception &e)
     {

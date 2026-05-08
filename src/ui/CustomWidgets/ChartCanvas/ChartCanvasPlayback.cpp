@@ -38,17 +38,17 @@ PluginManager *activePluginManager()
 void ChartCanvas::playbackPositionChanged(double timeMs)
 {
     constexpr double kPlaybackVisualEpsilonMs = 0.05;
-    constexpr double kAnchorDeadZoneMs = 2.0;
 
     if (m_timesDirty || m_noteDataDirty)
         rebuildNoteTimesCache();
 
+    const double clampedTimeMs = qMax(0.0, timeMs);
+
     if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing)
     {
-        const bool visualChanged = std::abs(m_currentPlayTime - timeMs) > kPlaybackVisualEpsilonMs;
-        m_hasPlaybackAnchor = false;
-        m_currentPlayTime = timeMs;
-        m_lastNoteSoundTimeMs = timeMs;
+        const bool visualChanged = std::abs(m_currentPlayTime - clampedTimeMs) > kPlaybackVisualEpsilonMs;
+        m_currentPlayTime = clampedTimeMs;
+        m_lastNoteSoundTimeMs = clampedTimeMs;
         m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
             m_playableNoteTimesMs.begin(),
             m_playableNoteTimesMs.end(),
@@ -58,71 +58,24 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
         return;
     }
 
-    const qint64 nowMs = m_playbackMonoClock.elapsed();
-    const double speed = m_playbackController->speed();
-
-    if (!m_hasPlaybackAnchor)
-    {
-        m_playbackAnchorMs = timeMs;
-        m_playbackAnchorMonoMs = nowMs;
-        m_hasPlaybackAnchor = true;
-        m_currentPlayTime = timeMs;
-        return;
-    }
-
-    const double predicted =
-        m_playbackAnchorMs + (nowMs - m_playbackAnchorMonoMs) * speed;
-    const double delta = timeMs - predicted;
-
-    // Keep a dead-zone around prediction to avoid beat-like micro tugging.
-    if (std::abs(delta) <= kAnchorDeadZoneMs)
-    {
-        m_playbackAnchorMs = predicted;
-        m_playbackAnchorMonoMs = nowMs;
-    }
-    else if (std::abs(delta) < 48.0)
-    {
-        // Moderate drift: very gentle correction to keep motion visually stable.
-        m_playbackAnchorMs = predicted + delta * 0.04;
-        m_playbackAnchorMonoMs = nowMs;
-    }
-    else if (std::abs(delta) < 220.0)
-    {
-        // Larger drift: faster catch-up while still avoiding hard snaps.
-        m_playbackAnchorMs = predicted + delta * 0.10;
-        m_playbackAnchorMonoMs = nowMs;
-    }
-    else
-    {
-        // Real discontinuity / seek.
-        m_playbackAnchorMs = timeMs;
-        m_playbackAnchorMonoMs = nowMs;
-    }
-
-    if (!m_autoScrollEnabled)
-    {
-        const bool visualChanged = std::abs(m_currentPlayTime - timeMs) > kPlaybackVisualEpsilonMs;
-        m_currentPlayTime = timeMs;
-        if (visualChanged)
-            update();
-    }
+    m_currentPlayTime = clampedTimeMs;
 
     if (m_noteSoundPlayer &&
         m_noteSoundPlayer->isEnabled() &&
         m_noteSoundPlayer->hasValidSound() &&
         !m_playableNoteTimesMs.isEmpty())
     {
-        if (timeMs < m_lastNoteSoundTimeMs - 2.0)
+        if (clampedTimeMs < m_lastNoteSoundTimeMs - 2.0)
         {
             m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
                 m_playableNoteTimesMs.begin(),
                 m_playableNoteTimesMs.end(),
-                timeMs) - m_playableNoteTimesMs.begin());
+                clampedTimeMs) - m_playableNoteTimesMs.begin());
         }
 
         bool hasHit = false;
         while (m_nextPlayableNoteIndex < m_playableNoteTimesMs.size() &&
-               m_playableNoteTimesMs[m_nextPlayableNoteIndex] <= timeMs + 0.5)
+               m_playableNoteTimesMs[m_nextPlayableNoteIndex] <= clampedTimeMs + 0.5)
         {
             if (m_playableNoteTimesMs[m_nextPlayableNoteIndex] > m_lastNoteSoundTimeMs + 0.5)
                 hasHit = true;
@@ -133,7 +86,7 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
             m_noteSoundPlayer->playHitSound();
     }
 
-    m_lastNoteSoundTimeMs = timeMs;
+    m_lastNoteSoundTimeMs = clampedTimeMs;
 }
 
 void ChartCanvas::playFromReferenceLine()
@@ -359,6 +312,7 @@ void ChartCanvas::timerEvent(QTimerEvent *event)
 void ChartCanvas::resizeEvent(QResizeEvent *event)
 {
     m_backgroundCacheDirty = true;
+    invalidateGridCache();
     QWidget::resizeEvent(event);
 }
 

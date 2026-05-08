@@ -3,13 +3,34 @@
 #include "utils/Logger.h"
 #include "model/Chart.h"
 #include <QTimer>
+#include <algorithm>
+
+namespace
+{
+constexpr qint64 kSeekSameValueThresholdMs = 2;
+}
 
 PlaybackController::PlaybackController(AudioPlayer *audioPlayer, QObject *parent)
-    : QObject(parent), m_audioPlayer(audioPlayer), m_state(Stopped), m_speed(1.0), m_noteSoundEnabled(true), m_autoPausedAtEnd(false)
+    : QObject(parent),
+      m_audioPlayer(audioPlayer),
+      m_state(Stopped),
+      m_speed(1.0),
+      m_noteSoundEnabled(true),
+      m_autoPausedAtEnd(false),
+      m_framePulseTimer(new QTimer(this)),
+      m_frameAnchorValid(false),
+      m_frameAnchorTimeMs(0.0),
+      m_frameAnchorWallMs(0),
+      m_frameSeq(0),
+      m_lastFrameTickMs(0.0)
 {
     connect(m_audioPlayer, &AudioPlayer::positionChanged, this, &PlaybackController::onAudioPositionChanged);
     connect(m_audioPlayer, &AudioPlayer::stateChanged, this, &PlaybackController::onAudioStateChanged);
     connect(m_audioPlayer, &AudioPlayer::errorOccurred, this, &PlaybackController::onAudioError);
+    m_framePulseTimer->setInterval(kFramePulseIntervalMs);
+    m_framePulseTimer->setTimerType(Qt::PreciseTimer);
+    connect(m_framePulseTimer, &QTimer::timeout, this, &PlaybackController::onFramePulseTimeout);
+    m_frameClock.start();
 }
 
 PlaybackController::State PlaybackController::state() const
@@ -41,8 +62,14 @@ void PlaybackController::play()
         }
         m_audioPlayer->play();
         m_state = Playing;
+        m_frameSeq = 0;
+        m_lastFrameTickMs = currentTime();
+        resetFrameAnchor(m_lastFrameTickMs, m_frameClock.elapsed());
+        if (!m_framePulseTimer->isActive())
+            m_framePulseTimer->start();
         Logger::debug(QString("PlaybackController::play - Playing from position %1ms").arg(m_audioPlayer->position()));
         emit stateChanged(m_state);
+        emit playbackFrameTick(m_lastFrameTickMs, m_frameSeq);
     }
     else
     {
@@ -64,7 +91,8 @@ void PlaybackController::playFromTime(double timeMs)
         Logger::info("PlaybackController::playFromTime - End-of-media replay requested, forcing restart from 0ms");
     }
 
-    seekTo(timeMs);
+    const qint64 targetMs = clampSeekTargetMs(static_cast<qint64>(qRound64(timeMs)));
+    applySeekNow(targetMs, "playFromTime");
     play();
 }
 
@@ -75,6 +103,9 @@ void PlaybackController::pause()
         m_autoPausedAtEnd = false;
         m_audioPlayer->pause();
         m_state = Paused;
+        if (m_framePulseTimer->isActive())
+            m_framePulseTimer->stop();
+        m_frameAnchorValid = false;
         Logger::debug(QString("PlaybackController::pause - Paused at position %1ms").arg(m_audioPlayer->position()));
         emit stateChanged(m_state);
     }
@@ -87,6 +118,10 @@ void PlaybackController::stop()
         m_autoPausedAtEnd = false;
         m_audioPlayer->stop();
         m_state = Stopped;
+        if (m_framePulseTimer->isActive())
+            m_framePulseTimer->stop();
+        m_frameAnchorValid = false;
+        m_frameSeq = 0;
         Logger::debug("PlaybackController::stop - Playback stopped");
         emit stateChanged(m_state);
     }
@@ -100,6 +135,11 @@ void PlaybackController::setSpeed(double speed)
         speed = 1.0;
     m_speed = speed;
     m_audioPlayer->setSpeed(speed);
+    if (m_state == Playing)
+    {
+        const qint64 nowMs = m_frameClock.elapsed();
+        resetFrameAnchor(currentTime(), nowMs);
+    }
     Logger::debug(QString("PlaybackController::setSpeed - Speed changed to %1x").arg(speed));
     emit speedChanged(speed);
 }
@@ -112,8 +152,9 @@ double PlaybackController::speed() const
 void PlaybackController::seekTo(double timeMs)
 {
     m_autoPausedAtEnd = false;
-    Logger::debug(QString("PlaybackController::seekTo - Seeking to %1ms (adjusted)").arg(timeMs));
-    m_audioPlayer->setAdjustedPosition(static_cast<qint64>(timeMs));
+    const qint64 targetMs = clampSeekTargetMs(static_cast<qint64>(qRound64(timeMs)));
+    applySeekNow(targetMs, "direct");
+    m_frameAnchorValid = false;
 }
 
 void PlaybackController::seekToBeat(int beat, int num, int den)
@@ -145,7 +186,10 @@ bool PlaybackController::autoPausedAtEnd() const
 void PlaybackController::onAudioPositionChanged(qint64 position)
 {
     Q_UNUSED(position);
-    emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
+    const double observedMs = static_cast<double>(m_audioPlayer->adjustedPosition());
+    emit positionChanged(observedMs);
+    if (m_state == Playing)
+        applyObservedTimeToAnchor(observedMs, m_frameClock.elapsed());
 }
 
 void PlaybackController::onAudioStateChanged(QMediaPlayer::PlaybackState state)
@@ -155,6 +199,11 @@ void PlaybackController::onAudioStateChanged(QMediaPlayer::PlaybackState state)
         m_autoPausedAtEnd = true;
         m_audioPlayer->setAdjustedPosition(0);
         m_state = Paused;
+        if (m_framePulseTimer->isActive())
+            m_framePulseTimer->stop();
+        m_frameAnchorValid = false;
+        m_frameSeq = 0;
+        m_lastFrameTickMs = 0.0;
         Logger::info("PlaybackController::onAudioStateChanged - Reached end of media, auto-paused at beginning");
         emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
         emit stateChanged(m_state);
@@ -168,8 +217,97 @@ void PlaybackController::onAudioError(const QString &error)
     if (m_state != Stopped)
     {
         m_state = Stopped;
+        if (m_framePulseTimer->isActive())
+            m_framePulseTimer->stop();
+        m_frameAnchorValid = false;
+        m_frameSeq = 0;
         emit stateChanged(m_state);
     }
     emit errorOccurred(error);
+}
+
+qint64 PlaybackController::clampSeekTargetMs(qint64 timeMs) const
+{
+    qint64 clamped = qMax<qint64>(0, timeMs);
+    if (!m_audioPlayer)
+        return clamped;
+    const qint64 duration = m_audioPlayer->duration();
+    if (duration > 0)
+        clamped = qBound<qint64>(0, clamped, duration);
+    return clamped;
+}
+
+void PlaybackController::applySeekNow(qint64 targetMs, const char *reason)
+{
+    const qint64 clampedMs = clampSeekTargetMs(targetMs);
+    const qint64 currentMs = m_audioPlayer
+                                 ? clampSeekTargetMs(m_audioPlayer->adjustedPosition())
+                                 : clampedMs;
+    if (qAbs(clampedMs - currentMs) <= kSeekSameValueThresholdMs)
+        return;
+
+    m_audioPlayer->setAdjustedPosition(clampedMs);
+    Logger::debug(QString("PlaybackController::seekTo - Seeking to %1ms (adjusted, %2)")
+                      .arg(clampedMs)
+                      .arg(QString::fromUtf8(reason)));
+}
+
+void PlaybackController::onFramePulseTimeout()
+{
+    if (m_state != Playing)
+        return;
+
+    const qint64 nowMs = m_frameClock.elapsed();
+    if (!m_frameAnchorValid)
+        resetFrameAnchor(currentTime(), nowMs);
+
+    double predictedMs = m_frameAnchorTimeMs +
+                         static_cast<double>(nowMs - m_frameAnchorWallMs) * m_speed;
+    predictedMs = qMax(0.0, predictedMs);
+    if (predictedMs < m_lastFrameTickMs)
+        predictedMs = m_lastFrameTickMs;
+
+    m_lastFrameTickMs = predictedMs;
+    ++m_frameSeq;
+    emit playbackFrameTick(predictedMs, m_frameSeq);
+}
+
+void PlaybackController::resetFrameAnchor(double timeMs, qint64 nowMs)
+{
+    m_frameAnchorTimeMs = qMax(0.0, timeMs);
+    m_frameAnchorWallMs = nowMs;
+    m_frameAnchorValid = true;
+}
+
+void PlaybackController::applyObservedTimeToAnchor(double observedMs, qint64 nowMs)
+{
+    const double clampedObserved = qMax(0.0, observedMs);
+    if (!m_frameAnchorValid)
+    {
+        resetFrameAnchor(clampedObserved, nowMs);
+        return;
+    }
+
+    const double predicted = m_frameAnchorTimeMs +
+                             static_cast<double>(nowMs - m_frameAnchorWallMs) * m_speed;
+    const double delta = clampedObserved - predicted;
+
+    if (std::abs(delta) <= kAnchorDeadZoneMs)
+    {
+        resetFrameAnchor(predicted, nowMs);
+        return;
+    }
+    if (std::abs(delta) < kAnchorModerateWindowMs)
+    {
+        resetFrameAnchor(predicted + delta * kAnchorModerateGain, nowMs);
+        return;
+    }
+    if (std::abs(delta) < kAnchorLargeWindowMs)
+    {
+        resetFrameAnchor(predicted + delta * kAnchorLargeGain, nowMs);
+        return;
+    }
+
+    resetFrameAnchor(clampedObserved, nowMs);
 }
 
