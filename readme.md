@@ -3,7 +3,7 @@
 A desktop chart editor for Malody Catch mode, developed to fill the feature gaps of the official charting tool.
 为 Malody Catch 模式开发的谱面编辑器，弥补官方制谱器功能的缺失。
 
-当前版本 / Current Version: **Beta v1.10.1**
+当前版本 / Current Version: **Beta v1.10.2**
 
 > ⚠️ **Early Stage Notice / 早期状态说明**
 > This project is in a very early stage of development. It is not yet ready for production use. Features may be incomplete, unstable, or subject to change.
@@ -14,7 +14,7 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## 📥 下载
 
-点击下载最新版本：[CatchChartEditor Beta v1.10.1 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
+点击下载最新版本：[CatchChartEditor Beta v1.10.2 安装包](https://github.com/ChuanYuanNotBoat/Malody_Catch_Editor/releases/latest)
 
 文档导航：
 - 帮助文档：[docs/help.md](docs/help.md)
@@ -42,18 +42,24 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 ## Recent Updates / 近期特性
 
-- `Beta v1.10.1`
+- `Beta v1.10.2`
   - Added density preview for the timeline/navigation flow, with smoother large-chart seek feedback.
   - 新增密度预览，提升时间导航与大谱面跳转时的可视反馈。
+  - Added auto-pause on wheel-based timeline scrolling; drag seek now uses preview-then-commit flow to reduce jitter.
+  - 新增滚轮时间滚动自动暂停；拖拽 seek 改为“预览后提交”，减少播放定位抖动。
   - Added async parse stage after working-copy preparation to prevent post-copy UI freeze.
   - 在工作副本准备后加入异步解析阶段，避免复制完成后的界面卡顿。
+  - Unified playback frame ticking and improved canvas/preview synchronization; grid/overlay rendering now uses adaptive caching and throttling.
+  - 统一播放帧驱动并优化画布/预览同步；网格与插件叠加绘制加入自适应缓存与节流。
+  - Removed legacy mobile build/runtime paths to keep a desktop-focused build chain.
+  - 移除旧移动端构建/运行链路，收敛为桌面构建流程。
   - Strengthened plugin self-heal and logging chain (UTF-8/filter), and expanded boundary-focused automated tests.
   - 强化插件自愈与日志链路（UTF-8/过滤），并补充边界导向自动化测试。
 - `Beta v1.9.3`
   - Refactored right-side density timeline widget with chart-linked density bins, drag seek, and live playhead/time tooltip.
   - 重构右侧密度时间条，接入谱面密度分桶、拖拽跳转与实时播放指示/时间提示。
-  - Integrated density bar with playback/canvas sync and mobile layout compatibility, replacing the old vertical scrollbar flow.
-  - 完成密度条与播放/画布联动及移动端布局兼容，替换旧竖向滚动条流程。
+  - Integrated density bar with playback/canvas sync and desktop layout consistency, replacing the old vertical scrollbar flow.
+  - 完成密度条与播放/画布联动及桌面布局一致性，替换旧竖向滚动条流程。
   - Fixed mouse-wheel timeline direction and adjusted related interaction code paths.
   - 修复时间轴滚轮方向，并同步调整相关交互链路。
 - `Beta v1.9.2`
@@ -194,4 +200,5 @@ This project is licensed under the GPL-3.0 License — see the [LICENSE](LICENSE
 
 - Runtime plugin directory is resolved as `<appDir>/plugins`.
 - 构建后会复制默认皮肤、插件与文档到可执行文件目录，便于开箱即用。
+
 
