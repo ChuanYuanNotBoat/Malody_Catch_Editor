@@ -2496,41 +2496,38 @@ def _handle_canvas_input(payload):
             status = str(box_result.get("status", status))
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
-        mode = STATE["drag"]["mode"]
-        idx = STATE["drag"]["index"]
-        if mode and 0 <= idx < len(STATE["anchors"]):
-            a = STATE["anchors"][idx]
-            if mode == "anchor":
-                lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
-                # Anchor drag keeps time snap, but should not apply lane-grid snap.
-                lane_x, beat = _snap_chart_point(STATE["last_context"], lane_x, beat, snap_beat=True, snap_lane=False)
-                a["lane_x"] = lane_x
-                a["beat"] = beat
-                _enforce_anchor_time_order(idx, STATE["last_context"])
-                _enforce_handle_time_constraints(idx, STATE["last_context"])
-                if idx > 0:
-                    _enforce_handle_time_constraints(idx - 1, STATE["last_context"])
-                cursor = "size_all"
-            elif mode == "in":
-                lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
-                _set_anchor_in_abs_chart(a, lane_x, beat, mirror=True)
-                _enforce_handle_time_constraints(idx, STATE["last_context"])
-                cursor = "crosshair"
-            elif mode == "out":
-                lane_x, beat = _canvas_to_chart(STATE["last_context"], x, y)
-                _set_anchor_out_abs_chart(a, lane_x, beat, mirror=True)
-                _enforce_handle_time_constraints(idx, STATE["last_context"])
-                cursor = "crosshair"
-            _invalidate_curve_cache()
-            _mark_dirty(STATE["last_context"])
-            consumed = True
-            status = tr(STATE["last_context"], "editing_anchor", index=idx)
+        drag_edit = input_ui.handle_drag_edit_on_mouse_move(
+            x,
+            y,
+            {
+                "state": STATE,
+                "canvas_to_chart": _canvas_to_chart,
+                "snap_chart_point": _snap_chart_point,
+                "enforce_anchor_time_order": _enforce_anchor_time_order,
+                "enforce_handle_time_constraints": _enforce_handle_time_constraints,
+                "set_anchor_in_abs_chart": _set_anchor_in_abs_chart,
+                "set_anchor_out_abs_chart": _set_anchor_out_abs_chart,
+                "invalidate_curve_cache": _invalidate_curve_cache,
+                "mark_dirty": _mark_dirty,
+                "tr": tr,
+            },
+        )
+        if drag_edit is not None:
+            consumed = bool(drag_edit.get("consumed", False))
+            cursor = str(drag_edit.get("cursor", cursor))
+            status = str(drag_edit.get("status", status))
         else:
-            hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
-            if hidx >= 0:
-                cursor = "pointing_hand"
-            elif _find_anchor_hit(STATE["last_context"], x, y) >= 0:
-                cursor = "pointing_hand"
+            hover_cursor = input_ui.resolve_hover_cursor_on_mouse_move(
+                x,
+                y,
+                {
+                    "state": STATE,
+                    "find_handle_hit": _find_handle_hit,
+                    "find_anchor_hit": _find_anchor_hit,
+                },
+            )
+            if hover_cursor is not None:
+                cursor = str(hover_cursor)
 
     elif et == "mouse_up":
         link_drag_result = input_ui.resolve_link_drag_mouse_up(

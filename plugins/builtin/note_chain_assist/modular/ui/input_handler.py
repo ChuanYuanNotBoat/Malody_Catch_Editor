@@ -377,3 +377,65 @@ def update_box_select_on_mouse_move(x, y, callbacks):
         "cursor": "crosshair",
         "status": tr(state["last_context"], "status_box_selecting"),
     }
+
+
+def handle_drag_edit_on_mouse_move(x, y, callbacks):
+    state = callbacks["state"]
+    canvas_to_chart = callbacks["canvas_to_chart"]
+    snap_chart_point = callbacks["snap_chart_point"]
+    enforce_anchor_time_order = callbacks["enforce_anchor_time_order"]
+    enforce_handle_time_constraints = callbacks["enforce_handle_time_constraints"]
+    set_anchor_in_abs_chart = callbacks["set_anchor_in_abs_chart"]
+    set_anchor_out_abs_chart = callbacks["set_anchor_out_abs_chart"]
+    invalidate_curve_cache = callbacks["invalidate_curve_cache"]
+    mark_dirty = callbacks["mark_dirty"]
+    tr = callbacks["tr"]
+
+    mode = state["drag"]["mode"]
+    idx = state["drag"]["index"]
+    if not mode or not (0 <= idx < len(state["anchors"])):
+        return None
+
+    a = state["anchors"][idx]
+    cursor = "arrow"
+    if mode == "anchor":
+        lane_x, beat = canvas_to_chart(state["last_context"], x, y)
+        lane_x, beat = snap_chart_point(state["last_context"], lane_x, beat, snap_beat=True, snap_lane=False)
+        a["lane_x"] = lane_x
+        a["beat"] = beat
+        enforce_anchor_time_order(idx, state["last_context"])
+        enforce_handle_time_constraints(idx, state["last_context"])
+        if idx > 0:
+            enforce_handle_time_constraints(idx - 1, state["last_context"])
+        cursor = "size_all"
+    elif mode == "in":
+        lane_x, beat = canvas_to_chart(state["last_context"], x, y)
+        set_anchor_in_abs_chart(a, lane_x, beat, mirror=True)
+        enforce_handle_time_constraints(idx, state["last_context"])
+        cursor = "crosshair"
+    elif mode == "out":
+        lane_x, beat = canvas_to_chart(state["last_context"], x, y)
+        set_anchor_out_abs_chart(a, lane_x, beat, mirror=True)
+        enforce_handle_time_constraints(idx, state["last_context"])
+        cursor = "crosshair"
+
+    invalidate_curve_cache()
+    mark_dirty(state["last_context"])
+    return {
+        "consumed": True,
+        "cursor": cursor,
+        "status": tr(state["last_context"], "editing_anchor", index=idx),
+    }
+
+
+def resolve_hover_cursor_on_mouse_move(x, y, callbacks):
+    state = callbacks["state"]
+    find_handle_hit = callbacks["find_handle_hit"]
+    find_anchor_hit = callbacks["find_anchor_hit"]
+
+    _hkind, hidx = find_handle_hit(state["last_context"], x, y)
+    if hidx >= 0:
+        return "pointing_hand"
+    if find_anchor_hit(state["last_context"], x, y) >= 0:
+        return "pointing_hand"
+    return None
