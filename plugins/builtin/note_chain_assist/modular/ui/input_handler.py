@@ -46,6 +46,13 @@ def build_canvas_response(consumed, cursor, status_text, request_undo_checkpoint
     }
 
 
+def should_passthrough_for_note_curve_snap(event_type, event, button, left_button):
+    if event_type not in ("mouse_down", "mouse_move", "mouse_up"):
+        return False
+    buttons = int(event.get("buttons", 0))
+    return button == left_button or (buttons & left_button)
+
+
 def sync_anchor_placement_with_host_mode(context, state):
     if not isinstance(context, dict):
         return

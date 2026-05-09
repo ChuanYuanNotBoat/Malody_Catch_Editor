@@ -2313,10 +2313,8 @@ def _handle_canvas_input(payload):
         "checkpoint_prefix": CURVE_CHECKPOINT_PREFIX,
     }
 
-    if _note_curve_snap_enabled() and et in ("mouse_down", "mouse_move", "mouse_up"):
-        buttons = int(event.get("buttons", 0))
-        if button == LEFT_BUTTON or (buttons & LEFT_BUTTON):
-            return input_ui.build_canvas_response(False, "arrow", "", False, response_callbacks)
+    if _note_curve_snap_enabled() and input_ui.should_passthrough_for_note_curve_snap(et, event, button, LEFT_BUTTON):
+        return input_ui.build_canvas_response(False, "arrow", "", False, response_callbacks)
 
     if et == "mouse_down":
         hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
