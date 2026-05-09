@@ -143,3 +143,64 @@ def sync_anchor_selection_from_host_notes(context, callbacks):
         return
     picked.sort(key=lambda aid: idx_map.get(aid, 1 << 30))
     state["selected_anchor_ids"] = picked
+
+
+def handle_key_down(event, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+    event_has_shift = callbacks["event_has_shift"]
+    host_controls_anchor_mode = callbacks["host_controls_anchor_mode"]
+    record_history_state = callbacks["record_history_state"]
+    disconnect_selected_segments = callbacks["disconnect_selected_segments"]
+    delete_selected_anchors = callbacks["delete_selected_anchors"]
+    ctrl_modifier_mask = callbacks["ctrl_modifier_mask"]
+    key_a = callbacks["key_a"]
+    key_delete = callbacks["key_delete"]
+    key_backspace = callbacks["key_backspace"]
+    key_shift = callbacks["key_shift"]
+    key_escape = callbacks["key_escape"]
+
+    key = int(event.get("key", 0))
+    mods = int(event.get("modifiers", 0))
+    ctrl = (mods & ctrl_modifier_mask) != 0
+    consumed = False
+    status = ""
+    request_checkpoint = False
+
+    if key == key_shift or event_has_shift(event):
+        state["shift_down"] = True
+    if not ctrl and key == key_a and not host_controls_anchor_mode(state["last_context"]):
+        state["anchor_placement_enabled"] = not bool(state.get("anchor_placement_enabled", False))
+        consumed = True
+        status = tr(state["last_context"], "anchor_enabled") if state["anchor_placement_enabled"] else tr(state["last_context"], "anchor_disabled")
+        record_history_state(state["last_context"])
+        request_checkpoint = True
+    elif key in (key_delete, key_backspace):
+        changed_segments = disconnect_selected_segments(state["last_context"])
+        changed_anchors = delete_selected_anchors(state["last_context"])
+        if changed_segments or changed_anchors:
+            consumed = True
+            request_checkpoint = True
+            status = tr(state["last_context"], "status_selection_deleted")
+    elif key == key_escape:
+        if state.get("selected_anchor_ids") or state.get("selected_links"):
+            state["selected_anchor_ids"] = []
+            state["selected_links"] = []
+            consumed = True
+            status = tr(state["last_context"], "status_selection_cleared")
+
+    return {
+        "consumed": consumed,
+        "status": status,
+        "request_checkpoint": request_checkpoint,
+    }
+
+
+def handle_key_up(event, callbacks):
+    state = callbacks["state"]
+    event_has_shift = callbacks["event_has_shift"]
+    key_shift = callbacks["key_shift"]
+
+    key = int(event.get("key", 0))
+    if key == key_shift or not event_has_shift(event):
+        state["shift_down"] = False

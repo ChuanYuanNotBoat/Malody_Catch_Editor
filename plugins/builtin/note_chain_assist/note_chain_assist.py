@@ -2583,36 +2583,38 @@ def _handle_canvas_input(payload):
         status = tr(STATE["last_context"], "interaction_cancelled")
 
     elif et == "key_down":
-        key = int(event.get("key", 0))
-        mods = int(event.get("modifiers", 0))
-        ctrl = (mods & CTRL_MODIFIER_MASK) != 0
-        if key == 0x01000020 or _event_has_shift(event):  # Qt::Key_Shift
-            STATE["shift_down"] = True
-        if not ctrl and key == KEY_A and not _host_controls_anchor_mode(STATE["last_context"]):
-            STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
-            consumed = True
-            status = tr(STATE["last_context"], "anchor_enabled") if STATE["anchor_placement_enabled"] else tr(STATE["last_context"], "anchor_disabled")
-            _record_history_state(STATE["last_context"])
-            request_checkpoint = True
-        elif key in (KEY_DELETE, KEY_BACKSPACE):
-            changed_segments = _disconnect_selected_segments(STATE["last_context"])
-            changed_anchors = _delete_selected_anchors(STATE["last_context"])
-            if changed_segments or changed_anchors:
-                consumed = True
-                request_checkpoint = True
-                status = tr(STATE["last_context"], "status_selection_deleted")
-        elif key == 0x01000000:  # Esc
-            if STATE.get("selected_anchor_ids") or STATE.get("selected_links"):
-                STATE["selected_anchor_ids"] = []
-                STATE["selected_links"] = []
-                consumed = True
-                status = tr(STATE["last_context"], "status_selection_cleared")
+        key_result = input_ui.handle_key_down(
+            event,
+            {
+                "state": STATE,
+                "tr": tr,
+                "event_has_shift": _event_has_shift,
+                "host_controls_anchor_mode": _host_controls_anchor_mode,
+                "record_history_state": _record_history_state,
+                "disconnect_selected_segments": _disconnect_selected_segments,
+                "delete_selected_anchors": _delete_selected_anchors,
+                "ctrl_modifier_mask": CTRL_MODIFIER_MASK,
+                "key_a": KEY_A,
+                "key_delete": KEY_DELETE,
+                "key_backspace": KEY_BACKSPACE,
+                "key_shift": 0x01000020,
+                "key_escape": 0x01000000,
+            },
+        )
+        consumed = bool(key_result.get("consumed", False))
+        status = str(key_result.get("status", ""))
+        request_checkpoint = bool(key_result.get("request_checkpoint", False))
 
     # In tool mode, left-button canvas operations belong to plugin.
     if et == "key_up":
-        key = int(event.get("key", 0))
-        if key == 0x01000020 or not _event_has_shift(event):
-            STATE["shift_down"] = False
+        input_ui.handle_key_up(
+            event,
+            {
+                "state": STATE,
+                "event_has_shift": _event_has_shift,
+                "key_shift": 0x01000020,
+            },
+        )
 
     notes_selectable = _selection_enabled("notes")
     consumed = input_ui.apply_note_selection_consume_policy(
