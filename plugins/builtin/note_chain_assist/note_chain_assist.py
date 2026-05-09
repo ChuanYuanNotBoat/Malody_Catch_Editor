@@ -2356,20 +2356,21 @@ def _handle_canvas_input(payload):
             host_select_passthrough = bool(mouse_down_ctx["host_select_passthrough"])
             blank_hit = bool(mouse_down_ctx["blank_hit"])
             had_selection = bool(mouse_down_ctx["had_selection"])
-            if blank_hit and had_selection:
-                STATE["selected_anchor_ids"] = []
-                STATE["selected_links"] = []
-                STATE["pending_connect_anchor_id"] = -1
-                STATE["drag"] = {"mode": "", "index": -1}
-                status = tr(STATE["last_context"], "status_selection_cleared")
-                consumed = True
-            elif host_select_passthrough:
-                consumed = False
-            elif hidx >= 0:
-                STATE["drag"] = {"mode": hkind, "index": hidx}
-                consumed = True
-                cursor = "crosshair"
-                status = tr(STATE["last_context"], "dragging_handle", handle_kind=tr(STATE["last_context"], f"handle_kind_{hkind}"), index=hidx)
+            left_pre = input_ui.handle_mouse_down_left_prebranches(
+                hkind,
+                hidx,
+                {
+                    "state": STATE,
+                    "tr": tr,
+                    "host_select_passthrough": host_select_passthrough,
+                    "blank_hit": blank_hit,
+                    "had_selection": had_selection,
+                },
+            )
+            if bool(left_pre.get("handled", False)):
+                consumed = bool(left_pre.get("consumed", False))
+                cursor = str(left_pre.get("cursor", cursor))
+                status = str(left_pre.get("status", status))
             elif aidx >= 0:
                 anchor_id = int(STATE["anchors"][aidx].get("id", 0))
                 if shift:

@@ -485,3 +485,44 @@ def handle_mouse_down_right_button(x, y, callbacks):
     set_context_menu_links_for_hit = callbacks["set_context_menu_links_for_hit"]
     set_context_menu_links_for_hit(state["last_context"], x, y)
     return {"consumed": False}
+
+
+def handle_mouse_down_left_prebranches(hkind, hidx, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+    host_select_passthrough = callbacks["host_select_passthrough"]
+    blank_hit = callbacks["blank_hit"]
+    had_selection = callbacks["had_selection"]
+
+    if blank_hit and had_selection:
+        state["selected_anchor_ids"] = []
+        state["selected_links"] = []
+        state["pending_connect_anchor_id"] = -1
+        state["drag"] = {"mode": "", "index": -1}
+        return {
+            "handled": True,
+            "consumed": True,
+            "cursor": "arrow",
+            "status": tr(state["last_context"], "status_selection_cleared"),
+        }
+    if host_select_passthrough:
+        return {
+            "handled": True,
+            "consumed": False,
+            "cursor": "arrow",
+            "status": "",
+        }
+    if hidx >= 0:
+        state["drag"] = {"mode": hkind, "index": hidx}
+        return {
+            "handled": True,
+            "consumed": True,
+            "cursor": "crosshair",
+            "status": tr(
+                state["last_context"],
+                "dragging_handle",
+                handle_kind=tr(state["last_context"], f"handle_kind_{hkind}"),
+                index=hidx,
+            ),
+        }
+    return {"handled": False}
