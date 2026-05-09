@@ -245,3 +245,49 @@ def resolve_link_drag_mouse_up(callbacks):
         "status": status,
         "request_checkpoint": request_checkpoint,
     }
+
+
+def resolve_mouse_up_after_link_drag(callbacks):
+    state = callbacks["state"]
+    apply_box_selection = callbacks["apply_box_selection"]
+    tr = callbacks["tr"]
+    record_history_state = callbacks["record_history_state"]
+
+    if bool(state.get("box_select", {}).get("active", False)):
+        changed = apply_box_selection(state["last_context"])
+        state["drag"] = {"mode": "", "index": -1}
+        status = tr(state["last_context"], "status_box_selection_applied") if changed else tr(state["last_context"], "status_box_selection_cleared")
+        return {
+            "consumed": True,
+            "status": status,
+            "request_checkpoint": False,
+            "should_return": True,
+        }
+
+    if state["drag"]["mode"]:
+        state["drag"] = {"mode": "", "index": -1}
+        record_history_state(state["last_context"])
+        status = tr(state["last_context"], "curve_edit_applied")
+        return {
+            "consumed": True,
+            "status": status,
+            "request_checkpoint": True,
+            "should_return": False,
+        }
+
+    state["drag"] = {"mode": "", "index": -1}
+    return {
+        "consumed": False,
+        "status": "",
+        "request_checkpoint": False,
+        "should_return": False,
+    }
+
+
+def handle_cancel(state, tr_fn):
+    state["drag"] = {"mode": "", "index": -1}
+    state["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
+    return {
+        "consumed": True,
+        "status": tr_fn(state["last_context"], "interaction_cancelled"),
+    }

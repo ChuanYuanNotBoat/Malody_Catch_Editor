@@ -2554,27 +2554,28 @@ def _handle_canvas_input(payload):
             request_checkpoint = bool(link_drag_result.get("request_checkpoint", False))
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
-        if bool(STATE.get("box_select", {}).get("active", False)):
-            changed = _apply_box_selection(STATE["last_context"])
+        post_mouse_up = input_ui.resolve_mouse_up_after_link_drag(
+            {
+                "state": STATE,
+                "apply_box_selection": _apply_box_selection,
+                "tr": tr,
+                "record_history_state": _record_history_state,
+            }
+        )
+        if bool(post_mouse_up.get("consumed", False)):
             consumed = True
-            status = tr(STATE["last_context"], "status_box_selection_applied") if changed else tr(STATE["last_context"], "status_box_selection_cleared")
-            STATE["drag"] = {"mode": "", "index": -1}
+        post_status = str(post_mouse_up.get("status", ""))
+        if post_status:
+            status = post_status
+        if bool(post_mouse_up.get("request_checkpoint", False)):
+            request_checkpoint = True
+        if bool(post_mouse_up.get("should_return", False)):
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
-        if STATE["drag"]["mode"]:
-            status = tr(STATE["last_context"], "curve_edit_applied")
-            consumed = True
-            STATE["drag"] = {"mode": "", "index": -1}
-            _record_history_state(STATE["last_context"])
-            request_checkpoint = True
-        else:
-            STATE["drag"] = {"mode": "", "index": -1}
-
     elif et == "cancel":
-        STATE["drag"] = {"mode": "", "index": -1}
-        STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
-        consumed = True
-        status = tr(STATE["last_context"], "interaction_cancelled")
+        cancel_result = input_ui.handle_cancel(STATE, tr)
+        consumed = bool(cancel_result.get("consumed", False))
+        status = str(cancel_result.get("status", ""))
 
     elif et == "key_down":
         key_result = input_ui.handle_key_down(
