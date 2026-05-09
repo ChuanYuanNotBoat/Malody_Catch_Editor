@@ -2372,41 +2372,29 @@ def _handle_canvas_input(payload):
                 cursor = str(left_pre.get("cursor", cursor))
                 status = str(left_pre.get("status", status))
             elif aidx >= 0:
-                anchor_id = int(STATE["anchors"][aidx].get("id", 0))
-                if shift:
-                    STATE["drag"] = {"mode": "", "index": -1}
-                    STATE["link_drag"] = {
-                        "active": True,
-                        "source_anchor_id": anchor_id,
-                        "hover_anchor_id": -1,
-                        "x": x,
-                        "y": y,
-                    }
-                    consumed = True
-                    cursor = "pointing_hand"
-                    status = tr(STATE["last_context"], "status_link_dragging")
-                    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-                if ctrl:
-                    _toggle_selected_anchor(anchor_id)
-                else:
-                    _add_selected_anchor(anchor_id)
-                    STATE["selected_links"] = []
-                is_double = (STATE["last_click_anchor"] == aidx and ts - STATE["last_click_ms"] <= 280)
-                STATE["last_click_anchor"] = aidx
-                STATE["last_click_ms"] = ts
-                if is_double:
-                    STATE["anchors"][aidx]["smooth"] = not bool(STATE["anchors"][aidx].get("smooth", True))
-                    _invalidate_curve_cache()
-                    _record_history_state(STATE["last_context"])
+                anchor_result = input_ui.handle_mouse_down_anchor_hit(
+                    aidx,
+                    x,
+                    y,
+                    ts,
+                    ctrl,
+                    shift,
+                    {
+                        "state": STATE,
+                        "tr": tr,
+                        "toggle_selected_anchor": _toggle_selected_anchor,
+                        "add_selected_anchor": _add_selected_anchor,
+                        "invalidate_curve_cache": _invalidate_curve_cache,
+                        "record_history_state": _record_history_state,
+                    },
+                )
+                consumed = bool(anchor_result.get("consumed", consumed))
+                cursor = str(anchor_result.get("cursor", cursor))
+                status = str(anchor_result.get("status", status))
+                if bool(anchor_result.get("request_checkpoint", False)):
                     request_checkpoint = True
-                    consumed = True
-                    mode = tr(STATE["last_context"], "mode_smooth") if STATE["anchors"][aidx]["smooth"] else tr(STATE["last_context"], "mode_corner")
-                    status = tr(STATE["last_context"], "anchor_mode_changed", index=aidx, mode=mode)
-                else:
-                    STATE["drag"] = {"mode": "anchor", "index": aidx}
-                    consumed = True
-                    cursor = "size_all"
-                    status = tr(STATE["last_context"], "dragging_anchor", index=aidx)
+                if bool(anchor_result.get("immediate_return", False)):
+                    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
             elif seg_hit is not None:
                 if ctrl:
                     _toggle_selected_link(seg_hit[0], seg_hit[1])

@@ -526,3 +526,61 @@ def handle_mouse_down_left_prebranches(hkind, hidx, callbacks):
             ),
         }
     return {"handled": False}
+
+
+def handle_mouse_down_anchor_hit(aidx, x, y, ts, ctrl, shift, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+    toggle_selected_anchor = callbacks["toggle_selected_anchor"]
+    add_selected_anchor = callbacks["add_selected_anchor"]
+    invalidate_curve_cache = callbacks["invalidate_curve_cache"]
+    record_history_state = callbacks["record_history_state"]
+
+    anchor_id = int(state["anchors"][aidx].get("id", 0))
+    if shift:
+        state["drag"] = {"mode": "", "index": -1}
+        state["link_drag"] = {
+            "active": True,
+            "source_anchor_id": anchor_id,
+            "hover_anchor_id": -1,
+            "x": x,
+            "y": y,
+        }
+        return {
+            "consumed": True,
+            "cursor": "pointing_hand",
+            "status": tr(state["last_context"], "status_link_dragging"),
+            "request_checkpoint": False,
+            "immediate_return": True,
+        }
+
+    if ctrl:
+        toggle_selected_anchor(anchor_id)
+    else:
+        add_selected_anchor(anchor_id)
+        state["selected_links"] = []
+
+    is_double = state["last_click_anchor"] == aidx and ts - state["last_click_ms"] <= 280
+    state["last_click_anchor"] = aidx
+    state["last_click_ms"] = ts
+    if is_double:
+        state["anchors"][aidx]["smooth"] = not bool(state["anchors"][aidx].get("smooth", True))
+        invalidate_curve_cache()
+        record_history_state(state["last_context"])
+        mode = tr(state["last_context"], "mode_smooth") if state["anchors"][aidx]["smooth"] else tr(state["last_context"], "mode_corner")
+        return {
+            "consumed": True,
+            "cursor": "arrow",
+            "status": tr(state["last_context"], "anchor_mode_changed", index=aidx, mode=mode),
+            "request_checkpoint": True,
+            "immediate_return": False,
+        }
+
+    state["drag"] = {"mode": "anchor", "index": aidx}
+    return {
+        "consumed": True,
+        "cursor": "size_all",
+        "status": tr(state["last_context"], "dragging_anchor", index=aidx),
+        "request_checkpoint": False,
+        "immediate_return": False,
+    }
