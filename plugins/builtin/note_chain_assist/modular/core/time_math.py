@@ -25,6 +25,15 @@ def cubic_point(a, b, c, d, t):
     uu = u * u
     uuu = uu * u
     ttt = tt * t
+    # Support both scalar interpolation and 2D point tuple/list interpolation.
+    if isinstance(a, (list, tuple)):
+        ax, ay = float(a[0]), float(a[1])
+        bx, by = float(b[0]), float(b[1])
+        cx, cy = float(c[0]), float(c[1])
+        dx, dy = float(d[0]), float(d[1])
+        x = uuu * ax + 3.0 * uu * t * bx + 3.0 * u * tt * cx + ttt * dx
+        y = uuu * ay + 3.0 * uu * t * by + 3.0 * u * tt * cy + ttt * dy
+        return (x, y)
     return uuu * a + 3.0 * uu * t * b + 3.0 * u * tt * c + ttt * d
 
 
