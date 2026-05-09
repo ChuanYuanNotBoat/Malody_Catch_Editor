@@ -28,6 +28,7 @@ from modular.core.state import (
     STATE,
     STYLE_PRESETS,
 )
+from modular.core import state as state_core
 from modular.core import time_math as tm
 from modular.core import curve_model as cm
 from modular.core import sidecar_v3 as scv3
