@@ -2359,58 +2359,21 @@ def _handle_canvas_input(payload):
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
     elif et == "mouse_move":
-        link_drag_move = input_ui.update_link_drag_on_mouse_move(
+        mouse_move_result = input_ui.handle_mouse_move_event(
             x,
             y,
+            event,
+            cursor,
+            status,
+            request_checkpoint,
             {
                 "state": STATE,
+                "tr": tr,
+                "event_has_shift": _event_has_shift,
                 "selection_enabled": _selection_enabled,
                 "find_anchor_hit": _find_anchor_hit,
+                "find_handle_hit": _find_handle_hit,
                 "anchor_index_map": _anchor_index_map,
-                "tr": tr,
-            },
-        )
-        if link_drag_move is not None:
-            consumed = bool(link_drag_move.get("consumed", False))
-            cursor = str(link_drag_move.get("cursor", cursor))
-            status = str(link_drag_move.get("status", status))
-            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-
-        shift_now = _event_has_shift(event) or bool(STATE.get("shift_down", False))
-        switch_result = input_ui.maybe_switch_anchor_drag_to_link_drag(
-            x,
-            y,
-            shift_now,
-            {
-                "state": STATE,
-                "tr": tr,
-            },
-        )
-        if switch_result is not None:
-            consumed = bool(switch_result.get("consumed", False))
-            cursor = str(switch_result.get("cursor", cursor))
-            status = str(switch_result.get("status", status))
-            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-
-        box_result = input_ui.update_box_select_on_mouse_move(
-            x,
-            y,
-            {
-                "state": STATE,
-                "tr": tr,
-            },
-        )
-        if box_result is not None:
-            consumed = bool(box_result.get("consumed", False))
-            cursor = str(box_result.get("cursor", cursor))
-            status = str(box_result.get("status", status))
-            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-
-        drag_edit = input_ui.handle_drag_edit_on_mouse_move(
-            x,
-            y,
-            {
-                "state": STATE,
                 "canvas_to_chart": _canvas_to_chart,
                 "snap_chart_point": _snap_chart_point,
                 "enforce_anchor_time_order": _enforce_anchor_time_order,
@@ -2419,25 +2382,14 @@ def _handle_canvas_input(payload):
                 "set_anchor_out_abs_chart": _set_anchor_out_abs_chart,
                 "invalidate_curve_cache": _invalidate_curve_cache,
                 "mark_dirty": _mark_dirty,
-                "tr": tr,
             },
         )
-        if drag_edit is not None:
-            consumed = bool(drag_edit.get("consumed", False))
-            cursor = str(drag_edit.get("cursor", cursor))
-            status = str(drag_edit.get("status", status))
-        else:
-            hover_cursor = input_ui.resolve_hover_cursor_on_mouse_move(
-                x,
-                y,
-                {
-                    "state": STATE,
-                    "find_handle_hit": _find_handle_hit,
-                    "find_anchor_hit": _find_anchor_hit,
-                },
-            )
-            if hover_cursor is not None:
-                cursor = str(hover_cursor)
+        consumed = bool(mouse_move_result.get("consumed", consumed))
+        cursor = str(mouse_move_result.get("cursor", cursor))
+        status = str(mouse_move_result.get("status", status))
+        request_checkpoint = bool(mouse_move_result.get("request_checkpoint", request_checkpoint))
+        if bool(mouse_move_result.get("immediate_return", False)):
+            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
     elif et == "mouse_up":
         link_drag_result = input_ui.resolve_link_drag_mouse_up(

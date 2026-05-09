@@ -838,3 +838,106 @@ def handle_mouse_down_event(x, y, button, event, ts, cursor, status, request_che
         "request_checkpoint": request_checkpoint,
         "immediate_return": immediate_return,
     }
+
+
+def handle_mouse_move_event(x, y, event, cursor, status, request_checkpoint, callbacks):
+    state = callbacks["state"]
+    event_has_shift = callbacks["event_has_shift"]
+
+    link_drag_move = update_link_drag_on_mouse_move(
+        x,
+        y,
+        {
+            "state": state,
+            "selection_enabled": callbacks["selection_enabled"],
+            "find_anchor_hit": callbacks["find_anchor_hit"],
+            "anchor_index_map": callbacks["anchor_index_map"],
+            "tr": callbacks["tr"],
+        },
+    )
+    if link_drag_move is not None:
+        return {
+            "consumed": bool(link_drag_move.get("consumed", False)),
+            "cursor": str(link_drag_move.get("cursor", cursor)),
+            "status": str(link_drag_move.get("status", status)),
+            "request_checkpoint": request_checkpoint,
+            "immediate_return": True,
+        }
+
+    shift_now = event_has_shift(event) or bool(state.get("shift_down", False))
+    switch_result = maybe_switch_anchor_drag_to_link_drag(
+        x,
+        y,
+        shift_now,
+        {
+            "state": state,
+            "tr": callbacks["tr"],
+        },
+    )
+    if switch_result is not None:
+        return {
+            "consumed": bool(switch_result.get("consumed", False)),
+            "cursor": str(switch_result.get("cursor", cursor)),
+            "status": str(switch_result.get("status", status)),
+            "request_checkpoint": request_checkpoint,
+            "immediate_return": True,
+        }
+
+    box_result = update_box_select_on_mouse_move(
+        x,
+        y,
+        {
+            "state": state,
+            "tr": callbacks["tr"],
+        },
+    )
+    if box_result is not None:
+        return {
+            "consumed": bool(box_result.get("consumed", False)),
+            "cursor": str(box_result.get("cursor", cursor)),
+            "status": str(box_result.get("status", status)),
+            "request_checkpoint": request_checkpoint,
+            "immediate_return": True,
+        }
+
+    consumed = False
+    drag_edit = handle_drag_edit_on_mouse_move(
+        x,
+        y,
+        {
+            "state": state,
+            "canvas_to_chart": callbacks["canvas_to_chart"],
+            "snap_chart_point": callbacks["snap_chart_point"],
+            "enforce_anchor_time_order": callbacks["enforce_anchor_time_order"],
+            "enforce_handle_time_constraints": callbacks["enforce_handle_time_constraints"],
+            "set_anchor_in_abs_chart": callbacks["set_anchor_in_abs_chart"],
+            "set_anchor_out_abs_chart": callbacks["set_anchor_out_abs_chart"],
+            "invalidate_curve_cache": callbacks["invalidate_curve_cache"],
+            "mark_dirty": callbacks["mark_dirty"],
+            "tr": callbacks["tr"],
+        },
+    )
+    if drag_edit is not None:
+        consumed = bool(drag_edit.get("consumed", False))
+        cursor = str(drag_edit.get("cursor", cursor))
+        status = str(drag_edit.get("status", status))
+    else:
+        hover_cursor = resolve_hover_cursor_on_mouse_move(
+            x,
+            y,
+            {
+                "state": state,
+                "find_handle_hit": callbacks["find_handle_hit"],
+                "find_anchor_hit": callbacks["find_anchor_hit"],
+            },
+        )
+        if hover_cursor is not None:
+            cursor = str(hover_cursor)
+
+    return {
+        "consumed": consumed,
+        "cursor": cursor,
+        "status": status,
+        "request_checkpoint": request_checkpoint,
+        "immediate_return": False,
+    }
