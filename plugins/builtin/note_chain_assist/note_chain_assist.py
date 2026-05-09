@@ -32,6 +32,7 @@ from modular.core import time_math as tm
 from modular.core import curve_model as cm
 from modular.core import sidecar_v3 as scv3
 from modular.actions import tool_actions as ta
+from modular.actions import batch_commit as bc
 from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
 
 TRANSLATIONS = {
@@ -3129,15 +3130,15 @@ def _workspace_config(_payload):
 
 
 def _build_batch_edit(payload):
-    action_id = str((payload or {}).get("action_id", ""))
-    context = (payload or {}).get("context", {}) or {}
-    _ensure_project_context(context)
-    _seed_missing_segment_denominators(context)
-    if action_id not in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar", "commit_context_segments_to_notes"):
-        return {"add": [], "remove": [], "move": []}
-    if action_id == "commit_context_segments_to_notes":
-        return _build_batch_from_curve(context, _context_menu_target_links())
-    return _build_batch_from_curve(context)
+    return bc.build_batch_edit(
+        payload,
+        {
+            "ensure_project_context": _ensure_project_context,
+            "seed_missing_segment_denominators": _seed_missing_segment_denominators,
+            "build_batch_from_curve": _build_batch_from_curve,
+            "context_menu_target_links": _context_menu_target_links,
+        },
+    )
 
 
 def run_one_shot(action_id):
