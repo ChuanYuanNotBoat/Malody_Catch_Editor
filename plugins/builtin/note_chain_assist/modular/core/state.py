@@ -74,6 +74,7 @@ def build_initial_state():
         "project_revision": 0,
         "project_file_uuid": "",
         "project_last_writer_instance": "",
+        "project_load_failed": False,
         "last_save_error": "",
         "last_save_error_detail": "",
         "host_undo_action_tokens": [],

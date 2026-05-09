@@ -855,17 +855,28 @@ def _register_host_undo_action(context, action_id):
     STATE["host_undo_action_tokens"] = tokens
 
 
-def _is_registered_host_undo_action(action_text):
-    if not isinstance(action_text, str):
-        return False
-    text = action_text.strip()
+def _extract_host_action_title(action_text):
+    text = str(action_text or "").strip()
     if not text:
+        return ""
+    # Host action text is usually "Plugin Action: <title>" (localized prefix possible).
+    sep_idx = text.find(":")
+    if sep_idx < 0:
+        sep_idx = text.find("：")
+    if sep_idx >= 0:
+        return text[sep_idx + 1 :].strip()
+    return text
+
+
+def _is_registered_host_undo_action(action_text):
+    title = _extract_host_action_title(action_text)
+    if not title:
         return False
     for token in STATE.get("host_undo_action_tokens", []):
         if not isinstance(token, str):
             continue
         cur = token.strip()
-        if cur and cur in text:
+        if cur and cur == title:
             return True
     return False
 
@@ -1584,6 +1595,9 @@ def _read_disk_payload(path):
 
 
 def _save_project(path, context=None):
+    if bool(STATE.get("project_load_failed", False)) and str(STATE.get("project_path", "") or "") == str(path or ""):
+        _set_save_error("load_failed_blocked", "sidecar load failed; save blocked to protect existing file")
+        return False
     return scv3.save_project(
         STATE,
         path,
@@ -1820,11 +1834,14 @@ def _ensure_project_context(context):
     if not path:
         return
 
-    if STATE["project_path"] != path:
-        if STATE["project_path"] and STATE["project_dirty"]:
+    path_changed = STATE["project_path"] != path
+    if path_changed or bool(STATE.get("project_load_failed", False)):
+        if path_changed and STATE["project_path"] and STATE["project_dirty"]:
             # Follow host save/discard flow: do not auto-persist when switching chart/project.
             STATE["project_dirty"] = False
-        STATE["project_path"] = path
+        if path_changed:
+            STATE["project_path"] = path
+        STATE["project_load_failed"] = False
         STATE["suppress_persist_once"] = False
         _try_seed_curve_project_from_source(context, path)
         if not _load_project(path, context):
@@ -1849,8 +1866,14 @@ def _ensure_project_context(context):
             STATE["project_revision"] = 0
             STATE["project_file_uuid"] = uuid.uuid4().hex
             STATE["project_last_writer_instance"] = ""
-            _set_save_error("", "")
-            STATE["project_dirty"] = True
+            file_exists = os.path.exists(path)
+            if file_exists:
+                # Existing sidecar failed to load: keep error and block save to avoid overwrite.
+                STATE["project_load_failed"] = True
+                STATE["project_dirty"] = False
+            else:
+                _set_save_error("", "")
+                STATE["project_dirty"] = True
             _invalidate_curve_cache()
         STATE["history"] = []
         STATE["history_index"] = -1

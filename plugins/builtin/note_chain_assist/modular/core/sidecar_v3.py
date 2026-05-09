@@ -132,7 +132,7 @@ def set_save_error(state, code, detail=""):
 def read_disk_payload(path, *, json_module, os_module):
     if not os_module.path.exists(path):
         return None
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8-sig") as f:
         return json_module.load(f)
 
 
@@ -209,7 +209,7 @@ def load_project(
     if not isinstance(path, str) or not path.strip() or not os_module.path.exists(path):
         return False
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             payload = json_module.load(f)
 
         state["segment_denominators"] = {}
