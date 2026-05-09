@@ -31,6 +31,7 @@ from modular.core.state import (
 from modular.core import time_math as tm
 from modular.core import curve_model as cm
 from modular.core import sidecar_v3 as scv3
+from modular.actions import tool_actions as ta
 from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
 
 TRANSLATIONS = {
@@ -3096,78 +3097,25 @@ def _list_tool_actions():
 
 
 def _run_tool_action(payload):
-    action_id = str((payload or {}).get("action_id", ""))
-    context = (payload or {}).get("context", {}) or {}
-    _ensure_project_context(context)
-
-    if action_id == "reset_curve":
-        _reset_anchors(context)
-        return True
-    if action_id in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar", "commit_context_segments_to_notes"):
-        if STATE["project_path"] and STATE["project_dirty"]:
-            if not _save_project(STATE["project_path"], context):
-                return False
-        return True
-    if action_id == "toggle_anchor_placement":
-        STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))
-        _record_history_state(context)
-        return True
-    if action_id == "toggle_curve_visible":
-        STATE["curve_visible"] = not bool(STATE.get("curve_visible", True))
-        _record_history_state(context)
-        return True
-    if action_id == "toggle_polyline_mode":
-        return _toggle_polyline_for_active_or_selected(context)
-    if action_id == "toggle_context_polyline_mode":
-        return _toggle_polyline_for_context_links(context)
-    if action_id == "toggle_note_curve_snap":
-        STATE["note_curve_snap_enabled"] = not _note_curve_snap_enabled()
-        _record_history_state(context)
-        return True
-    if action_id == "toggle_select_anchors":
-        cur = bool(STATE.get("selection_targets", {}).get("anchors", True))
-        STATE["selection_targets"]["anchors"] = not cur
-        if not STATE["selection_targets"]["anchors"]:
-            STATE["selected_anchor_ids"] = []
-        _record_history_state(context)
-        return True
-    if action_id == "toggle_select_segments":
-        cur = bool(STATE.get("selection_targets", {}).get("segments", True))
-        STATE["selection_targets"]["segments"] = not cur
-        if not STATE["selection_targets"]["segments"]:
-            STATE["selected_links"] = []
-        _record_history_state(context)
-        return True
-    if action_id == "toggle_select_notes":
-        cur = bool(STATE.get("selection_targets", {}).get("notes", False))
-        STATE["selection_targets"]["notes"] = not cur
-        _record_history_state(context)
-        return True
-    if action_id == "set_segment_density_follow":
-        return _set_density_for_selected_segments(context, 0)
-    if action_id.startswith("set_segment_density_"):
-        suffix = action_id[len("set_segment_density_") :]
-        try:
-            den = int(suffix)
-        except Exception:
-            return False
-        return _set_density_for_selected_segments(context, den)
-    if action_id in ("connect_selected_nodes", "connect_selected_nodes_ctx"):
-        return _connect_selected_anchors(context)
-    if action_id == "disconnect_selected_segments":
-        return _disconnect_selected_segments(context)
-    if action_id == "disconnect_selected_segments_ctx":
-        changed_segments = _disconnect_selected_segments(context)
-        changed_anchors = _delete_selected_anchors(context)
-        return changed_segments or changed_anchors
-    if action_id == "export_style_preset":
-        return _save_style(context)
-    if action_id == "import_style_preset":
-        ok = _load_style(context)
-        if ok:
-            _record_history_state(context)
-        return ok
-    return False
+    return ta.run_tool_action(
+        payload,
+        {
+            "state": STATE,
+            "ensure_project_context": _ensure_project_context,
+            "reset_anchors": _reset_anchors,
+            "save_project": _save_project,
+            "record_history_state": _record_history_state,
+            "toggle_polyline_for_active_or_selected": _toggle_polyline_for_active_or_selected,
+            "toggle_polyline_for_context_links": _toggle_polyline_for_context_links,
+            "note_curve_snap_enabled": _note_curve_snap_enabled,
+            "set_density_for_selected_segments": _set_density_for_selected_segments,
+            "connect_selected_anchors": _connect_selected_anchors,
+            "disconnect_selected_segments": _disconnect_selected_segments,
+            "delete_selected_anchors": _delete_selected_anchors,
+            "save_style": _save_style,
+            "load_style": _load_style,
+        },
+    )
 
 
 def _workspace_config(_payload):
@@ -3193,30 +3141,7 @@ def _build_batch_edit(payload):
 
 
 def run_one_shot(action_id):
-    if isinstance(action_id, str):
-        if action_id == "set_segment_density_follow" or action_id.startswith("set_segment_density_"):
-            return 0
-    known = {
-        "reset_curve",
-        "commit_curve_to_notes",
-        "commit_curve_to_notes_sidebar",
-        "commit_context_segments_to_notes",
-        "toggle_anchor_placement",
-        "toggle_curve_visible",
-        "toggle_polyline_mode",
-        "toggle_context_polyline_mode",
-        "toggle_note_curve_snap",
-        "toggle_select_anchors",
-        "toggle_select_segments",
-        "toggle_select_notes",
-        "connect_selected_nodes",
-        "disconnect_selected_segments",
-        "connect_selected_nodes_ctx",
-        "disconnect_selected_segments_ctx",
-        "export_style_preset",
-        "import_style_preset",
-    }
-    return 0 if action_id in known else 1
+    return ta.run_one_shot(action_id)
 
 
 def run_plugin_loop():
