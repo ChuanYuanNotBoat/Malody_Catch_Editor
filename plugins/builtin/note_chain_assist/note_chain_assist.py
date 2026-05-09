@@ -261,96 +261,25 @@ def _configure_stdio_utf8():
 
 
 def _capture_snapshot():
-    return {
-        "anchors": _clone(STATE.get("anchors", [])),
-        "links": _clone(STATE.get("links", [])),
-        "style": _clone(STATE.get("style", {})),
-        "segment_denominators": _clone(STATE.get("segment_denominators", {})),
-        "segment_shapes": _clone(STATE.get("segment_shapes", {})),
-        "anchor_group_ids": _clone(STATE.get("anchor_group_ids", {})),
-        "anchor_reserved": _clone(STATE.get("anchor_reserved", {})),
-        "anchor_compat_handles": _clone(STATE.get("anchor_compat_handles", {})),
-        "curve_id_by_link": _clone(STATE.get("curve_id_by_link", {})),
-        "curve_no_by_link": _clone(STATE.get("curve_no_by_link", {})),
-        "curve_group_ids_by_link": _clone(STATE.get("curve_group_ids_by_link", {})),
-        "curve_density_mode_by_link": _clone(STATE.get("curve_density_mode_by_link", {})),
-        "curve_reserved_by_link": _clone(STATE.get("curve_reserved_by_link", {})),
-        "curve_special_joystick_by_link": _clone(STATE.get("curve_special_joystick_by_link", {})),
-        "node_groups": _clone(STATE.get("node_groups", [])),
-        "curve_groups": _clone(STATE.get("curve_groups", [])),
-        "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True, "notes": False})),
-        "curve_visible": bool(STATE.get("curve_visible", True)),
-        "active_link_shape": _active_link_shape(),
-        "note_curve_snap_enabled": bool(STATE.get("note_curve_snap_enabled", False)),
-        "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
-        "next_anchor_id": int(STATE.get("next_anchor_id", 1)),
-        "next_curve_id": int(STATE.get("next_curve_id", 1)),
-        "next_group_id": int(STATE.get("next_group_id", 2)),
-        "pending_connect_anchor_id": int(STATE.get("pending_connect_anchor_id", -1)),
-    }
+    return state_core.capture_snapshot(
+        STATE,
+        clone_fn=_clone,
+        active_link_shape_fn=_active_link_shape,
+    )
 
 
 def _restore_snapshot(snapshot):
-    if not isinstance(snapshot, dict):
-        return
-    STATE["anchors"] = _clone(snapshot.get("anchors", [])) if isinstance(snapshot.get("anchors"), list) else []
-    STATE["links"] = _clone(snapshot.get("links", [])) if isinstance(snapshot.get("links"), list) else []
-    style = snapshot.get("style")
-    STATE["style"] = _clone(style) if isinstance(style, dict) else {"denominators": [4, 8, 12, 16], "style_name": "balanced"}
-    seg_dens = snapshot.get("segment_denominators")
-    STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
-    seg_shapes = snapshot.get("segment_shapes")
-    STATE["segment_shapes"] = _clone(seg_shapes) if isinstance(seg_shapes, dict) else {}
-    anchor_group_ids = snapshot.get("anchor_group_ids")
-    STATE["anchor_group_ids"] = _clone(anchor_group_ids) if isinstance(anchor_group_ids, dict) else {}
-    anchor_reserved = snapshot.get("anchor_reserved")
-    STATE["anchor_reserved"] = _clone(anchor_reserved) if isinstance(anchor_reserved, dict) else {}
-    anchor_compat = snapshot.get("anchor_compat_handles")
-    STATE["anchor_compat_handles"] = _clone(anchor_compat) if isinstance(anchor_compat, dict) else {}
-    curve_id_by_link = snapshot.get("curve_id_by_link")
-    STATE["curve_id_by_link"] = _clone(curve_id_by_link) if isinstance(curve_id_by_link, dict) else {}
-    curve_no_by_link = snapshot.get("curve_no_by_link")
-    STATE["curve_no_by_link"] = _clone(curve_no_by_link) if isinstance(curve_no_by_link, dict) else {}
-    curve_group_ids_by_link = snapshot.get("curve_group_ids_by_link")
-    STATE["curve_group_ids_by_link"] = _clone(curve_group_ids_by_link) if isinstance(curve_group_ids_by_link, dict) else {}
-    curve_density_mode_by_link = snapshot.get("curve_density_mode_by_link")
-    STATE["curve_density_mode_by_link"] = _clone(curve_density_mode_by_link) if isinstance(curve_density_mode_by_link, dict) else {}
-    curve_reserved_by_link = snapshot.get("curve_reserved_by_link")
-    STATE["curve_reserved_by_link"] = _clone(curve_reserved_by_link) if isinstance(curve_reserved_by_link, dict) else {}
-    curve_special_js = snapshot.get("curve_special_joystick_by_link")
-    STATE["curve_special_joystick_by_link"] = _clone(curve_special_js) if isinstance(curve_special_js, dict) else {}
-    node_groups = snapshot.get("node_groups")
-    STATE["node_groups"] = _clone(node_groups) if isinstance(node_groups, list) else [{"group_id": DEFAULT_NODE_GROUP_ID, "group_name": "base", "reserved": {}}]
-    curve_groups = snapshot.get("curve_groups")
-    STATE["curve_groups"] = _clone(curve_groups) if isinstance(curve_groups, list) else [{"group_id": DEFAULT_CURVE_GROUP_ID, "group_name": "base", "reserved": {}}]
-    targets = snapshot.get("selection_targets")
-    if isinstance(targets, dict):
-        STATE["selection_targets"] = {
-            "anchors": bool(targets.get("anchors", True)),
-            "segments": bool(targets.get("segments", True)),
-            "notes": bool(targets.get("notes", False)),
-        }
-    else:
-        STATE["selection_targets"] = {"anchors": True, "segments": True, "notes": False}
-    STATE["curve_visible"] = bool(snapshot.get("curve_visible", True))
-    active_shape = str(snapshot.get("active_link_shape", snapshot.get("curve_shape", "curve")) or "curve").strip().lower()
-    STATE["active_link_shape"] = "polyline" if active_shape == "polyline" else "curve"
-    STATE["note_curve_snap_enabled"] = bool(snapshot.get("note_curve_snap_enabled", False))
-    STATE["anchor_placement_enabled"] = bool(snapshot.get("anchor_placement_enabled", False))
-    STATE["drag"] = {"mode": "", "index": -1}
-    STATE["selected_anchor_ids"] = []
-    STATE["selected_links"] = []
-    STATE["box_select"] = {"active": False, "start": [0.0, 0.0], "end": [0.0, 0.0], "append": False}
-    STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
-    STATE["shift_down"] = False
-    STATE["pending_connect_anchor_id"] = int(snapshot.get("pending_connect_anchor_id", -1))
-    STATE["next_anchor_id"] = max(1, int(snapshot.get("next_anchor_id", 1)))
-    STATE["next_curve_id"] = max(1, int(snapshot.get("next_curve_id", 1)))
-    STATE["next_group_id"] = max(2, int(snapshot.get("next_group_id", 2)))
-    _ensure_anchor_ids()
-    _cleanup_links_and_selection()
-    _seed_missing_segment_denominators()
-    _invalidate_curve_cache()
+    state_core.restore_snapshot(
+        STATE,
+        snapshot,
+        clone_fn=_clone,
+        default_node_group_id=DEFAULT_NODE_GROUP_ID,
+        default_curve_group_id=DEFAULT_CURVE_GROUP_ID,
+        ensure_anchor_ids_fn=_ensure_anchor_ids,
+        cleanup_links_and_selection_fn=_cleanup_links_and_selection,
+        seed_missing_segment_denominators_fn=_seed_missing_segment_denominators,
+        invalidate_curve_cache_fn=_invalidate_curve_cache,
+    )
 
 
 def _invalidate_curve_cache():
@@ -843,23 +772,11 @@ def _apply_box_selection(context):
 
 
 def _push_history():
-    snap = _capture_snapshot()
-    hist = STATE.get("history", [])
-    idx = int(STATE.get("history_index", -1))
-
-    if 0 <= idx < len(hist):
-        if hist[idx] == snap:
-            return
-        hist = hist[: idx + 1]
-    else:
-        hist = []
-
-    hist.append(snap)
-    if len(hist) > MAX_HISTORY:
-        hist = hist[-MAX_HISTORY:]
-    STATE["history"] = hist
-    STATE["history_index"] = len(hist) - 1
-    return True
+    return state_core.push_history(
+        STATE,
+        _capture_snapshot(),
+        max_history=MAX_HISTORY,
+    )
 
 
 def _record_history_state(context):
@@ -870,27 +787,21 @@ def _record_history_state(context):
 
 
 def _undo_history_from_host(context):
-    hist = STATE.get("history", [])
-    idx = int(STATE.get("history_index", -1))
-    if not hist or idx <= 0:
-        return False
-    idx -= 1
-    STATE["history_index"] = idx
-    _restore_snapshot(hist[idx])
-    _mark_dirty(context, flush=True)
-    return True
+    return state_core.undo_history(
+        STATE,
+        restore_snapshot_fn=_restore_snapshot,
+        mark_dirty_fn=_mark_dirty,
+        context=context,
+    )
 
 
 def _redo_history_from_host(context):
-    hist = STATE.get("history", [])
-    idx = int(STATE.get("history_index", -1))
-    if not hist or idx >= len(hist) - 1:
-        return False
-    idx += 1
-    STATE["history_index"] = idx
-    _restore_snapshot(hist[idx])
-    _mark_dirty(context, flush=True)
-    return True
+    return state_core.redo_history(
+        STATE,
+        restore_snapshot_fn=_restore_snapshot,
+        mark_dirty_fn=_mark_dirty,
+        context=context,
+    )
 
 
 def _is_curve_checkpoint_action(action_text):
