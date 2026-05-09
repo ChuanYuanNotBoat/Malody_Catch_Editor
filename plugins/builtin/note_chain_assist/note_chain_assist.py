@@ -2284,186 +2284,57 @@ def _sync_anchor_selection_from_host_notes(context):
 
 
 def _handle_canvas_input(payload):
-    prepared = input_ui.prepare_canvas_input(
+    return input_ui.handle_canvas_input(
         payload,
         {
             "state": STATE,
+            "tr": tr,
+            "checkpoint_prefix": CURVE_CHECKPOINT_PREFIX,
+            "right_button": RIGHT_BUTTON,
+            "left_button": LEFT_BUTTON,
+            "ctrl_modifier_mask": CTRL_MODIFIER_MASK,
+            "key_a": KEY_A,
+            "key_delete": KEY_DELETE,
+            "key_backspace": KEY_BACKSPACE,
+            "key_shift": 0x01000020,
+            "key_escape": 0x01000000,
+            "now_ms": lambda: int(time.time() * 1000),
+            "build_overlay": _build_overlay,
+            "note_curve_snap_enabled": _note_curve_snap_enabled,
             "ensure_project_context": _ensure_project_context,
             "seed_missing_segment_denominators": _seed_missing_segment_denominators,
             "sync_anchor_placement_with_host_mode": _sync_anchor_placement_with_host_mode,
             "sync_anchor_selection_from_host_notes": _sync_anchor_selection_from_host_notes,
-            "now_ms": lambda: int(time.time() * 1000),
+            "event_has_shift": _event_has_shift,
+            "selection_enabled": _selection_enabled,
+            "host_controls_anchor_mode": _host_controls_anchor_mode,
+            "find_handle_hit": _find_handle_hit,
+            "find_anchor_hit": _find_anchor_hit,
+            "find_segment_hit": _find_segment_hit,
+            "set_context_menu_links_for_hit": _set_context_menu_links_for_hit,
+            "toggle_selected_anchor": _toggle_selected_anchor,
+            "add_selected_anchor": _add_selected_anchor,
+            "toggle_selected_link": _toggle_selected_link,
+            "set_single_selected_link": _set_single_selected_link,
+            "append_anchor": _append_anchor,
+            "add_link": _add_link,
+            "set_single_selected_anchor": _set_single_selected_anchor,
+            "cleanup_links_and_selection": _cleanup_links_and_selection,
+            "invalidate_curve_cache": _invalidate_curve_cache,
+            "record_history_state": _record_history_state,
+            "mark_dirty": _mark_dirty,
+            "disconnect_selected_segments": _disconnect_selected_segments,
+            "delete_selected_anchors": _delete_selected_anchors,
+            "anchor_index_map": _anchor_index_map,
+            "canvas_to_chart": _canvas_to_chart,
+            "snap_chart_point": _snap_chart_point,
+            "enforce_anchor_time_order": _enforce_anchor_time_order,
+            "enforce_handle_time_constraints": _enforce_handle_time_constraints,
+            "set_anchor_in_abs_chart": _set_anchor_in_abs_chart,
+            "set_anchor_out_abs_chart": _set_anchor_out_abs_chart,
+            "apply_box_selection": _apply_box_selection,
         },
     )
-    context = prepared["context"]
-    event = prepared["event"]
-    et = prepared["event_type"]
-    x = prepared["x"]
-    y = prepared["y"]
-    button = prepared["button"]
-    ts = prepared["timestamp_ms"]
-
-    consumed = False
-    status = ""
-    cursor = "arrow"
-    request_checkpoint = False
-    response_callbacks = {
-        "build_overlay": _build_overlay,
-        "context": STATE["last_context"],
-        "checkpoint_prefix": CURVE_CHECKPOINT_PREFIX,
-    }
-
-    if _note_curve_snap_enabled() and input_ui.should_passthrough_for_note_curve_snap(et, event, button, LEFT_BUTTON):
-        return input_ui.build_canvas_response(False, "arrow", "", False, response_callbacks)
-
-    if et == "mouse_down":
-        mouse_down_result = input_ui.handle_mouse_down_event(
-            x,
-            y,
-            button,
-            event,
-            ts,
-            cursor,
-            status,
-            request_checkpoint,
-            {
-                "state": STATE,
-                "tr": tr,
-                "right_button": RIGHT_BUTTON,
-                "left_button": LEFT_BUTTON,
-                "ctrl_modifier_mask": CTRL_MODIFIER_MASK,
-                "find_handle_hit": _find_handle_hit,
-                "find_anchor_hit": _find_anchor_hit,
-                "find_segment_hit": _find_segment_hit,
-                "selection_enabled": _selection_enabled,
-                "event_has_shift": _event_has_shift,
-                "set_context_menu_links_for_hit": _set_context_menu_links_for_hit,
-                "toggle_selected_anchor": _toggle_selected_anchor,
-                "add_selected_anchor": _add_selected_anchor,
-                "invalidate_curve_cache": _invalidate_curve_cache,
-                "record_history_state": _record_history_state,
-                "toggle_selected_link": _toggle_selected_link,
-                "set_single_selected_link": _set_single_selected_link,
-                "append_anchor": _append_anchor,
-                "add_link": _add_link,
-                "set_single_selected_anchor": _set_single_selected_anchor,
-                "cleanup_links_and_selection": _cleanup_links_and_selection,
-                "mark_dirty": _mark_dirty,
-            },
-        )
-        consumed = bool(mouse_down_result.get("consumed", consumed))
-        cursor = str(mouse_down_result.get("cursor", cursor))
-        status = str(mouse_down_result.get("status", status))
-        request_checkpoint = bool(mouse_down_result.get("request_checkpoint", request_checkpoint))
-        if bool(mouse_down_result.get("immediate_return", False)):
-            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-
-    elif et == "mouse_move":
-        mouse_move_result = input_ui.handle_mouse_move_event(
-            x,
-            y,
-            event,
-            cursor,
-            status,
-            request_checkpoint,
-            {
-                "state": STATE,
-                "tr": tr,
-                "event_has_shift": _event_has_shift,
-                "selection_enabled": _selection_enabled,
-                "find_anchor_hit": _find_anchor_hit,
-                "find_handle_hit": _find_handle_hit,
-                "anchor_index_map": _anchor_index_map,
-                "canvas_to_chart": _canvas_to_chart,
-                "snap_chart_point": _snap_chart_point,
-                "enforce_anchor_time_order": _enforce_anchor_time_order,
-                "enforce_handle_time_constraints": _enforce_handle_time_constraints,
-                "set_anchor_in_abs_chart": _set_anchor_in_abs_chart,
-                "set_anchor_out_abs_chart": _set_anchor_out_abs_chart,
-                "invalidate_curve_cache": _invalidate_curve_cache,
-                "mark_dirty": _mark_dirty,
-            },
-        )
-        consumed = bool(mouse_move_result.get("consumed", consumed))
-        cursor = str(mouse_move_result.get("cursor", cursor))
-        status = str(mouse_move_result.get("status", status))
-        request_checkpoint = bool(mouse_move_result.get("request_checkpoint", request_checkpoint))
-        if bool(mouse_move_result.get("immediate_return", False)):
-            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-
-    elif et == "mouse_up":
-        mouse_up_result = input_ui.handle_mouse_up_event(
-            cursor,
-            status,
-            request_checkpoint,
-            {
-                "state": STATE,
-                "tr": tr,
-                "add_link": _add_link,
-                "anchor_index_map": _anchor_index_map,
-                "cleanup_links_and_selection": _cleanup_links_and_selection,
-                "invalidate_curve_cache": _invalidate_curve_cache,
-                "record_history_state": _record_history_state,
-                "apply_box_selection": _apply_box_selection,
-            },
-        )
-        consumed = bool(mouse_up_result.get("consumed", consumed))
-        cursor = str(mouse_up_result.get("cursor", cursor))
-        status = str(mouse_up_result.get("status", status))
-        request_checkpoint = bool(mouse_up_result.get("request_checkpoint", request_checkpoint))
-        if bool(mouse_up_result.get("immediate_return", False)):
-            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-
-    elif et == "cancel":
-        cancel_result = input_ui.handle_cancel(STATE, tr)
-        consumed = bool(cancel_result.get("consumed", False))
-        status = str(cancel_result.get("status", ""))
-
-    elif et == "key_down":
-        key_result = input_ui.handle_key_down(
-            event,
-            {
-                "state": STATE,
-                "tr": tr,
-                "event_has_shift": _event_has_shift,
-                "host_controls_anchor_mode": _host_controls_anchor_mode,
-                "record_history_state": _record_history_state,
-                "disconnect_selected_segments": _disconnect_selected_segments,
-                "delete_selected_anchors": _delete_selected_anchors,
-                "ctrl_modifier_mask": CTRL_MODIFIER_MASK,
-                "key_a": KEY_A,
-                "key_delete": KEY_DELETE,
-                "key_backspace": KEY_BACKSPACE,
-                "key_shift": 0x01000020,
-                "key_escape": 0x01000000,
-            },
-        )
-        consumed = bool(key_result.get("consumed", False))
-        status = str(key_result.get("status", ""))
-        request_checkpoint = bool(key_result.get("request_checkpoint", False))
-
-    # In tool mode, left-button canvas operations belong to plugin.
-    if et == "key_up":
-        input_ui.handle_key_up(
-            event,
-            {
-                "state": STATE,
-                "event_has_shift": _event_has_shift,
-                "key_shift": 0x01000020,
-            },
-        )
-
-    notes_selectable = _selection_enabled("notes")
-    consumed = input_ui.apply_note_selection_consume_policy(
-        et,
-        consumed,
-        button,
-        int(event.get("buttons", 0)),
-        notes_selectable,
-        LEFT_BUTTON,
-    )
-
-    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
 
 def _list_tool_actions():

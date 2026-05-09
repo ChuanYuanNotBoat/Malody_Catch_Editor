@@ -987,3 +987,132 @@ def handle_mouse_up_event(cursor, status, request_checkpoint, callbacks):
         "request_checkpoint": request_checkpoint,
         "immediate_return": bool(post_mouse_up.get("should_return", False)),
     }
+
+
+def handle_canvas_input(payload, callbacks):
+    prepared = prepare_canvas_input(
+        payload,
+        {
+            "state": callbacks["state"],
+            "ensure_project_context": callbacks["ensure_project_context"],
+            "seed_missing_segment_denominators": callbacks["seed_missing_segment_denominators"],
+            "sync_anchor_placement_with_host_mode": callbacks["sync_anchor_placement_with_host_mode"],
+            "sync_anchor_selection_from_host_notes": callbacks["sync_anchor_selection_from_host_notes"],
+            "now_ms": callbacks["now_ms"],
+        },
+    )
+    event = prepared["event"]
+    et = prepared["event_type"]
+    x = prepared["x"]
+    y = prepared["y"]
+    button = prepared["button"]
+    ts = prepared["timestamp_ms"]
+
+    consumed = False
+    status = ""
+    cursor = "arrow"
+    request_checkpoint = False
+    response_callbacks = {
+        "build_overlay": callbacks["build_overlay"],
+        "context": callbacks["state"]["last_context"],
+        "checkpoint_prefix": callbacks["checkpoint_prefix"],
+    }
+
+    if callbacks["note_curve_snap_enabled"]() and should_passthrough_for_note_curve_snap(et, event, button, callbacks["left_button"]):
+        return build_canvas_response(False, "arrow", "", False, response_callbacks)
+
+    if et == "mouse_down":
+        mouse_down_result = handle_mouse_down_event(
+            x,
+            y,
+            button,
+            event,
+            ts,
+            cursor,
+            status,
+            request_checkpoint,
+            callbacks,
+        )
+        consumed = bool(mouse_down_result.get("consumed", consumed))
+        cursor = str(mouse_down_result.get("cursor", cursor))
+        status = str(mouse_down_result.get("status", status))
+        request_checkpoint = bool(mouse_down_result.get("request_checkpoint", request_checkpoint))
+        if bool(mouse_down_result.get("immediate_return", False)):
+            return build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
+    elif et == "mouse_move":
+        mouse_move_result = handle_mouse_move_event(
+            x,
+            y,
+            event,
+            cursor,
+            status,
+            request_checkpoint,
+            callbacks,
+        )
+        consumed = bool(mouse_move_result.get("consumed", consumed))
+        cursor = str(mouse_move_result.get("cursor", cursor))
+        status = str(mouse_move_result.get("status", status))
+        request_checkpoint = bool(mouse_move_result.get("request_checkpoint", request_checkpoint))
+        if bool(mouse_move_result.get("immediate_return", False)):
+            return build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
+    elif et == "mouse_up":
+        mouse_up_result = handle_mouse_up_event(
+            cursor,
+            status,
+            request_checkpoint,
+            callbacks,
+        )
+        consumed = bool(mouse_up_result.get("consumed", consumed))
+        cursor = str(mouse_up_result.get("cursor", cursor))
+        status = str(mouse_up_result.get("status", status))
+        request_checkpoint = bool(mouse_up_result.get("request_checkpoint", request_checkpoint))
+        if bool(mouse_up_result.get("immediate_return", False)):
+            return build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
+    elif et == "cancel":
+        cancel_result = handle_cancel(callbacks["state"], callbacks["tr"])
+        consumed = bool(cancel_result.get("consumed", False))
+        status = str(cancel_result.get("status", ""))
+    elif et == "key_down":
+        key_result = handle_key_down(
+            event,
+            {
+                "state": callbacks["state"],
+                "tr": callbacks["tr"],
+                "event_has_shift": callbacks["event_has_shift"],
+                "host_controls_anchor_mode": callbacks["host_controls_anchor_mode"],
+                "record_history_state": callbacks["record_history_state"],
+                "disconnect_selected_segments": callbacks["disconnect_selected_segments"],
+                "delete_selected_anchors": callbacks["delete_selected_anchors"],
+                "ctrl_modifier_mask": callbacks["ctrl_modifier_mask"],
+                "key_a": callbacks["key_a"],
+                "key_delete": callbacks["key_delete"],
+                "key_backspace": callbacks["key_backspace"],
+                "key_shift": callbacks["key_shift"],
+                "key_escape": callbacks["key_escape"],
+            },
+        )
+        consumed = bool(key_result.get("consumed", False))
+        status = str(key_result.get("status", ""))
+        request_checkpoint = bool(key_result.get("request_checkpoint", False))
+
+    if et == "key_up":
+        handle_key_up(
+            event,
+            {
+                "state": callbacks["state"],
+                "event_has_shift": callbacks["event_has_shift"],
+                "key_shift": callbacks["key_shift"],
+            },
+        )
+
+    notes_selectable = callbacks["selection_enabled"]("notes")
+    consumed = apply_note_selection_consume_policy(
+        et,
+        consumed,
+        button,
+        int(event.get("buttons", 0)),
+        notes_selectable,
+        callbacks["left_button"],
+    )
+
+    return build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
