@@ -53,6 +53,14 @@ def should_passthrough_for_note_curve_snap(event_type, event, button, left_butto
     return button == left_button or (buttons & left_button)
 
 
+def apply_note_selection_consume_policy(event_type, consumed, button, pressed_buttons, notes_selectable, left_button):
+    if event_type in ("mouse_down", "mouse_up") and (not consumed) and button == left_button and (not notes_selectable):
+        return True
+    if event_type == "mouse_move" and (not consumed) and int(pressed_buttons) != 0 and (not notes_selectable):
+        return True
+    return consumed
+
+
 def sync_anchor_placement_with_host_mode(context, state):
     if not isinstance(context, dict):
         return

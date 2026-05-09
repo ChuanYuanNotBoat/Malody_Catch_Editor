@@ -2615,10 +2615,14 @@ def _handle_canvas_input(payload):
             STATE["shift_down"] = False
 
     notes_selectable = _selection_enabled("notes")
-    if et in ("mouse_down", "mouse_up") and not consumed and button == LEFT_BUTTON and not notes_selectable:
-        consumed = True
-    if et == "mouse_move" and not consumed and int(event.get("buttons", 0)) != 0 and not notes_selectable:
-        consumed = True
+    consumed = input_ui.apply_note_selection_consume_policy(
+        et,
+        consumed,
+        button,
+        int(event.get("buttons", 0)),
+        notes_selectable,
+        LEFT_BUTTON,
+    )
 
     return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
