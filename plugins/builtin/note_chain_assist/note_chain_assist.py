@@ -35,6 +35,7 @@ from modular.core import i18n as i18n_core
 from modular.actions import tool_actions as ta
 from modular.actions import batch_commit as bc
 from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
+from modular.runtime import protocol_io as proto_io
 
 TRANSLATIONS = {
     "anchor_mode_smooth": {"en": "S", "zh": "平", "ja": "滑"},
@@ -189,17 +190,11 @@ def _clone(v):
 
 
 def _write(msg):
-    line = json.dumps(msg, ensure_ascii=False) + "\n"
-    if hasattr(sys.stdout, "buffer"):
-        sys.stdout.buffer.write(line.encode("utf-8"))
-        sys.stdout.buffer.flush()
-    else:
-        sys.stdout.write(line)
-        sys.stdout.flush()
+    proto_io.write_message(msg, json_module=json, sys_module=sys)
 
 
 def _respond(req_id, result):
-    _write({"type": "response", "id": req_id, "result": result})
+    proto_io.respond(req_id, result, write_fn=_write)
 
 
 def _distance(x1, y1, x2, y2):
