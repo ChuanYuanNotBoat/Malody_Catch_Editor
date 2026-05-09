@@ -38,6 +38,7 @@ from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
 from modular.runtime import protocol_io as proto_io
 from modular.runtime import workspace as ws_runtime
 from modular.ui import overlay as overlay_ui
+from modular.ui import input_handler as input_ui
 
 TRANSLATIONS = {
     "anchor_mode_smooth": {"en": "S", "zh": "平", "ja": "滑"},
@@ -2152,26 +2153,11 @@ def _build_batch_from_curve(context, target_links=None):
 
 
 def _sync_anchor_placement_with_host_mode(context):
-    if not isinstance(context, dict):
-        return
-    host_sel = context.get("host_selection_tool", {})
-    if not isinstance(host_sel, dict):
-        return
-    mode = str(host_sel.get("mode", "")).strip().lower()
-    if mode == "anchor_place":
-        STATE["anchor_placement_enabled"] = True
-    elif mode in ("place_note", "place_rain", "delete", "select"):
-        STATE["anchor_placement_enabled"] = False
+    input_ui.sync_anchor_placement_with_host_mode(context, STATE)
 
 
 def _host_controls_anchor_mode(context):
-    if not isinstance(context, dict):
-        return False
-    host_sel = context.get("host_selection_tool", {})
-    if not isinstance(host_sel, dict):
-        return False
-    mode = str(host_sel.get("mode", "")).strip().lower()
-    return mode in ("anchor_place", "place_note", "place_rain", "delete", "select")
+    return input_ui.host_controls_anchor_mode(context)
 
 
 def _selected_target_links():
@@ -2289,60 +2275,12 @@ def _set_density_for_selected_segments(context, target_den):
 
 
 def _sync_anchor_selection_from_host_notes(context):
-    if not isinstance(context, dict):
-        return
-    if not _selection_enabled("notes") or not _selection_enabled("anchors"):
-        STATE["last_host_selected_note_ids"] = []
-        return
-    if STATE.get("drag", {}).get("mode") or bool(STATE.get("box_select", {}).get("active", False)):
-        return
-
-    raw_ids = context.get("selected_note_ids")
-    selected_ids = [str(v) for v in raw_ids if isinstance(v, str) and v] if isinstance(raw_ids, list) else []
-    if selected_ids == list(STATE.get("last_host_selected_note_ids", [])):
-        return
-    STATE["last_host_selected_note_ids"] = list(selected_ids)
-
-    selected_notes = context.get("selected_notes")
-    if not isinstance(selected_notes, list) or not selected_notes:
-        return
-
-    idx_map = _anchor_index_map()
-    anchors = STATE.get("anchors", [])
-    if not idx_map or not anchors:
-        return
-
-    picked = []
-    used_anchor_ids = set()
-    for raw in selected_notes:
-        if not isinstance(raw, dict):
-            continue
-        try:
-            lane_x = float(raw.get("lane_x", raw.get("x", 0.0)))
-            beat = float(raw.get("beat", 0.0))
-        except Exception:
-            continue
-
-        best_id = -1
-        best_dist = 1e18
-        for aid, idx in idx_map.items():
-            if aid in used_anchor_ids:
-                continue
-            a = anchors[idx]
-            dx = float(a.get("lane_x", 0.0)) - lane_x
-            dy = float(a.get("beat", 0.0)) - beat
-            dist2 = dx * dx + dy * dy
-            if dist2 < best_dist:
-                best_dist = dist2
-                best_id = aid
-        if best_id > 0:
-            used_anchor_ids.add(best_id)
-            picked.append(best_id)
-
-    if not picked:
-        return
-    picked.sort(key=lambda aid: idx_map.get(aid, 1 << 30))
-    STATE["selected_anchor_ids"] = picked
+    callbacks = {
+        "selection_enabled": _selection_enabled,
+        "anchor_index_map": _anchor_index_map,
+        "state": STATE,
+    }
+    input_ui.sync_anchor_selection_from_host_notes(context, callbacks)
 
 
 def _handle_canvas_input(payload):
