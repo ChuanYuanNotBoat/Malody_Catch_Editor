@@ -619,3 +619,18 @@ def handle_mouse_down_segment_hit(seg_hit, ctrl, callbacks):
         "cursor": "pointing_hand",
         "status": tr(state["last_context"], "status_segment_selected"),
     }
+
+
+def maybe_start_box_selection_on_mouse_down(x, y, ctrl, is_select_mode, notes_selectable, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+
+    if not ((ctrl or is_select_mode) and (not notes_selectable)):
+        return None
+
+    state["box_select"] = {"active": True, "start": [x, y], "end": [x, y], "append": bool(ctrl)}
+    return {
+        "consumed": True,
+        "cursor": "arrow",
+        "status": tr(state["last_context"], "status_box_selecting"),
+    }

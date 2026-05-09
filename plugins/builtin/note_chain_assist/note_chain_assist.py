@@ -2411,9 +2411,21 @@ def _handle_canvas_input(payload):
                 cursor = str(segment_result.get("cursor", cursor))
                 status = str(segment_result.get("status", status))
             elif (ctrl or is_select_mode) and not notes_selectable:
-                STATE["box_select"] = {"active": True, "start": [x, y], "end": [x, y], "append": bool(ctrl)}
-                consumed = True
-                status = tr(STATE["last_context"], "status_box_selecting")
+                box_start = input_ui.maybe_start_box_selection_on_mouse_down(
+                    x,
+                    y,
+                    ctrl,
+                    is_select_mode,
+                    notes_selectable,
+                    {
+                        "state": STATE,
+                        "tr": tr,
+                    },
+                )
+                if box_start is not None:
+                    consumed = bool(box_start.get("consumed", consumed))
+                    cursor = str(box_start.get("cursor", cursor))
+                    status = str(box_start.get("status", status))
             else:
                 if notes_selectable and not anchor_placement_enabled:
                     consumed = False
