@@ -1,10 +1,31 @@
 # Note Chain Assist Modularization Prep
 
-Status: prep only, no module code extraction started yet.
+Status: completed on branch `refactor/plugin-note-chain-modularization` (multi-step releasable refactor).
 
 ## Goal
 
 Split `plugins/builtin/note_chain_assist/note_chain_assist.py` into smaller modules without behavior changes, with sidecar V3 behavior (`format_version=3`, CAS conflict check, stable `curve_id`, unique `curve_no`) kept intact.
+
+## Completion Snapshot
+
+1. Extracted modules are now in place and actively wired:
+- `core/state.py`, `core/time_math.py`, `core/curve_model.py`, `core/sidecar_v3.py`, `core/i18n.py`
+- `actions/tool_actions.py`, `actions/batch_commit.py`
+- `ui/overlay.py`, `ui/input_handler.py`
+- `runtime/plugin_loop.py`, `runtime/protocol_io.py`, `runtime/workspace.py`
+
+2. `note_chain_assist.py` has been reduced to orchestration + callback wiring style for runtime/actions/ui/core modules.
+
+3. Sidecar V3 semantics remained preserved during refactor:
+- CAS `revision_conflict`
+- stable `curve_id`
+- unique and self-healing `curve_no`
+- case-insensitive custom group name dedupe
+- auto-symmetric joystick + `compat_handles` compatibility path
+
+4. Delivery method followed the “small releasable steps” rule:
+- each step committed independently
+- each step passed `python -m py_compile` checks
 
 ## Proposed Module Boundaries
 
@@ -102,4 +123,3 @@ Rules:
 
 4. Regression sanity:
 - run minimal plugin smoke checks and existing tests touching plugin bridge.
-
