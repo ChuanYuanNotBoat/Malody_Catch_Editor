@@ -6,7 +6,6 @@ import shutil
 import sys
 import time
 import uuid
-from fractions import Fraction
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -29,6 +28,7 @@ from modular.core.state import (
     STATE,
     STYLE_PRESETS,
 )
+from modular.core import time_math as tm
 
 TRANSLATIONS = {
     "anchor_mode_smooth": {"en": "S", "zh": "平", "ja": "滑"},
@@ -197,7 +197,7 @@ def _respond(req_id, result):
 
 
 def _distance(x1, y1, x2, y2):
-    return math.hypot(x1 - x2, y1 - y2)
+    return tm.distance(x1, y1, x2, y2)
 
 
 def _mods_has_shift(mods):
@@ -220,7 +220,7 @@ def _event_has_shift(event):
 
 
 def _clamp(v, lo, hi):
-    return max(lo, min(hi, v))
+    return tm.clamp(v, lo, hi)
 
 
 def normalize_lang(value, default="en"):
@@ -757,20 +757,7 @@ def _set_single_selected_link(id_a, id_b):
 
 
 def _distance_point_to_segment(px, py, x1, y1, x2, y2):
-    vx = x2 - x1
-    vy = y2 - y1
-    wx = px - x1
-    wy = py - y1
-    c1 = vx * wx + vy * wy
-    if c1 <= 0:
-        return _distance(px, py, x1, y1)
-    c2 = vx * vx + vy * vy
-    if c2 <= 1e-12:
-        return _distance(px, py, x1, y1)
-    t = _clamp(c1 / c2, 0.0, 1.0)
-    qx = x1 + t * vx
-    qy = y1 + t * vy
-    return _distance(px, py, qx, qy)
+    return tm.distance_point_to_segment(px, py, x1, y1, x2, y2)
 
 
 def _find_segment_hit(context, cx, cy, threshold=14.0):
@@ -876,12 +863,11 @@ def _delete_selected_anchors(context):
 
 
 def _rect_normalized(x1, y1, x2, y2):
-    return min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)
+    return tm.rect_normalized(x1, y1, x2, y2)
 
 
 def _point_in_rect(px, py, rect):
-    x0, y0, x1, y1 = rect
-    return x0 <= px <= x1 and y0 <= py <= y1
+    return tm.point_in_rect(px, py, rect)
 
 
 def _apply_box_selection(context):
@@ -1014,81 +1000,27 @@ def _sanitize_denominators(values, context):
 
 
 def _float_to_triplet(beat, den):
-    den = max(1, int(den))
-    ticks = int(round(float(beat) * den))
-    beat_num = ticks // den
-    num = ticks % den
-    if num < 0:
-        num += den
-        beat_num -= 1
-    return [int(beat_num), int(num), int(den)]
+    return tm.float_to_triplet(beat, den)
 
 
 def _triplet_to_float(tri):
-    if not isinstance(tri, list) or len(tri) != 3:
-        return None
-    try:
-        b = int(tri[0])
-        n = int(tri[1])
-        d = int(tri[2])
-    except Exception:
-        return None
-    if d <= 0:
-        return None
-    return float(b) + float(n) / float(d)
+    return tm.triplet_to_float(tri)
 
 
 def _context_dims(context):
-    cw = float(context.get("canvas_width", 1200.0))
-    ch = max(1.0, float(context.get("canvas_height", 800.0)))
-    l = float(context.get("left_margin", 0.0))
-    r = float(context.get("right_margin", 0.0))
-    lane_w = max(1.0, float(context.get("lane_width", 512.0)))
-    available = max(1.0, cw - l - r)
-    return cw, ch, l, r, lane_w, available
+    return tm.context_dims(context)
 
 
 def _canvas_to_chart(context, x, y):
-    _, ch, l, _, lane_w, available = _context_dims(context)
-    nx = _clamp((float(x) - l) / available, 0.0, 1.0)
-    lane_x = nx * lane_w
-
-    scroll = float(context.get("scroll_beat", 0.0))
-    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
-    vertical_flip = bool(context.get("vertical_flip", False))
-    if vertical_flip:
-        beat = scroll + ((ch - float(y)) / ch) * vr
-    else:
-        beat = scroll + (float(y) / ch) * vr
-    return lane_x, beat
+    return tm.canvas_to_chart(context, x, y)
 
 
 def _chart_to_canvas(context, lane_x, beat):
-    _, ch, l, _, lane_w, available = _context_dims(context)
-    lane_x = _clamp(float(lane_x), 0.0, lane_w)
-    x = l + (lane_x / lane_w) * available
-
-    scroll = float(context.get("scroll_beat", 0.0))
-    vr = max(1e-6, float(context.get("visible_beat_range", 8.0)))
-    vertical_flip = bool(context.get("vertical_flip", False))
-    t = (float(beat) - scroll) / vr
-    y = ch - t * ch if vertical_flip else t * ch
-    return x, y
+    return tm.chart_to_canvas(context, lane_x, beat)
 
 
 def _snap_chart_point(context, lane_x, beat, snap_beat=True, snap_lane=True):
-    lane_w = max(1.0, float(context.get("lane_width", 512.0)))
-    grid_snap = bool(context.get("grid_snap", False))
-    grid_div = max(1, int(context.get("grid_division", 8)))
-    time_div = max(1, int(context.get("time_division", 1)))
-
-    lane_x = _clamp(float(lane_x), 0.0, lane_w)
-    if snap_lane and grid_snap and grid_div > 0:
-        lane_x = round((lane_x / lane_w) * grid_div) * (lane_w / float(grid_div))
-
-    if snap_beat:
-        beat = round(float(beat) * time_div) / float(time_div)
-    return lane_x, beat
+    return tm.snap_chart_point(context, lane_x, beat, snap_beat=snap_beat, snap_lane=snap_lane)
 
 
 def _first_style_path(context):
@@ -1194,14 +1126,7 @@ def _find_handle_hit(context, cx, cy, threshold=14.0):
 
 
 def _cubic_point(a, b, c, d, t):
-    u = 1.0 - t
-    tt = t * t
-    uu = u * u
-    uuu = uu * u
-    ttt = tt * t
-    x = uuu * a[0] + 3 * uu * t * b[0] + 3 * u * tt * c[0] + ttt * d[0]
-    y = uuu * a[1] + 3 * uu * t * b[1] + 3 * u * tt * c[1] + ttt * d[1]
-    return x, y
+    return tm.cubic_point(a, b, c, d, t)
 
 
 def _note_curve_snap_enabled():
@@ -2427,17 +2352,7 @@ def _chart_to_note(context, lane_x, beat, den):
 
 
 def _beat_fraction_from_triplet(triplet):
-    if not isinstance(triplet, list) or len(triplet) != 3:
-        return None
-    try:
-        beat_num = int(triplet[0])
-        numerator = int(triplet[1])
-        denominator = int(triplet[2])
-    except Exception:
-        return None
-    if denominator <= 0:
-        return None
-    return Fraction(beat_num, 1) + Fraction(numerator, denominator)
+    return tm.beat_fraction_from_triplet(triplet)
 
 
 def _normal_note_position_key(note_obj):
