@@ -2317,24 +2317,45 @@ def _handle_canvas_input(payload):
         return input_ui.build_canvas_response(False, "arrow", "", False, response_callbacks)
 
     if et == "mouse_down":
-        hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
-        aidx = _find_anchor_hit(STATE["last_context"], x, y) if _selection_enabled("anchors") else -1
-        seg_hit = _find_segment_hit(STATE["last_context"], x, y) if _selection_enabled("segments") else None
-        mods = int(event.get("modifiers", 0))
-        ctrl = (mods & CTRL_MODIFIER_MASK) != 0
-        shift = _event_has_shift(event) or bool(STATE.get("shift_down", False))
-        host_sel = STATE["last_context"].get("host_selection_tool", {}) if isinstance(STATE["last_context"], dict) else {}
-        is_select_mode = bool(host_sel.get("is_select_mode", False)) if isinstance(host_sel, dict) else False
+        mouse_down_ctx = input_ui.analyze_mouse_down_context(
+            x,
+            y,
+            event,
+            {
+                "state": STATE,
+                "find_handle_hit": _find_handle_hit,
+                "find_anchor_hit": _find_anchor_hit,
+                "find_segment_hit": _find_segment_hit,
+                "selection_enabled": _selection_enabled,
+                "event_has_shift": _event_has_shift,
+                "ctrl_modifier_mask": CTRL_MODIFIER_MASK,
+            },
+        )
+        hkind = mouse_down_ctx["hkind"]
+        hidx = mouse_down_ctx["hidx"]
+        aidx = mouse_down_ctx["aidx"]
+        seg_hit = mouse_down_ctx["seg_hit"]
+        ctrl = bool(mouse_down_ctx["ctrl"])
+        shift = bool(mouse_down_ctx["shift"])
+        is_select_mode = bool(mouse_down_ctx["is_select_mode"])
 
         if button == RIGHT_BUTTON:
-            _set_context_menu_links_for_hit(STATE["last_context"], x, y)
-            consumed = False
+            consumed = bool(
+                input_ui.handle_mouse_down_right_button(
+                    x,
+                    y,
+                    {
+                        "state": STATE,
+                        "set_context_menu_links_for_hit": _set_context_menu_links_for_hit,
+                    },
+                ).get("consumed", False)
+            )
         elif button == LEFT_BUTTON:
-            notes_selectable = _selection_enabled("notes")
-            anchor_placement_enabled = bool(STATE.get("anchor_placement_enabled", False))
-            host_select_passthrough = bool(is_select_mode and notes_selectable)
-            blank_hit = hidx < 0 and aidx < 0 and seg_hit is None
-            had_selection = bool(STATE.get("selected_anchor_ids")) or bool(STATE.get("selected_links"))
+            notes_selectable = bool(mouse_down_ctx["notes_selectable"])
+            anchor_placement_enabled = bool(mouse_down_ctx["anchor_placement_enabled"])
+            host_select_passthrough = bool(mouse_down_ctx["host_select_passthrough"])
+            blank_hit = bool(mouse_down_ctx["blank_hit"])
+            had_selection = bool(mouse_down_ctx["had_selection"])
             if blank_hit and had_selection:
                 STATE["selected_anchor_ids"] = []
                 STATE["selected_links"] = []

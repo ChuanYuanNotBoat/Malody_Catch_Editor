@@ -439,3 +439,49 @@ def resolve_hover_cursor_on_mouse_move(x, y, callbacks):
     if find_anchor_hit(state["last_context"], x, y) >= 0:
         return "pointing_hand"
     return None
+
+
+def analyze_mouse_down_context(x, y, event, callbacks):
+    state = callbacks["state"]
+    find_handle_hit = callbacks["find_handle_hit"]
+    find_anchor_hit = callbacks["find_anchor_hit"]
+    find_segment_hit = callbacks["find_segment_hit"]
+    selection_enabled = callbacks["selection_enabled"]
+    event_has_shift = callbacks["event_has_shift"]
+    ctrl_modifier_mask = callbacks["ctrl_modifier_mask"]
+
+    hkind, hidx = find_handle_hit(state["last_context"], x, y)
+    aidx = find_anchor_hit(state["last_context"], x, y) if selection_enabled("anchors") else -1
+    seg_hit = find_segment_hit(state["last_context"], x, y) if selection_enabled("segments") else None
+    mods = int(event.get("modifiers", 0))
+    ctrl = (mods & ctrl_modifier_mask) != 0
+    shift = event_has_shift(event) or bool(state.get("shift_down", False))
+    host_sel = state["last_context"].get("host_selection_tool", {}) if isinstance(state["last_context"], dict) else {}
+    is_select_mode = bool(host_sel.get("is_select_mode", False)) if isinstance(host_sel, dict) else False
+    notes_selectable = selection_enabled("notes")
+    anchor_placement_enabled = bool(state.get("anchor_placement_enabled", False))
+    host_select_passthrough = bool(is_select_mode and notes_selectable)
+    blank_hit = hidx < 0 and aidx < 0 and seg_hit is None
+    had_selection = bool(state.get("selected_anchor_ids")) or bool(state.get("selected_links"))
+
+    return {
+        "hkind": hkind,
+        "hidx": hidx,
+        "aidx": aidx,
+        "seg_hit": seg_hit,
+        "ctrl": ctrl,
+        "shift": shift,
+        "is_select_mode": is_select_mode,
+        "notes_selectable": notes_selectable,
+        "anchor_placement_enabled": anchor_placement_enabled,
+        "host_select_passthrough": host_select_passthrough,
+        "blank_hit": blank_hit,
+        "had_selection": had_selection,
+    }
+
+
+def handle_mouse_down_right_button(x, y, callbacks):
+    state = callbacks["state"]
+    set_context_menu_links_for_hit = callbacks["set_context_menu_links_for_hit"]
+    set_context_menu_links_for_hit(state["last_context"], x, y)
+    return {"consumed": False}
