@@ -2392,39 +2392,26 @@ def _handle_canvas_input(payload):
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
     elif et == "mouse_up":
-        link_drag_result = input_ui.resolve_link_drag_mouse_up(
+        mouse_up_result = input_ui.handle_mouse_up_event(
+            cursor,
+            status,
+            request_checkpoint,
             {
                 "state": STATE,
+                "tr": tr,
                 "add_link": _add_link,
                 "anchor_index_map": _anchor_index_map,
                 "cleanup_links_and_selection": _cleanup_links_and_selection,
                 "invalidate_curve_cache": _invalidate_curve_cache,
                 "record_history_state": _record_history_state,
-                "tr": tr,
-            }
-        )
-        if link_drag_result is not None:
-            consumed = bool(link_drag_result.get("consumed", False))
-            status = str(link_drag_result.get("status", ""))
-            request_checkpoint = bool(link_drag_result.get("request_checkpoint", False))
-            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-
-        post_mouse_up = input_ui.resolve_mouse_up_after_link_drag(
-            {
-                "state": STATE,
                 "apply_box_selection": _apply_box_selection,
-                "tr": tr,
-                "record_history_state": _record_history_state,
-            }
+            },
         )
-        if bool(post_mouse_up.get("consumed", False)):
-            consumed = True
-        post_status = str(post_mouse_up.get("status", ""))
-        if post_status:
-            status = post_status
-        if bool(post_mouse_up.get("request_checkpoint", False)):
-            request_checkpoint = True
-        if bool(post_mouse_up.get("should_return", False)):
+        consumed = bool(mouse_up_result.get("consumed", consumed))
+        cursor = str(mouse_up_result.get("cursor", cursor))
+        status = str(mouse_up_result.get("status", status))
+        request_checkpoint = bool(mouse_up_result.get("request_checkpoint", request_checkpoint))
+        if bool(mouse_up_result.get("immediate_return", False)):
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
     elif et == "cancel":

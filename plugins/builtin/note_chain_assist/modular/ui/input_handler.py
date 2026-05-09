@@ -941,3 +941,49 @@ def handle_mouse_move_event(x, y, event, cursor, status, request_checkpoint, cal
         "request_checkpoint": request_checkpoint,
         "immediate_return": False,
     }
+
+
+def handle_mouse_up_event(cursor, status, request_checkpoint, callbacks):
+    state = callbacks["state"]
+
+    link_drag_result = resolve_link_drag_mouse_up(
+        {
+            "state": state,
+            "add_link": callbacks["add_link"],
+            "anchor_index_map": callbacks["anchor_index_map"],
+            "cleanup_links_and_selection": callbacks["cleanup_links_and_selection"],
+            "invalidate_curve_cache": callbacks["invalidate_curve_cache"],
+            "record_history_state": callbacks["record_history_state"],
+            "tr": callbacks["tr"],
+        }
+    )
+    if link_drag_result is not None:
+        return {
+            "consumed": bool(link_drag_result.get("consumed", False)),
+            "cursor": cursor,
+            "status": str(link_drag_result.get("status", status)),
+            "request_checkpoint": bool(link_drag_result.get("request_checkpoint", request_checkpoint)),
+            "immediate_return": True,
+        }
+
+    post_mouse_up = resolve_mouse_up_after_link_drag(
+        {
+            "state": state,
+            "apply_box_selection": callbacks["apply_box_selection"],
+            "tr": callbacks["tr"],
+            "record_history_state": callbacks["record_history_state"],
+        }
+    )
+    consumed = bool(post_mouse_up.get("consumed", False))
+    post_status = str(post_mouse_up.get("status", ""))
+    if post_status:
+        status = post_status
+    if bool(post_mouse_up.get("request_checkpoint", False)):
+        request_checkpoint = True
+    return {
+        "consumed": consumed,
+        "cursor": cursor,
+        "status": status,
+        "request_checkpoint": request_checkpoint,
+        "immediate_return": bool(post_mouse_up.get("should_return", False)),
+    }
