@@ -775,6 +775,33 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
         const QString pluginId = resolvePluginCanvasToolId();
         const bool routeDensityToSelectedSegments =
             (pluginId.trimmed().compare(QStringLiteral("builtin.note_chain_assist"), Qt::CaseInsensitive) == 0);
+        QHash<QString, bool> segmentDensityCheckedMap;
+        bool segmentDensityMixed = false;
+        if (routeDensityToSelectedSegments)
+        {
+            if (PluginManager *pm = activePluginManager())
+            {
+                if (!pluginId.trimmed().isEmpty())
+                {
+                    const QList<PluginManager::ToolActionEntry> entries = pm->toolActions();
+                    for (const PluginManager::ToolActionEntry &entry : entries)
+                    {
+                        if (entry.pluginId.trimmed() != pluginId)
+                            continue;
+                        const QString actionId = entry.action.actionId.trimmed();
+                        if (actionId == QStringLiteral("set_segment_density_follow") ||
+                            actionId.startsWith(QStringLiteral("set_segment_density_")))
+                        {
+                            segmentDensityCheckedMap.insert(actionId, entry.action.checked);
+                        }
+                        else if (actionId == QStringLiteral("segment_density_mixed_info") && entry.action.checked)
+                        {
+                            segmentDensityMixed = true;
+                        }
+                    }
+                }
+            }
+        }
 
         QMenu pluginMenu(this);
         QAction *commitCurveAction = pluginMenu.addAction(tr("Commit Curve -> Notes"));
@@ -809,9 +836,11 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
             QAction *act = densityMenu->addAction(tr(opt.label));
             if (routeDensityToSelectedSegments)
             {
+                act->setCheckable(true);
                 const QString actionId = (opt.denominator <= 0)
                                              ? QStringLiteral("set_segment_density_follow")
                                              : QStringLiteral("set_segment_density_%1").arg(opt.denominator);
+                act->setChecked(segmentDensityCheckedMap.value(actionId, false));
                 const QString actionTitle = (opt.denominator <= 0)
                                                 ? tr("Set Segment Density: Follow Editor")
                                                 : tr("Set Segment Density: 1/%1").arg(opt.denominator);
@@ -834,6 +863,14 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
                 });
             }
         }
+        if (routeDensityToSelectedSegments && segmentDensityMixed)
+        {
+            densityMenu->addSeparator();
+            QAction *mixedAct = densityMenu->addAction(tr("Mixed"));
+            mixedAct->setEnabled(false);
+            mixedAct->setCheckable(true);
+            mixedAct->setChecked(true);
+        }
 
         QAction *contextSeparator = nullptr;
         QHash<QAction *, QPair<QString, QString>> pluginContextActions;
@@ -846,6 +883,16 @@ void ChartCanvas::showRightClickMenu(QMouseEvent *event)
                 {
                     if (entry.pluginId.trimmed() != pluginId)
                         continue;
+                    if (routeDensityToSelectedSegments)
+                    {
+                        const QString actionId = entry.action.actionId.trimmed();
+                        if (actionId == QStringLiteral("set_segment_density_follow") ||
+                            actionId.startsWith(QStringLiteral("set_segment_density_")) ||
+                            actionId == QStringLiteral("segment_density_mixed_info"))
+                        {
+                            continue;
+                        }
+                    }
                     const QString placement = entry.action.placement.trimmed().toLower();
                     if (placement != QString(PluginInterface::kPlacementPluginContextMenu))
                         continue;
