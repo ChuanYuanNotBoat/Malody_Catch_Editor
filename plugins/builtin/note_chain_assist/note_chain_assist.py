@@ -31,6 +31,7 @@ from modular.core.state import (
 from modular.core import time_math as tm
 from modular.core import curve_model as cm
 from modular.core import sidecar_v3 as scv3
+from modular.core import i18n as i18n_core
 from modular.actions import tool_actions as ta
 from modular.actions import batch_commit as bc
 from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
@@ -229,49 +230,28 @@ def _clamp(v, lo, hi):
 
 
 def normalize_lang(value, default="en"):
-    if not isinstance(value, str) or not value.strip():
-        return default
-    lower = value.strip().lower()
-    if lower.startswith("zh"):
-        return "zh"
-    if lower.startswith("ja"):
-        return "ja"
-    if lower.startswith("en"):
-        return "en"
-    return default
+    return i18n_core.normalize_lang(value, default)
 
 
 def detect_lang(default="en", context=None):
-    if isinstance(context, dict):
-        locale_value = context.get("locale")
-        language_value = context.get("language")
-        if isinstance(locale_value, str) and locale_value.strip():
-            return normalize_lang(locale_value, default)
-        if isinstance(language_value, str) and language_value.strip():
-            return normalize_lang(language_value, default)
-
-    state_lang = str(STATE.get("lang", "") or "").strip()
-    if state_lang:
-        return normalize_lang(state_lang, default)
-
-    locale_env = os.environ.get("MALODY_LOCALE", "")
-    language_env = os.environ.get("MALODY_LANGUAGE", "")
-    if locale_env:
-        return normalize_lang(locale_env, default)
-    if language_env:
-        return normalize_lang(language_env, default)
-
-    sys_locale = locale.getlocale()[0]
-    if sys_locale:
-        return normalize_lang(sys_locale, default)
-    return default
+    return i18n_core.detect_lang(
+        default=default,
+        context=context,
+        state=STATE,
+        os_module=os,
+        locale_module=locale,
+        normalize_lang_fn=normalize_lang,
+    )
 
 
 def tr(context, key, **kwargs):
-    lang = detect_lang(context=context)
-    table = TRANSLATIONS.get(key, {})
-    text = table.get(lang, table.get("en", key))
-    return text.format(**kwargs)
+    return i18n_core.tr(
+        context,
+        key,
+        translations=TRANSLATIONS,
+        detect_lang_fn=detect_lang,
+        **kwargs,
+    )
 
 
 def _configure_stdio_utf8():
