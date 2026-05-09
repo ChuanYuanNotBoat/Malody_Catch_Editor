@@ -36,6 +36,7 @@ from modular.actions import tool_actions as ta
 from modular.actions import batch_commit as bc
 from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
 from modular.runtime import protocol_io as proto_io
+from modular.runtime import workspace as ws_runtime
 
 TRANSLATIONS = {
     "anchor_mode_smooth": {"en": "S", "zh": "平", "ja": "滑"},
@@ -3095,13 +3096,7 @@ def _run_tool_action(payload):
 
 
 def _workspace_config(_payload):
-    return {
-        "workspace_id": "note_chain_workspace",
-        "docking_supported": True,
-        "tab_merge_supported": True,
-        "default_layout": "advanced",
-        "window_group": "note_chain",
-    }
+    return ws_runtime.workspace_config(_payload)
 
 
 def _build_batch_edit(payload):
