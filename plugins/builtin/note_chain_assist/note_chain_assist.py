@@ -30,6 +30,7 @@ from modular.core.state import (
 )
 from modular.core import time_math as tm
 from modular.core import curve_model as cm
+from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
 
 TRANSLATIONS = {
     "anchor_mode_smooth": {"en": "S", "zh": "平", "ja": "滑"},
@@ -3334,69 +3335,21 @@ def run_one_shot(action_id):
 
 
 def run_plugin_loop():
-    for raw in sys.stdin:
-        raw = raw.strip()
-        if not raw:
-            continue
-        try:
-            msg = json.loads(raw)
-        except Exception:
-            continue
-
-        mtype = msg.get("type")
-        if mtype == "notify":
-            event = msg.get("event")
-            payload = msg.get("payload", {}) or {}
-            if event == "initialize":
-                locale_name = str(payload.get("locale", "") or "")
-                language_name = str(payload.get("language", "") or "")
-                if locale_name.strip():
-                    STATE["lang"] = normalize_lang(locale_name, STATE.get("lang", "en"))
-                elif language_name.strip():
-                    STATE["lang"] = normalize_lang(language_name, STATE.get("lang", "en"))
-            elif event == "onHostDiscardChanges":
-                STATE["suppress_persist_once"] = True
-                STATE["project_dirty"] = False
-            elif event == "onChartSaved":
-                STATE["suppress_persist_once"] = False
-                if STATE["project_path"] and STATE["project_dirty"]:
-                    _save_project(STATE["project_path"], STATE.get("last_context", {}))
-            elif event == "shutdown":
-                if (not bool(STATE.get("suppress_persist_once", False)) and
-                        STATE["project_path"] and STATE["project_dirty"]):
-                    _save_project(STATE["project_path"], STATE.get("last_context", {}))
-                break
-            elif event == "onHostUndo":
-                action_text = str(payload.get("action_text", "") or "")
-                if _is_curve_checkpoint_action(action_text):
-                    _undo_history_from_host(STATE.get("last_context", {}))
-            elif event == "onHostRedo":
-                action_text = str(payload.get("action_text", "") or "")
-                if _is_curve_checkpoint_action(action_text):
-                    _redo_history_from_host(STATE.get("last_context", {}))
-            continue
-
-        if mtype != "request":
-            continue
-
-        req_id = msg.get("id", str(int(time.time() * 1000)))
-        method = msg.get("method", "")
-        payload = msg.get("payload", {}) or {}
-
-        if method == "listToolActions":
-            _respond(req_id, _list_tool_actions())
-        elif method == "runToolAction":
-            _respond(req_id, bool(_run_tool_action(payload)))
-        elif method == "listCanvasOverlays":
-            _respond(req_id, _build_overlay(payload if isinstance(payload, dict) else {}))
-        elif method == "handleCanvasInput":
-            _respond(req_id, _handle_canvas_input(payload))
-        elif method == "getPanelWorkspaceConfig":
-            _respond(req_id, _workspace_config(payload))
-        elif method == "buildBatchEdit":
-            _respond(req_id, _build_batch_edit(payload))
-        else:
-            _respond(req_id, False)
+    run_protocol_loop({
+        "state": STATE,
+        "normalize_lang": normalize_lang,
+        "is_curve_checkpoint_action": _is_curve_checkpoint_action,
+        "undo_history_from_host": _undo_history_from_host,
+        "redo_history_from_host": _redo_history_from_host,
+        "list_tool_actions": _list_tool_actions,
+        "run_tool_action": _run_tool_action,
+        "build_overlay": _build_overlay,
+        "handle_canvas_input": _handle_canvas_input,
+        "workspace_config": _workspace_config,
+        "build_batch_edit": _build_batch_edit,
+        "respond": _respond,
+        "save_project": _save_project,
+    })
 
 
 def main():
