@@ -691,3 +691,150 @@ def handle_mouse_down_empty_area(x, y, notes_selectable, anchor_placement_enable
         "cursor": "size_all",
         "status": tr(state["last_context"], "anchor_added", index=new_idx),
     }
+
+
+def handle_mouse_down_event(x, y, button, event, ts, cursor, status, request_checkpoint, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+    right_button = callbacks["right_button"]
+    left_button = callbacks["left_button"]
+    ctrl_modifier_mask = callbacks["ctrl_modifier_mask"]
+
+    mouse_down_ctx = analyze_mouse_down_context(
+        x,
+        y,
+        event,
+        {
+            "state": state,
+            "find_handle_hit": callbacks["find_handle_hit"],
+            "find_anchor_hit": callbacks["find_anchor_hit"],
+            "find_segment_hit": callbacks["find_segment_hit"],
+            "selection_enabled": callbacks["selection_enabled"],
+            "event_has_shift": callbacks["event_has_shift"],
+            "ctrl_modifier_mask": ctrl_modifier_mask,
+        },
+    )
+    hkind = mouse_down_ctx["hkind"]
+    hidx = mouse_down_ctx["hidx"]
+    aidx = mouse_down_ctx["aidx"]
+    seg_hit = mouse_down_ctx["seg_hit"]
+    ctrl = bool(mouse_down_ctx["ctrl"])
+    shift = bool(mouse_down_ctx["shift"])
+    is_select_mode = bool(mouse_down_ctx["is_select_mode"])
+
+    consumed = False
+    immediate_return = False
+    if button == right_button:
+        consumed = bool(
+            handle_mouse_down_right_button(
+                x,
+                y,
+                {
+                    "state": state,
+                    "set_context_menu_links_for_hit": callbacks["set_context_menu_links_for_hit"],
+                },
+            ).get("consumed", False)
+        )
+    elif button == left_button:
+        notes_selectable = bool(mouse_down_ctx["notes_selectable"])
+        anchor_placement_enabled = bool(mouse_down_ctx["anchor_placement_enabled"])
+        host_select_passthrough = bool(mouse_down_ctx["host_select_passthrough"])
+        blank_hit = bool(mouse_down_ctx["blank_hit"])
+        had_selection = bool(mouse_down_ctx["had_selection"])
+        left_pre = handle_mouse_down_left_prebranches(
+            hkind,
+            hidx,
+            {
+                "state": state,
+                "tr": tr,
+                "host_select_passthrough": host_select_passthrough,
+                "blank_hit": blank_hit,
+                "had_selection": had_selection,
+            },
+        )
+        if bool(left_pre.get("handled", False)):
+            consumed = bool(left_pre.get("consumed", False))
+            cursor = str(left_pre.get("cursor", cursor))
+            status = str(left_pre.get("status", status))
+        elif aidx >= 0:
+            anchor_result = handle_mouse_down_anchor_hit(
+                aidx,
+                x,
+                y,
+                ts,
+                ctrl,
+                shift,
+                {
+                    "state": state,
+                    "tr": tr,
+                    "toggle_selected_anchor": callbacks["toggle_selected_anchor"],
+                    "add_selected_anchor": callbacks["add_selected_anchor"],
+                    "invalidate_curve_cache": callbacks["invalidate_curve_cache"],
+                    "record_history_state": callbacks["record_history_state"],
+                },
+            )
+            consumed = bool(anchor_result.get("consumed", consumed))
+            cursor = str(anchor_result.get("cursor", cursor))
+            status = str(anchor_result.get("status", status))
+            if bool(anchor_result.get("request_checkpoint", False)):
+                request_checkpoint = True
+            if bool(anchor_result.get("immediate_return", False)):
+                immediate_return = True
+        elif seg_hit is not None:
+            segment_result = handle_mouse_down_segment_hit(
+                seg_hit,
+                ctrl,
+                {
+                    "state": state,
+                    "tr": tr,
+                    "toggle_selected_link": callbacks["toggle_selected_link"],
+                    "set_single_selected_link": callbacks["set_single_selected_link"],
+                    "selection_enabled": callbacks["selection_enabled"],
+                },
+            )
+            consumed = bool(segment_result.get("consumed", consumed))
+            cursor = str(segment_result.get("cursor", cursor))
+            status = str(segment_result.get("status", status))
+        elif (ctrl or is_select_mode) and not notes_selectable:
+            box_start = maybe_start_box_selection_on_mouse_down(
+                x,
+                y,
+                ctrl,
+                is_select_mode,
+                notes_selectable,
+                {
+                    "state": state,
+                    "tr": tr,
+                },
+            )
+            if box_start is not None:
+                consumed = bool(box_start.get("consumed", consumed))
+                cursor = str(box_start.get("cursor", cursor))
+                status = str(box_start.get("status", status))
+        else:
+            empty_area = handle_mouse_down_empty_area(
+                x,
+                y,
+                notes_selectable,
+                anchor_placement_enabled,
+                {
+                    "state": state,
+                    "tr": tr,
+                    "append_anchor": callbacks["append_anchor"],
+                    "add_link": callbacks["add_link"],
+                    "set_single_selected_anchor": callbacks["set_single_selected_anchor"],
+                    "cleanup_links_and_selection": callbacks["cleanup_links_and_selection"],
+                    "mark_dirty": callbacks["mark_dirty"],
+                },
+            )
+            consumed = bool(empty_area.get("consumed", consumed))
+            cursor = str(empty_area.get("cursor", cursor))
+            status = str(empty_area.get("status", status))
+
+    return {
+        "consumed": consumed,
+        "cursor": cursor,
+        "status": status,
+        "request_checkpoint": request_checkpoint,
+        "immediate_return": immediate_return,
+    }

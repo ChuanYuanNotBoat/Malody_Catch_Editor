@@ -2317,134 +2317,46 @@ def _handle_canvas_input(payload):
         return input_ui.build_canvas_response(False, "arrow", "", False, response_callbacks)
 
     if et == "mouse_down":
-        mouse_down_ctx = input_ui.analyze_mouse_down_context(
+        mouse_down_result = input_ui.handle_mouse_down_event(
             x,
             y,
+            button,
             event,
+            ts,
+            cursor,
+            status,
+            request_checkpoint,
             {
                 "state": STATE,
+                "tr": tr,
+                "right_button": RIGHT_BUTTON,
+                "left_button": LEFT_BUTTON,
+                "ctrl_modifier_mask": CTRL_MODIFIER_MASK,
                 "find_handle_hit": _find_handle_hit,
                 "find_anchor_hit": _find_anchor_hit,
                 "find_segment_hit": _find_segment_hit,
                 "selection_enabled": _selection_enabled,
                 "event_has_shift": _event_has_shift,
-                "ctrl_modifier_mask": CTRL_MODIFIER_MASK,
+                "set_context_menu_links_for_hit": _set_context_menu_links_for_hit,
+                "toggle_selected_anchor": _toggle_selected_anchor,
+                "add_selected_anchor": _add_selected_anchor,
+                "invalidate_curve_cache": _invalidate_curve_cache,
+                "record_history_state": _record_history_state,
+                "toggle_selected_link": _toggle_selected_link,
+                "set_single_selected_link": _set_single_selected_link,
+                "append_anchor": _append_anchor,
+                "add_link": _add_link,
+                "set_single_selected_anchor": _set_single_selected_anchor,
+                "cleanup_links_and_selection": _cleanup_links_and_selection,
+                "mark_dirty": _mark_dirty,
             },
         )
-        hkind = mouse_down_ctx["hkind"]
-        hidx = mouse_down_ctx["hidx"]
-        aidx = mouse_down_ctx["aidx"]
-        seg_hit = mouse_down_ctx["seg_hit"]
-        ctrl = bool(mouse_down_ctx["ctrl"])
-        shift = bool(mouse_down_ctx["shift"])
-        is_select_mode = bool(mouse_down_ctx["is_select_mode"])
-
-        if button == RIGHT_BUTTON:
-            consumed = bool(
-                input_ui.handle_mouse_down_right_button(
-                    x,
-                    y,
-                    {
-                        "state": STATE,
-                        "set_context_menu_links_for_hit": _set_context_menu_links_for_hit,
-                    },
-                ).get("consumed", False)
-            )
-        elif button == LEFT_BUTTON:
-            notes_selectable = bool(mouse_down_ctx["notes_selectable"])
-            anchor_placement_enabled = bool(mouse_down_ctx["anchor_placement_enabled"])
-            host_select_passthrough = bool(mouse_down_ctx["host_select_passthrough"])
-            blank_hit = bool(mouse_down_ctx["blank_hit"])
-            had_selection = bool(mouse_down_ctx["had_selection"])
-            left_pre = input_ui.handle_mouse_down_left_prebranches(
-                hkind,
-                hidx,
-                {
-                    "state": STATE,
-                    "tr": tr,
-                    "host_select_passthrough": host_select_passthrough,
-                    "blank_hit": blank_hit,
-                    "had_selection": had_selection,
-                },
-            )
-            if bool(left_pre.get("handled", False)):
-                consumed = bool(left_pre.get("consumed", False))
-                cursor = str(left_pre.get("cursor", cursor))
-                status = str(left_pre.get("status", status))
-            elif aidx >= 0:
-                anchor_result = input_ui.handle_mouse_down_anchor_hit(
-                    aidx,
-                    x,
-                    y,
-                    ts,
-                    ctrl,
-                    shift,
-                    {
-                        "state": STATE,
-                        "tr": tr,
-                        "toggle_selected_anchor": _toggle_selected_anchor,
-                        "add_selected_anchor": _add_selected_anchor,
-                        "invalidate_curve_cache": _invalidate_curve_cache,
-                        "record_history_state": _record_history_state,
-                    },
-                )
-                consumed = bool(anchor_result.get("consumed", consumed))
-                cursor = str(anchor_result.get("cursor", cursor))
-                status = str(anchor_result.get("status", status))
-                if bool(anchor_result.get("request_checkpoint", False)):
-                    request_checkpoint = True
-                if bool(anchor_result.get("immediate_return", False)):
-                    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
-            elif seg_hit is not None:
-                segment_result = input_ui.handle_mouse_down_segment_hit(
-                    seg_hit,
-                    ctrl,
-                    {
-                        "state": STATE,
-                        "tr": tr,
-                        "toggle_selected_link": _toggle_selected_link,
-                        "set_single_selected_link": _set_single_selected_link,
-                        "selection_enabled": _selection_enabled,
-                    },
-                )
-                consumed = bool(segment_result.get("consumed", consumed))
-                cursor = str(segment_result.get("cursor", cursor))
-                status = str(segment_result.get("status", status))
-            elif (ctrl or is_select_mode) and not notes_selectable:
-                box_start = input_ui.maybe_start_box_selection_on_mouse_down(
-                    x,
-                    y,
-                    ctrl,
-                    is_select_mode,
-                    notes_selectable,
-                    {
-                        "state": STATE,
-                        "tr": tr,
-                    },
-                )
-                if box_start is not None:
-                    consumed = bool(box_start.get("consumed", consumed))
-                    cursor = str(box_start.get("cursor", cursor))
-                    status = str(box_start.get("status", status))
-            else:
-                empty_area = input_ui.handle_mouse_down_empty_area(
-                    x,
-                    y,
-                    notes_selectable,
-                    anchor_placement_enabled,
-                    {
-                        "state": STATE,
-                        "tr": tr,
-                        "append_anchor": _append_anchor,
-                        "add_link": _add_link,
-                        "set_single_selected_anchor": _set_single_selected_anchor,
-                        "cleanup_links_and_selection": _cleanup_links_and_selection,
-                        "mark_dirty": _mark_dirty,
-                    },
-                )
-                consumed = bool(empty_area.get("consumed", consumed))
-                cursor = str(empty_area.get("cursor", cursor))
-                status = str(empty_area.get("status", status))
+        consumed = bool(mouse_down_result.get("consumed", consumed))
+        cursor = str(mouse_down_result.get("cursor", cursor))
+        status = str(mouse_down_result.get("status", status))
+        request_checkpoint = bool(mouse_down_result.get("request_checkpoint", request_checkpoint))
+        if bool(mouse_down_result.get("immediate_return", False)):
+            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
     elif et == "mouse_move":
         link_drag_move = input_ui.update_link_drag_on_mouse_move(
