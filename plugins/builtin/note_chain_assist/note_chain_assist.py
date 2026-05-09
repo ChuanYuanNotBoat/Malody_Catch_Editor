@@ -2307,19 +2307,16 @@ def _handle_canvas_input(payload):
     status = ""
     cursor = "arrow"
     request_checkpoint = False
+    response_callbacks = {
+        "build_overlay": _build_overlay,
+        "context": STATE["last_context"],
+        "checkpoint_prefix": CURVE_CHECKPOINT_PREFIX,
+    }
 
     if _note_curve_snap_enabled() and et in ("mouse_down", "mouse_move", "mouse_up"):
         buttons = int(event.get("buttons", 0))
         if button == LEFT_BUTTON or (buttons & LEFT_BUTTON):
-            return {
-                "consumed": False,
-                "overlay": _build_overlay(STATE["last_context"]),
-                "cursor": "arrow",
-                "status_text": "",
-                "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                "request_undo_checkpoint": False,
-                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-            }
+            return input_ui.build_canvas_response(False, "arrow", "", False, response_callbacks)
 
     if et == "mouse_down":
         hkind, hidx = _find_handle_hit(STATE["last_context"], x, y)
@@ -2368,15 +2365,7 @@ def _handle_canvas_input(payload):
                     consumed = True
                     cursor = "pointing_hand"
                     status = tr(STATE["last_context"], "status_link_dragging")
-                    return {
-                        "consumed": consumed,
-                        "overlay": _build_overlay(STATE["last_context"]),
-                        "cursor": cursor,
-                        "status_text": status,
-                        "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                        "request_undo_checkpoint": request_checkpoint,
-                        "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-                    }
+                    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
                 if ctrl:
                     _toggle_selected_anchor(anchor_id)
                 else:
@@ -2483,15 +2472,7 @@ def _handle_canvas_input(payload):
                 status = tr(STATE["last_context"], "status_link_drag_target", from_idx=src_i, to_idx=dst_i)
             else:
                 status = tr(STATE["last_context"], "status_link_dragging")
-            return {
-                "consumed": consumed,
-                "overlay": _build_overlay(STATE["last_context"]),
-                "cursor": cursor,
-                "status_text": status,
-                "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                "request_undo_checkpoint": request_checkpoint,
-                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-            }
+            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         shift_now = _event_has_shift(event) or bool(STATE.get("shift_down", False))
         if shift_now and STATE.get("drag", {}).get("mode") == "anchor":
@@ -2510,15 +2491,7 @@ def _handle_canvas_input(payload):
                     consumed = True
                     cursor = "pointing_hand"
                     status = tr(STATE["last_context"], "status_link_dragging")
-                    return {
-                        "consumed": consumed,
-                        "overlay": _build_overlay(STATE["last_context"]),
-                        "cursor": cursor,
-                        "status_text": status,
-                        "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                        "request_undo_checkpoint": request_checkpoint,
-                        "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-                    }
+                    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         box = STATE.get("box_select", {})
         if bool(box.get("active", False)):
@@ -2527,15 +2500,7 @@ def _handle_canvas_input(payload):
             consumed = True
             cursor = "crosshair"
             status = tr(STATE["last_context"], "status_box_selecting")
-            return {
-                "consumed": consumed,
-                "overlay": _build_overlay(STATE["last_context"]),
-                "cursor": cursor,
-                "status_text": status,
-                "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                "request_undo_checkpoint": request_checkpoint,
-                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-            }
+            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         mode = STATE["drag"]["mode"]
         idx = STATE["drag"]["index"]
@@ -2595,30 +2560,14 @@ def _handle_canvas_input(payload):
                     status = tr(STATE["last_context"], "status_link_already_connected", from_idx=src_i, to_idx=dst_i)
             else:
                 status = tr(STATE["last_context"], "status_link_cancelled")
-            return {
-                "consumed": consumed,
-                "overlay": _build_overlay(STATE["last_context"]),
-                "cursor": cursor,
-                "status_text": status,
-                "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                "request_undo_checkpoint": request_checkpoint,
-                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-            }
+            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         if bool(STATE.get("box_select", {}).get("active", False)):
             changed = _apply_box_selection(STATE["last_context"])
             consumed = True
             status = tr(STATE["last_context"], "status_box_selection_applied") if changed else tr(STATE["last_context"], "status_box_selection_cleared")
             STATE["drag"] = {"mode": "", "index": -1}
-            return {
-                "consumed": consumed,
-                "overlay": _build_overlay(STATE["last_context"]),
-                "cursor": cursor,
-                "status_text": status,
-                "preview_batch_edit": {"add": [], "remove": [], "move": []},
-                "request_undo_checkpoint": request_checkpoint,
-                "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-            }
+            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         if STATE["drag"]["mode"]:
             status = tr(STATE["last_context"], "curve_edit_applied")
@@ -2673,15 +2622,7 @@ def _handle_canvas_input(payload):
     if et == "mouse_move" and not consumed and int(event.get("buttons", 0)) != 0 and not notes_selectable:
         consumed = True
 
-    return {
-        "consumed": consumed,
-        "overlay": _build_overlay(STATE["last_context"]),
-        "cursor": cursor,
-        "status_text": status,
-        "preview_batch_edit": {"add": [], "remove": [], "move": []},
-        "request_undo_checkpoint": request_checkpoint,
-        "undo_checkpoint_label": CURVE_CHECKPOINT_PREFIX,
-    }
+    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
 
 def _list_tool_actions():

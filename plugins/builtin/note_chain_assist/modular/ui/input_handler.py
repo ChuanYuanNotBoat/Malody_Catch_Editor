@@ -31,6 +31,21 @@ def prepare_canvas_input(payload, callbacks):
     }
 
 
+def build_canvas_response(consumed, cursor, status_text, request_undo_checkpoint, callbacks):
+    build_overlay = callbacks["build_overlay"]
+    context = callbacks["context"]
+    checkpoint_prefix = callbacks["checkpoint_prefix"]
+    return {
+        "consumed": consumed,
+        "overlay": build_overlay(context),
+        "cursor": cursor,
+        "status_text": status_text,
+        "preview_batch_edit": {"add": [], "remove": [], "move": []},
+        "request_undo_checkpoint": request_undo_checkpoint,
+        "undo_checkpoint_label": checkpoint_prefix,
+    }
+
+
 def sync_anchor_placement_with_host_mode(context, state):
     if not isinstance(context, dict):
         return
