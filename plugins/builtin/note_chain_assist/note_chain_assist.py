@@ -155,6 +155,24 @@ TRANSLATIONS = {
         "zh": "从共享样式文件导入样式",
         "ja": "共有スタイルファイルからスタイルを読み込みます",
     },
+    "action_density_follow": {"en": "Density: Follow", "zh": "分度：跟随", "ja": "分度: 追従"},
+    "action_density_follow_desc": {
+        "en": "Follow current placement denominator",
+        "zh": "跟随当前放置分度",
+        "ja": "現在の配置分度に追従します",
+    },
+    "action_density_fixed": {"en": "Density 1/{den}", "zh": "分度 1/{den}", "ja": "分度 1/{den}"},
+    "action_density_fixed_desc": {
+        "en": "Set selected segment density to 1/{den}",
+        "zh": "将选中曲线段分度设为 1/{den}",
+        "ja": "選択セグメントの分度を 1/{den} に設定します",
+    },
+    "action_density_mixed": {"en": "Density: Mixed", "zh": "分度：混合", "ja": "分度: 混在"},
+    "action_density_mixed_desc": {
+        "en": "Selected segments have mixed density settings",
+        "zh": "当前选中曲线段分度状态不一致",
+        "ja": "選択セグメントの分度設定が混在しています",
+    },
 }
 
 TRANSLATIONS.update(
@@ -782,7 +800,7 @@ def _push_history():
 def _record_history_state(context):
     changed = _push_history()
     if changed:
-        _mark_dirty(context, flush=True)
+        _mark_dirty(context, flush=False)
     return changed
 
 
@@ -808,6 +826,74 @@ def _is_curve_checkpoint_action(action_text):
     if not isinstance(action_text, str):
         return False
     return action_text.strip().startswith(CURVE_CHECKPOINT_PREFIX)
+
+
+def _register_host_undo_action(context, action_id):
+    tokens = STATE.get("host_undo_action_tokens", [])
+    if not isinstance(tokens, list):
+        tokens = []
+
+    title = ""
+    if isinstance(context, dict):
+        title = str(context.get("action_title", "") or "").strip()
+    if not title:
+        if action_id == "reset_curve":
+            title = tr(STATE.get("last_context", {}), "action_reset_curve")
+        elif action_id in ("connect_selected_nodes", "connect_selected_nodes_ctx"):
+            title = tr(STATE.get("last_context", {}), "action_connect_selected")
+        elif action_id in ("disconnect_selected_segments", "disconnect_selected_segments_ctx"):
+            title = tr(STATE.get("last_context", {}), "action_disconnect_selected_segments")
+    if not title:
+        return
+
+    if title in tokens:
+        tokens = [v for v in tokens if isinstance(v, str) and v != title]
+    tokens.append(title)
+    if len(tokens) > 64:
+        tokens = tokens[-64:]
+    STATE["host_undo_action_tokens"] = tokens
+
+
+def _is_registered_host_undo_action(action_text):
+    if not isinstance(action_text, str):
+        return False
+    text = action_text.strip()
+    if not text:
+        return False
+    for token in STATE.get("host_undo_action_tokens", []):
+        if not isinstance(token, str):
+            continue
+        cur = token.strip()
+        if cur and cur in text:
+            return True
+    return False
+
+
+def _context_density_menu_state():
+    links = _context_menu_target_links()
+    dens = _sanitize_denominators(STATE.get("style", {}).get("denominators", [4, 8, 12, 16]), STATE.get("last_context", {}))
+    if not links:
+        return {"has_target": False, "mixed": False, "mode": "", "den": 0, "denominators": dens}
+
+    signatures = []
+    density_mode_map = STATE.get("curve_density_mode_by_link", {})
+    for id0, id1 in links:
+        key = _link_key(id0, id1)
+        mode = str(density_mode_map.get(key, "") if isinstance(density_mode_map, dict) else "").strip().lower()
+        if mode == "follow":
+            signatures.append(("follow", 0))
+        else:
+            den = _segment_denominator_for_link(id0, id1, _context_default_segment_denominator(STATE.get("last_context", {})))
+            signatures.append(("fixed", int(den)))
+    first = signatures[0] if signatures else ("", 0)
+    mixed = any(sig != first for sig in signatures[1:])
+    return {
+        "has_target": True,
+        "mixed": bool(mixed),
+        "mode": str(first[0]),
+        "den": int(first[1]),
+        "denominators": dens,
+    }
 
 
 def _safe_denominator_set(context):
@@ -1090,12 +1176,30 @@ def _enforce_anchor_time_order(index, context):
     den = max(1, int(context.get("time_division", 4)))
     eps = 1.0 / float(den * 4)
     cur = STATE["anchors"][index]
-    if index > 0:
-        prev_b = STATE["anchors"][index - 1]["beat"]
-        cur["beat"] = max(cur["beat"], prev_b + eps)
-    if index + 1 < len(STATE["anchors"]):
-        next_b = STATE["anchors"][index + 1]["beat"]
-        cur["beat"] = min(cur["beat"], next_b - eps)
+    cur_id = int(cur.get("id", 0))
+    lower = None
+    upper = None
+    for _i0, _i1, id0, id1, a0, a1 in _connected_anchor_segments():
+        if cur_id <= 0:
+            break
+        other = None
+        if id0 == cur_id:
+            other = a1
+        elif id1 == cur_id:
+            other = a0
+        if other is None:
+            continue
+        other_b = float(other.get("beat", 0.0))
+        if other_b < float(cur.get("beat", 0.0)):
+            candidate = other_b + eps
+            lower = candidate if lower is None else max(lower, candidate)
+        elif other_b > float(cur.get("beat", 0.0)):
+            candidate = other_b - eps
+            upper = candidate if upper is None else min(upper, candidate)
+    if lower is not None:
+        cur["beat"] = max(float(cur.get("beat", 0.0)), float(lower))
+    if upper is not None:
+        cur["beat"] = min(float(cur.get("beat", 0.0)), float(upper))
 
 
 def _enforce_handle_time_constraints(index, context):
@@ -1104,16 +1208,32 @@ def _enforce_handle_time_constraints(index, context):
     den = max(1, int(context.get("time_division", 4)))
     eps = 1.0 / float(den * 4)
     a = STATE["anchors"][index]
+    cur_id = int(a.get("id", 0))
+    cur_beat = float(a.get("beat", 0.0))
+    out_upper = None
+    in_lower = None
+    for _i0, _i1, id0, id1, a0, a1 in _connected_anchor_segments():
+        if cur_id <= 0:
+            break
+        other = None
+        if id0 == cur_id:
+            other = a1
+        elif id1 == cur_id:
+            other = a0
+        if other is None:
+            continue
+        other_b = float(other.get("beat", 0.0))
+        if other_b > cur_beat:
+            candidate = max(0.0, other_b - cur_beat - eps)
+            out_upper = candidate if out_upper is None else min(out_upper, candidate)
+        elif other_b < cur_beat:
+            candidate = min(0.0, other_b - cur_beat + eps)
+            in_lower = candidate if in_lower is None else max(in_lower, candidate)
 
-    if index + 1 < len(STATE["anchors"]):
-        next_b = STATE["anchors"][index + 1]["beat"]
-        max_out = max(0.0, next_b - a["beat"] - eps)
-        a["out"][1] = _clamp(a["out"][1], 0.0, max_out)
-
-    if index > 0:
-        prev_b = STATE["anchors"][index - 1]["beat"]
-        min_in = min(0.0, prev_b - a["beat"] + eps)
-        a["in"][1] = _clamp(a["in"][1], min_in, 0.0)
+    if out_upper is not None:
+        a["out"][1] = _clamp(a["out"][1], 0.0, out_upper)
+    if in_lower is not None:
+        a["in"][1] = _clamp(a["in"][1], in_lower, 0.0)
 
 
 def _serialize_anchor(a):
@@ -1701,10 +1821,8 @@ def _ensure_project_context(context):
 
     if STATE["project_path"] != path:
         if STATE["project_path"] and STATE["project_dirty"]:
-            if not bool(STATE.get("suppress_persist_once", False)):
-                _save_project(STATE["project_path"], context)
-            else:
-                STATE["project_dirty"] = False
+            # Follow host save/discard flow: do not auto-persist when switching chart/project.
+            STATE["project_dirty"] = False
         STATE["project_path"] = path
         STATE["suppress_persist_once"] = False
         _try_seed_curve_project_from_source(context, path)
@@ -2071,7 +2189,7 @@ def _toggle_polyline_for_context_links(context):
 
 
 def _set_density_for_selected_segments(context, target_den):
-    links = _selected_target_links()
+    links = _context_menu_target_links()
     if not links:
         return False
     den = int(target_den)
@@ -2156,6 +2274,7 @@ def _list_tool_actions():
             "selected_links_all_polyline": _selected_links_all_polyline,
             "note_curve_snap_enabled": _note_curve_snap_enabled,
             "context_links_all_polyline": _context_links_all_polyline,
+            "context_density_menu_state": _context_density_menu_state,
         }
     )
 
@@ -2178,6 +2297,7 @@ def _run_tool_action(payload):
             "delete_selected_anchors": _delete_selected_anchors,
             "save_style": _save_style,
             "load_style": _load_style,
+            "register_host_undo_action": _register_host_undo_action,
         },
     )
 
@@ -2207,6 +2327,7 @@ def run_plugin_loop():
         "state": STATE,
         "normalize_lang": normalize_lang,
         "is_curve_checkpoint_action": _is_curve_checkpoint_action,
+        "is_registered_host_undo_action": _is_registered_host_undo_action,
         "undo_history_from_host": _undo_history_from_host,
         "redo_history_from_host": _redo_history_from_host,
         "list_tool_actions": _list_tool_actions,

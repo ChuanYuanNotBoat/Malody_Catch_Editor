@@ -7,6 +7,7 @@ def run_plugin_loop(callbacks):
     state = callbacks["state"]
     normalize_lang = callbacks["normalize_lang"]
     is_curve_checkpoint_action = callbacks["is_curve_checkpoint_action"]
+    is_registered_host_undo_action = callbacks["is_registered_host_undo_action"]
     undo_history_from_host = callbacks["undo_history_from_host"]
     redo_history_from_host = callbacks["redo_history_from_host"]
     list_tool_actions = callbacks["list_tool_actions"]
@@ -46,17 +47,14 @@ def run_plugin_loop(callbacks):
                 if state["project_path"] and state["project_dirty"]:
                     save_project(state["project_path"], state.get("last_context", {}))
             elif event == "shutdown":
-                if (not bool(state.get("suppress_persist_once", False)) and
-                        state["project_path"] and state["project_dirty"]):
-                    save_project(state["project_path"], state.get("last_context", {}))
                 break
             elif event == "onHostUndo":
                 action_text = str(payload.get("action_text", "") or "")
-                if is_curve_checkpoint_action(action_text):
+                if is_curve_checkpoint_action(action_text) or is_registered_host_undo_action(action_text):
                     undo_history_from_host(state.get("last_context", {}))
             elif event == "onHostRedo":
                 action_text = str(payload.get("action_text", "") or "")
-                if is_curve_checkpoint_action(action_text):
+                if is_curve_checkpoint_action(action_text) or is_registered_host_undo_action(action_text):
                     redo_history_from_host(state.get("last_context", {}))
             continue
 

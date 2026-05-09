@@ -76,6 +76,7 @@ def build_initial_state():
         "project_last_writer_instance": "",
         "last_save_error": "",
         "last_save_error_detail": "",
+        "host_undo_action_tokens": [],
         "instance_id": f"{os.getpid()}-{uuid.uuid4().hex[:12]}",
     }
 
@@ -213,7 +214,7 @@ def undo_history(state, *, restore_snapshot_fn, mark_dirty_fn, context):
     idx -= 1
     state["history_index"] = idx
     restore_snapshot_fn(hist[idx])
-    mark_dirty_fn(context, flush=True)
+    mark_dirty_fn(context, flush=False)
     return True
 
 
@@ -225,5 +226,5 @@ def redo_history(state, *, restore_snapshot_fn, mark_dirty_fn, context):
     idx += 1
     state["history_index"] = idx
     restore_snapshot_fn(hist[idx])
-    mark_dirty_fn(context, flush=True)
+    mark_dirty_fn(context, flush=False)
     return True

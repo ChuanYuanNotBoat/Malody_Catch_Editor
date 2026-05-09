@@ -5,6 +5,14 @@ def list_tool_actions(callbacks):
     selected_links_all_polyline = callbacks["selected_links_all_polyline"]
     note_curve_snap_enabled = callbacks["note_curve_snap_enabled"]
     context_links_all_polyline = callbacks["context_links_all_polyline"]
+    context_density_menu_state = callbacks["context_density_menu_state"]
+
+    density_state = context_density_menu_state()
+    density_denominators = list(density_state.get("denominators", []))
+    density_mixed = bool(density_state.get("mixed", False))
+    density_mode = str(density_state.get("mode", ""))
+    density_den = int(density_state.get("den", 0) or 0)
+    density_has_target = bool(density_state.get("has_target", False))
 
     actions = [
         {
@@ -106,7 +114,7 @@ def list_tool_actions(callbacks):
             "title": tr(state.get("last_context", {}), "action_reset_curve"),
             "description": tr(state.get("last_context", {}), "action_reset_curve_desc"),
             "placement": "left_sidebar",
-            "requires_undo_snapshot": False,
+            "requires_undo_snapshot": True,
         },
         {
             "action_id": "connect_selected_nodes",
@@ -120,7 +128,7 @@ def list_tool_actions(callbacks):
             "title": tr(state.get("last_context", {}), "action_disconnect_selected_segments"),
             "description": tr(state.get("last_context", {}), "action_disconnect_selected_segments_desc"),
             "placement": "left_sidebar",
-            "requires_undo_snapshot": False,
+            "requires_undo_snapshot": True,
         },
         {
             "action_id": "connect_selected_nodes_ctx",
@@ -134,7 +142,7 @@ def list_tool_actions(callbacks):
             "title": tr(state.get("last_context", {}), "status_selection_deleted"),
             "description": tr(state.get("last_context", {}), "status_selection_deleted"),
             "placement": "plugin_context_menu",
-            "requires_undo_snapshot": False,
+            "requires_undo_snapshot": True,
         },
         {
             "action_id": "export_style_preset",
@@ -151,6 +159,42 @@ def list_tool_actions(callbacks):
             "requires_undo_snapshot": False,
         },
     ]
+    if density_has_target:
+        actions.append(
+            {
+                "action_id": "set_segment_density_follow",
+                "title": tr(state.get("last_context", {}), "action_density_follow"),
+                "description": tr(state.get("last_context", {}), "action_density_follow_desc"),
+                "placement": "plugin_context_menu",
+                "requires_undo_snapshot": False,
+                "checkable": True,
+                "checked": (not density_mixed) and density_mode == "follow",
+            }
+        )
+        for den in density_denominators:
+            actions.append(
+                {
+                    "action_id": f"set_segment_density_{int(den)}",
+                    "title": tr(state.get("last_context", {}), "action_density_fixed", den=int(den)),
+                    "description": tr(state.get("last_context", {}), "action_density_fixed_desc", den=int(den)),
+                    "placement": "plugin_context_menu",
+                    "requires_undo_snapshot": False,
+                    "checkable": True,
+                    "checked": (not density_mixed) and density_mode == "fixed" and density_den == int(den),
+                }
+            )
+        if density_mixed:
+            actions.append(
+                {
+                    "action_id": "segment_density_mixed_info",
+                    "title": tr(state.get("last_context", {}), "action_density_mixed"),
+                    "description": tr(state.get("last_context", {}), "action_density_mixed_desc"),
+                    "placement": "plugin_context_menu",
+                    "requires_undo_snapshot": False,
+                    "checkable": True,
+                    "checked": True,
+                }
+            )
     return actions
 
 
@@ -169,6 +213,7 @@ def run_tool_action(payload, callbacks):
     delete_selected_anchors = callbacks["delete_selected_anchors"]
     save_style = callbacks["save_style"]
     load_style = callbacks["load_style"]
+    register_host_undo_action = callbacks["register_host_undo_action"]
 
     action_id = str((payload or {}).get("action_id", ""))
     context = (payload or {}).get("context", {}) or {}
@@ -176,6 +221,7 @@ def run_tool_action(payload, callbacks):
 
     if action_id == "reset_curve":
         reset_anchors(context)
+        register_host_undo_action(context, action_id)
         return True
     if action_id in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar", "commit_context_segments_to_notes"):
         if state["project_path"] and state["project_dirty"]:
@@ -226,14 +272,25 @@ def run_tool_action(payload, callbacks):
         except Exception:
             return False
         return set_density_for_selected_segments(context, den)
+    if action_id == "segment_density_mixed_info":
+        return True
     if action_id in ("connect_selected_nodes", "connect_selected_nodes_ctx"):
-        return connect_selected_anchors(context)
+        changed = connect_selected_anchors(context)
+        if changed:
+            register_host_undo_action(context, action_id)
+        return changed
     if action_id == "disconnect_selected_segments":
-        return disconnect_selected_segments(context)
+        changed = disconnect_selected_segments(context)
+        if changed:
+            register_host_undo_action(context, action_id)
+        return changed
     if action_id == "disconnect_selected_segments_ctx":
         changed_segments = disconnect_selected_segments(context)
         changed_anchors = delete_selected_anchors(context)
-        return changed_segments or changed_anchors
+        changed = changed_segments or changed_anchors
+        if changed:
+            register_host_undo_action(context, action_id)
+        return changed
     if action_id == "export_style_preset":
         return save_style(context)
     if action_id == "import_style_preset":
@@ -246,7 +303,7 @@ def run_tool_action(payload, callbacks):
 
 def run_one_shot(action_id):
     if isinstance(action_id, str):
-        if action_id == "set_segment_density_follow" or action_id.startswith("set_segment_density_"):
+        if action_id in ("set_segment_density_follow", "segment_density_mixed_info") or action_id.startswith("set_segment_density_"):
             return 0
     known = {
         "reset_curve",
@@ -265,6 +322,7 @@ def run_one_shot(action_id):
         "disconnect_selected_segments",
         "connect_selected_nodes_ctx",
         "disconnect_selected_segments_ctx",
+        "segment_density_mixed_info",
         "export_style_preset",
         "import_style_preset",
     }
