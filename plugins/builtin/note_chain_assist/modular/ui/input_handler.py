@@ -291,3 +291,89 @@ def handle_cancel(state, tr_fn):
         "consumed": True,
         "status": tr_fn(state["last_context"], "interaction_cancelled"),
     }
+
+
+def update_link_drag_on_mouse_move(x, y, callbacks):
+    state = callbacks["state"]
+    selection_enabled = callbacks["selection_enabled"]
+    find_anchor_hit = callbacks["find_anchor_hit"]
+    anchor_index_map = callbacks["anchor_index_map"]
+    tr = callbacks["tr"]
+
+    link_drag = state.get("link_drag", {})
+    if not bool(link_drag.get("active", False)):
+        return None
+
+    link_drag["x"] = x
+    link_drag["y"] = y
+    hidx = find_anchor_hit(state["last_context"], x, y) if selection_enabled("anchors") else -1
+    hover_id = -1
+    if hidx >= 0:
+        hit_id = int(state["anchors"][hidx].get("id", 0))
+        if hit_id > 0 and hit_id != int(link_drag.get("source_anchor_id", -1)):
+            hover_id = hit_id
+    link_drag["hover_anchor_id"] = hover_id
+    state["link_drag"] = link_drag
+
+    if hover_id > 0:
+        idx_map = anchor_index_map()
+        src_i = idx_map.get(int(link_drag.get("source_anchor_id", -1)), -1)
+        dst_i = idx_map.get(hover_id, -1)
+        status = tr(state["last_context"], "status_link_drag_target", from_idx=src_i, to_idx=dst_i)
+    else:
+        status = tr(state["last_context"], "status_link_dragging")
+
+    return {
+        "consumed": True,
+        "cursor": "pointing_hand",
+        "status": status,
+    }
+
+
+def maybe_switch_anchor_drag_to_link_drag(x, y, shift_now, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+
+    if not shift_now:
+        return None
+    if state.get("drag", {}).get("mode") != "anchor":
+        return None
+
+    drag_idx = int(state.get("drag", {}).get("index", -1))
+    if not (0 <= drag_idx < len(state.get("anchors", []))):
+        return None
+
+    source_id = int(state["anchors"][drag_idx].get("id", 0))
+    if source_id <= 0:
+        return None
+
+    state["drag"] = {"mode": "", "index": -1}
+    state["link_drag"] = {
+        "active": True,
+        "source_anchor_id": source_id,
+        "hover_anchor_id": -1,
+        "x": x,
+        "y": y,
+    }
+    return {
+        "consumed": True,
+        "cursor": "pointing_hand",
+        "status": tr(state["last_context"], "status_link_dragging"),
+    }
+
+
+def update_box_select_on_mouse_move(x, y, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+
+    box = state.get("box_select", {})
+    if not bool(box.get("active", False)):
+        return None
+
+    box["end"] = [x, y]
+    state["box_select"] = box
+    return {
+        "consumed": True,
+        "cursor": "crosshair",
+        "status": tr(state["last_context"], "status_box_selecting"),
+    }

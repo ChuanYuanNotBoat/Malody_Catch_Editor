@@ -2449,55 +2449,51 @@ def _handle_canvas_input(payload):
                     status = tr(STATE["last_context"], "anchor_added", index=new_idx)
 
     elif et == "mouse_move":
-        link_drag = STATE.get("link_drag", {})
-        if bool(link_drag.get("active", False)):
-            link_drag["x"] = x
-            link_drag["y"] = y
-            hidx = _find_anchor_hit(STATE["last_context"], x, y) if _selection_enabled("anchors") else -1
-            hover_id = -1
-            if hidx >= 0:
-                hit_id = int(STATE["anchors"][hidx].get("id", 0))
-                if hit_id > 0 and hit_id != int(link_drag.get("source_anchor_id", -1)):
-                    hover_id = hit_id
-            link_drag["hover_anchor_id"] = hover_id
-            STATE["link_drag"] = link_drag
-            consumed = True
-            cursor = "pointing_hand"
-            if hover_id > 0:
-                idx_map = _anchor_index_map()
-                src_i = idx_map.get(int(link_drag.get("source_anchor_id", -1)), -1)
-                dst_i = idx_map.get(hover_id, -1)
-                status = tr(STATE["last_context"], "status_link_drag_target", from_idx=src_i, to_idx=dst_i)
-            else:
-                status = tr(STATE["last_context"], "status_link_dragging")
+        link_drag_move = input_ui.update_link_drag_on_mouse_move(
+            x,
+            y,
+            {
+                "state": STATE,
+                "selection_enabled": _selection_enabled,
+                "find_anchor_hit": _find_anchor_hit,
+                "anchor_index_map": _anchor_index_map,
+                "tr": tr,
+            },
+        )
+        if link_drag_move is not None:
+            consumed = bool(link_drag_move.get("consumed", False))
+            cursor = str(link_drag_move.get("cursor", cursor))
+            status = str(link_drag_move.get("status", status))
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         shift_now = _event_has_shift(event) or bool(STATE.get("shift_down", False))
-        if shift_now and STATE.get("drag", {}).get("mode") == "anchor":
-            drag_idx = int(STATE.get("drag", {}).get("index", -1))
-            if 0 <= drag_idx < len(STATE.get("anchors", [])):
-                source_id = int(STATE["anchors"][drag_idx].get("id", 0))
-                if source_id > 0:
-                    STATE["drag"] = {"mode": "", "index": -1}
-                    STATE["link_drag"] = {
-                        "active": True,
-                        "source_anchor_id": source_id,
-                        "hover_anchor_id": -1,
-                        "x": x,
-                        "y": y,
-                    }
-                    consumed = True
-                    cursor = "pointing_hand"
-                    status = tr(STATE["last_context"], "status_link_dragging")
-                    return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
+        switch_result = input_ui.maybe_switch_anchor_drag_to_link_drag(
+            x,
+            y,
+            shift_now,
+            {
+                "state": STATE,
+                "tr": tr,
+            },
+        )
+        if switch_result is not None:
+            consumed = bool(switch_result.get("consumed", False))
+            cursor = str(switch_result.get("cursor", cursor))
+            status = str(switch_result.get("status", status))
+            return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
-        box = STATE.get("box_select", {})
-        if bool(box.get("active", False)):
-            box["end"] = [x, y]
-            STATE["box_select"] = box
-            consumed = True
-            cursor = "crosshair"
-            status = tr(STATE["last_context"], "status_box_selecting")
+        box_result = input_ui.update_box_select_on_mouse_move(
+            x,
+            y,
+            {
+                "state": STATE,
+                "tr": tr,
+            },
+        )
+        if box_result is not None:
+            consumed = bool(box_result.get("consumed", False))
+            cursor = str(box_result.get("cursor", cursor))
+            status = str(box_result.get("status", status))
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         mode = STATE["drag"]["mode"]
