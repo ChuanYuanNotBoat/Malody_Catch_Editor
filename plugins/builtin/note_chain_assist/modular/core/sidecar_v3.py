@@ -134,3 +134,96 @@ def read_disk_payload(path, *, json_module, os_module):
         return None
     with open(path, "r", encoding="utf-8") as f:
         return json_module.load(f)
+
+
+def save_project(
+    state,
+    path,
+    context,
+    *,
+    os_module,
+    json_module,
+    time_module,
+    read_disk_payload_fn,
+    build_v3_payload_fn,
+    parse_int_fn,
+    set_save_error_fn,
+):
+    if not isinstance(path, str) or not path.strip():
+        set_save_error_fn("invalid_path")
+        return False
+    try:
+        os_module.makedirs(os_module.path.dirname(path), exist_ok=True)
+
+        disk_payload = None
+        if os_module.path.exists(path):
+            try:
+                disk_payload = read_disk_payload_fn(path)
+            except Exception as ex:
+                set_save_error_fn("read_existing_failed", str(ex))
+                return False
+
+        disk_revision = 0
+        if isinstance(disk_payload, dict):
+            disk_revision = max(0, parse_int_fn(disk_payload.get("revision", 0), 0))
+        state_revision = max(0, parse_int_fn(state.get("project_revision", 0), 0))
+        if disk_revision != state_revision:
+            set_save_error_fn("revision_conflict", "file updated by another instance, please refresh")
+            return False
+
+        payload = build_v3_payload_fn()
+        payload["revision"] = disk_revision + 1
+        payload["updated_at"] = int(time_module.time() * 1000)
+        payload["last_writer_instance"] = str(state.get("instance_id", "") or "")
+
+        tmp_path = f"{path}.tmp.{os_module.getpid()}.{int(time_module.time() * 1000)}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json_module.dump(payload, f, ensure_ascii=False, indent=2)
+        os_module.replace(tmp_path, path)
+
+        state["project_dirty"] = False
+        state["project_revision"] = int(payload.get("revision", 0))
+        state["project_file_uuid"] = str(payload.get("file_uuid", "") or "")
+        state["project_last_writer_instance"] = str(payload.get("last_writer_instance", "") or "")
+        set_save_error_fn("", "")
+        return True
+    except Exception as ex:
+        set_save_error_fn("write_failed", str(ex))
+        return False
+
+
+def load_project(
+    state,
+    path,
+    context,
+    *,
+    os_module,
+    json_module,
+    parse_int_fn,
+    set_save_error_fn,
+    load_project_v2_payload_fn,
+    load_project_v3_payload_fn,
+    invalidate_curve_cache_fn,
+    format_version_threshold,
+):
+    if not isinstance(path, str) or not path.strip() or not os_module.path.exists(path):
+        return False
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json_module.load(f)
+
+        state["segment_denominators"] = {}
+        state["segment_shapes"] = {}
+        format_version = parse_int_fn(payload.get("format_version", 0), 0)
+        if format_version >= format_version_threshold or ("nodes" in payload and "curves" in payload):
+            load_project_v3_payload_fn(payload, context)
+        else:
+            load_project_v2_payload_fn(payload, context)
+
+        invalidate_curve_cache_fn()
+        state["project_dirty"] = False
+        set_save_error_fn("", "")
+        return True
+    except Exception as ex:
+        set_save_error_fn("load_failed", str(ex))
+        return False

@@ -1572,47 +1572,18 @@ def _read_disk_payload(path):
 
 
 def _save_project(path, context=None):
-    if not isinstance(path, str) or not path.strip():
-        _set_save_error("invalid_path")
-        return False
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-
-        disk_payload = None
-        if os.path.exists(path):
-            try:
-                disk_payload = _read_disk_payload(path)
-            except Exception as ex:
-                _set_save_error("read_existing_failed", str(ex))
-                return False
-
-        disk_revision = 0
-        if isinstance(disk_payload, dict):
-            disk_revision = max(0, _parse_int(disk_payload.get("revision", 0), 0))
-        state_revision = max(0, _parse_int(STATE.get("project_revision", 0), 0))
-        if disk_revision != state_revision:
-            _set_save_error("revision_conflict", "file updated by another instance, please refresh")
-            return False
-
-        payload = _build_v3_payload()
-        payload["revision"] = disk_revision + 1
-        payload["updated_at"] = int(time.time() * 1000)
-        payload["last_writer_instance"] = str(STATE.get("instance_id", "") or "")
-
-        tmp_path = f"{path}.tmp.{os.getpid()}.{int(time.time() * 1000)}"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, path)
-
-        STATE["project_dirty"] = False
-        STATE["project_revision"] = int(payload.get("revision", 0))
-        STATE["project_file_uuid"] = str(payload.get("file_uuid", "") or "")
-        STATE["project_last_writer_instance"] = str(payload.get("last_writer_instance", "") or "")
-        _set_save_error("", "")
-        return True
-    except Exception as ex:
-        _set_save_error("write_failed", str(ex))
-        return False
+    return scv3.save_project(
+        STATE,
+        path,
+        context,
+        os_module=os,
+        json_module=json,
+        time_module=time,
+        read_disk_payload_fn=_read_disk_payload,
+        build_v3_payload_fn=_build_v3_payload,
+        parse_int_fn=_parse_int,
+        set_save_error_fn=_set_save_error,
+    )
 
 
 def _load_project_v2_payload(payload, context):
@@ -1815,27 +1786,19 @@ def _load_project_v3_payload(payload, context):
 
 
 def _load_project(path, context):
-    if not isinstance(path, str) or not path.strip() or not os.path.exists(path):
-        return False
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            payload = json.load(f)
-
-        STATE["segment_denominators"] = {}
-        STATE["segment_shapes"] = {}
-        format_version = _parse_int(payload.get("format_version", 0), 0)
-        if format_version >= CURVE_SIDECAR_FORMAT_VERSION or ("nodes" in payload and "curves" in payload):
-            _load_project_v3_payload(payload, context)
-        else:
-            _load_project_v2_payload(payload, context)
-
-        _invalidate_curve_cache()
-        STATE["project_dirty"] = False
-        _set_save_error("", "")
-        return True
-    except Exception as ex:
-        _set_save_error("load_failed", str(ex))
-        return False
+    return scv3.load_project(
+        STATE,
+        path,
+        context,
+        os_module=os,
+        json_module=json,
+        parse_int_fn=_parse_int,
+        set_save_error_fn=_set_save_error,
+        load_project_v2_payload_fn=_load_project_v2_payload,
+        load_project_v3_payload_fn=_load_project_v3_payload,
+        invalidate_curve_cache_fn=_invalidate_curve_cache,
+        format_version_threshold=CURVE_SIDECAR_FORMAT_VERSION,
+    )
 
 
 def _ensure_project_context(context):
