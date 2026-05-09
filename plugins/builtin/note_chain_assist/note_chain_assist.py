@@ -2537,27 +2537,21 @@ def _handle_canvas_input(payload):
                 cursor = "pointing_hand"
 
     elif et == "mouse_up":
-        link_drag = STATE.get("link_drag", {})
-        if bool(link_drag.get("active", False)):
-            consumed = True
-            source_id = int(link_drag.get("source_anchor_id", -1))
-            target_id = int(link_drag.get("hover_anchor_id", -1))
-            STATE["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
-            if source_id > 0 and target_id > 0 and source_id != target_id:
-                added = _add_link(source_id, target_id)
-                idx_map = _anchor_index_map()
-                src_i = idx_map.get(source_id, -1)
-                dst_i = idx_map.get(target_id, -1)
-                if added:
-                    _cleanup_links_and_selection()
-                    _invalidate_curve_cache()
-                    _record_history_state(STATE["last_context"])
-                    request_checkpoint = True
-                    status = tr(STATE["last_context"], "status_link_connected", from_idx=src_i, to_idx=dst_i)
-                else:
-                    status = tr(STATE["last_context"], "status_link_already_connected", from_idx=src_i, to_idx=dst_i)
-            else:
-                status = tr(STATE["last_context"], "status_link_cancelled")
+        link_drag_result = input_ui.resolve_link_drag_mouse_up(
+            {
+                "state": STATE,
+                "add_link": _add_link,
+                "anchor_index_map": _anchor_index_map,
+                "cleanup_links_and_selection": _cleanup_links_and_selection,
+                "invalidate_curve_cache": _invalidate_curve_cache,
+                "record_history_state": _record_history_state,
+                "tr": tr,
+            }
+        )
+        if link_drag_result is not None:
+            consumed = bool(link_drag_result.get("consumed", False))
+            status = str(link_drag_result.get("status", ""))
+            request_checkpoint = bool(link_drag_result.get("request_checkpoint", False))
             return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
 
         if bool(STATE.get("box_select", {}).get("active", False)):

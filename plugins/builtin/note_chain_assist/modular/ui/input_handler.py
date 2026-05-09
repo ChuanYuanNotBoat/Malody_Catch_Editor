@@ -204,3 +204,44 @@ def handle_key_up(event, callbacks):
     key = int(event.get("key", 0))
     if key == key_shift or not event_has_shift(event):
         state["shift_down"] = False
+
+
+def resolve_link_drag_mouse_up(callbacks):
+    state = callbacks["state"]
+    add_link = callbacks["add_link"]
+    anchor_index_map = callbacks["anchor_index_map"]
+    cleanup_links_and_selection = callbacks["cleanup_links_and_selection"]
+    invalidate_curve_cache = callbacks["invalidate_curve_cache"]
+    record_history_state = callbacks["record_history_state"]
+    tr = callbacks["tr"]
+
+    link_drag = state.get("link_drag", {})
+    if not bool(link_drag.get("active", False)):
+        return None
+
+    source_id = int(link_drag.get("source_anchor_id", -1))
+    target_id = int(link_drag.get("hover_anchor_id", -1))
+    state["link_drag"] = {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0}
+    request_checkpoint = False
+
+    if source_id > 0 and target_id > 0 and source_id != target_id:
+        added = add_link(source_id, target_id)
+        idx_map = anchor_index_map()
+        src_i = idx_map.get(source_id, -1)
+        dst_i = idx_map.get(target_id, -1)
+        if added:
+            cleanup_links_and_selection()
+            invalidate_curve_cache()
+            record_history_state(state["last_context"])
+            request_checkpoint = True
+            status = tr(state["last_context"], "status_link_connected", from_idx=src_i, to_idx=dst_i)
+        else:
+            status = tr(state["last_context"], "status_link_already_connected", from_idx=src_i, to_idx=dst_i)
+    else:
+        status = tr(state["last_context"], "status_link_cancelled")
+
+    return {
+        "consumed": True,
+        "status": status,
+        "request_checkpoint": request_checkpoint,
+    }
