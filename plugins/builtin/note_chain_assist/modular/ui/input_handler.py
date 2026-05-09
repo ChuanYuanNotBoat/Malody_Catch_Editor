@@ -634,3 +634,60 @@ def maybe_start_box_selection_on_mouse_down(x, y, ctrl, is_select_mode, notes_se
         "cursor": "arrow",
         "status": tr(state["last_context"], "status_box_selecting"),
     }
+
+
+def handle_mouse_down_empty_area(x, y, notes_selectable, anchor_placement_enabled, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+    append_anchor = callbacks["append_anchor"]
+    add_link = callbacks["add_link"]
+    set_single_selected_anchor = callbacks["set_single_selected_anchor"]
+    cleanup_links_and_selection = callbacks["cleanup_links_and_selection"]
+    mark_dirty = callbacks["mark_dirty"]
+
+    if notes_selectable and not anchor_placement_enabled:
+        return {
+            "consumed": False,
+            "cursor": "arrow",
+            "status": "",
+        }
+
+    if not anchor_placement_enabled:
+        return {
+            "consumed": True,
+            "cursor": "arrow",
+            "status": tr(state["last_context"], "anchor_place_off_hint"),
+        }
+
+    new_idx = append_anchor(state["last_context"], x, y)
+    new_anchor_id = int(state["anchors"][new_idx].get("id", 0))
+    selected = [int(v) for v in state.get("selected_anchor_ids", []) if int(v) > 0]
+    keep_selected_new_anchor = False
+    if len(selected) == 1:
+        add_link(selected[0], new_anchor_id)
+        state["pending_connect_anchor_id"] = -1
+        keep_selected_new_anchor = True
+    elif len(selected) == 0:
+        pending_id = int(state.get("pending_connect_anchor_id", -1))
+        if pending_id > 0:
+            add_link(pending_id, new_anchor_id)
+            state["pending_connect_anchor_id"] = -1
+        else:
+            state["pending_connect_anchor_id"] = new_anchor_id
+    else:
+        state["pending_connect_anchor_id"] = -1
+        keep_selected_new_anchor = False
+
+    if keep_selected_new_anchor:
+        set_single_selected_anchor(new_anchor_id)
+    else:
+        state["selected_anchor_ids"] = []
+
+    cleanup_links_and_selection()
+    state["drag"] = {"mode": "anchor", "index": new_idx}
+    mark_dirty(state["last_context"])
+    return {
+        "consumed": True,
+        "cursor": "size_all",
+        "status": tr(state["last_context"], "anchor_added", index=new_idx),
+    }

@@ -2427,40 +2427,24 @@ def _handle_canvas_input(payload):
                     cursor = str(box_start.get("cursor", cursor))
                     status = str(box_start.get("status", status))
             else:
-                if notes_selectable and not anchor_placement_enabled:
-                    consumed = False
-                elif not anchor_placement_enabled:
-                    consumed = True
-                    status = tr(STATE["last_context"], "anchor_place_off_hint")
-                else:
-                    consumed = True
-                    new_idx = _append_anchor(STATE["last_context"], x, y)
-                    new_anchor_id = int(STATE["anchors"][new_idx].get("id", 0))
-                    selected = [int(v) for v in STATE.get("selected_anchor_ids", []) if int(v) > 0]
-                    keep_selected_new_anchor = False
-                    if len(selected) == 1:
-                        _add_link(selected[0], new_anchor_id)
-                        STATE["pending_connect_anchor_id"] = -1
-                        keep_selected_new_anchor = True
-                    elif len(selected) == 0:
-                        pending_id = int(STATE.get("pending_connect_anchor_id", -1))
-                        if pending_id > 0:
-                            _add_link(pending_id, new_anchor_id)
-                            STATE["pending_connect_anchor_id"] = -1
-                        else:
-                            STATE["pending_connect_anchor_id"] = new_anchor_id
-                    else:
-                        STATE["pending_connect_anchor_id"] = -1
-                        keep_selected_new_anchor = False
-                    if keep_selected_new_anchor:
-                        _set_single_selected_anchor(new_anchor_id)
-                    else:
-                        STATE["selected_anchor_ids"] = []
-                    _cleanup_links_and_selection()
-                    STATE["drag"] = {"mode": "anchor", "index": new_idx}
-                    _mark_dirty(STATE["last_context"])
-                    cursor = "size_all"
-                    status = tr(STATE["last_context"], "anchor_added", index=new_idx)
+                empty_area = input_ui.handle_mouse_down_empty_area(
+                    x,
+                    y,
+                    notes_selectable,
+                    anchor_placement_enabled,
+                    {
+                        "state": STATE,
+                        "tr": tr,
+                        "append_anchor": _append_anchor,
+                        "add_link": _add_link,
+                        "set_single_selected_anchor": _set_single_selected_anchor,
+                        "cleanup_links_and_selection": _cleanup_links_and_selection,
+                        "mark_dirty": _mark_dirty,
+                    },
+                )
+                consumed = bool(empty_area.get("consumed", consumed))
+                cursor = str(empty_area.get("cursor", cursor))
+                status = str(empty_area.get("status", status))
 
     elif et == "mouse_move":
         link_drag_move = input_ui.update_link_drag_on_mouse_move(
