@@ -2284,19 +2284,24 @@ def _sync_anchor_selection_from_host_notes(context):
 
 
 def _handle_canvas_input(payload):
-    context = payload.get("context", {}) if isinstance(payload, dict) else {}
-    event = payload.get("event", {}) if isinstance(payload, dict) else {}
-    STATE["last_context"] = context if isinstance(context, dict) else {}
-    _ensure_project_context(STATE["last_context"])
-    _seed_missing_segment_denominators(STATE["last_context"])
-    _sync_anchor_placement_with_host_mode(STATE["last_context"])
-    _sync_anchor_selection_from_host_notes(STATE["last_context"])
-
-    et = str(event.get("type", ""))
-    x = float(event.get("x", 0.0))
-    y = float(event.get("y", 0.0))
-    button = int(event.get("button", 0))
-    ts = int(event.get("timestamp_ms", int(time.time() * 1000)))
+    prepared = input_ui.prepare_canvas_input(
+        payload,
+        {
+            "state": STATE,
+            "ensure_project_context": _ensure_project_context,
+            "seed_missing_segment_denominators": _seed_missing_segment_denominators,
+            "sync_anchor_placement_with_host_mode": _sync_anchor_placement_with_host_mode,
+            "sync_anchor_selection_from_host_notes": _sync_anchor_selection_from_host_notes,
+            "now_ms": lambda: int(time.time() * 1000),
+        },
+    )
+    context = prepared["context"]
+    event = prepared["event"]
+    et = prepared["event_type"]
+    x = prepared["x"]
+    y = prepared["y"]
+    button = prepared["button"]
+    ts = prepared["timestamp_ms"]
 
     consumed = False
     status = ""

@@ -1,3 +1,36 @@
+def prepare_canvas_input(payload, callbacks):
+    state = callbacks["state"]
+    ensure_project_context = callbacks["ensure_project_context"]
+    seed_missing_segment_denominators = callbacks["seed_missing_segment_denominators"]
+    sync_anchor_placement_with_host_mode = callbacks["sync_anchor_placement_with_host_mode"]
+    sync_anchor_selection_from_host_notes = callbacks["sync_anchor_selection_from_host_notes"]
+    now_ms = callbacks["now_ms"]
+
+    context = payload.get("context", {}) if isinstance(payload, dict) else {}
+    event = payload.get("event", {}) if isinstance(payload, dict) else {}
+    state["last_context"] = context if isinstance(context, dict) else {}
+    ensure_project_context(state["last_context"])
+    seed_missing_segment_denominators(state["last_context"])
+    sync_anchor_placement_with_host_mode(state["last_context"])
+    sync_anchor_selection_from_host_notes(state["last_context"])
+
+    et = str(event.get("type", ""))
+    x = float(event.get("x", 0.0))
+    y = float(event.get("y", 0.0))
+    button = int(event.get("button", 0))
+    ts = int(event.get("timestamp_ms", now_ms()))
+
+    return {
+        "context": context,
+        "event": event,
+        "event_type": et,
+        "x": x,
+        "y": y,
+        "button": button,
+        "timestamp_ms": ts,
+    }
+
+
 def sync_anchor_placement_with_host_mode(context, state):
     if not isinstance(context, dict):
         return
