@@ -29,6 +29,7 @@ from modular.core.state import (
     STYLE_PRESETS,
 )
 from modular.core import time_math as tm
+from modular.core import curve_model as cm
 
 TRANSLATIONS = {
     "anchor_mode_smooth": {"en": "S", "zh": "平", "ja": "滑"},
@@ -409,88 +410,44 @@ def _new_anchor_id():
 
 
 def _normalize_link(id_a, id_b):
-    a = int(id_a)
-    b = int(id_b)
-    if a <= 0 or b <= 0 or a == b:
-        return None
-    idx_map = _anchor_index_map()
-    if a not in idx_map or b not in idx_map:
-        return None
-    return (a, b) if idx_map[a] <= idx_map[b] else (b, a)
+    return cm.normalize_link(id_a, id_b, _anchor_index_map())
 
 
 def _link_exists(id_a, id_b):
-    norm = _normalize_link(id_a, id_b)
-    if norm is None:
-        return False
-    for raw in STATE.get("links", []):
-        if not isinstance(raw, list) or len(raw) != 2:
-            continue
-        cur = _normalize_link(raw[0], raw[1])
-        if cur == norm:
-            return True
-    return False
+    return cm.link_exists(STATE.get("links", []), id_a, id_b, _anchor_index_map())
 
 
 def _link_key(id_a, id_b):
-    norm = _normalize_link(id_a, id_b)
-    if norm is None:
-        return ""
-    return f"{norm[0]}:{norm[1]}"
+    return cm.link_key(id_a, id_b, _anchor_index_map())
 
 
 def _segment_denominator_for_link(id_a, id_b, fallback_den=4):
-    key = _link_key(id_a, id_b)
-    if not key:
-        return max(1, int(fallback_den))
-    density_mode = STATE.get("curve_density_mode_by_link", {})
-    if isinstance(density_mode, dict):
-        mode = str(density_mode.get(key, "") or "").strip().lower()
-        if mode == "follow":
-            return max(1, int(fallback_den))
-    seg_map = STATE.get("segment_denominators", {})
-    if isinstance(seg_map, dict):
-        try:
-            den = int(seg_map.get(key, 0))
-            if den > 0:
-                return den
-        except Exception:
-            pass
-    return max(1, int(fallback_den))
+    return cm.segment_denominator_for_link(
+        STATE.get("segment_denominators", {}),
+        STATE.get("curve_density_mode_by_link", {}),
+        id_a,
+        id_b,
+        _anchor_index_map(),
+        fallback_den=fallback_den,
+    )
 
 
 def _set_segment_denominator(id_a, id_b, den):
-    key = _link_key(id_a, id_b)
-    if not key:
-        return False
-    try:
-        val = int(den)
-    except Exception:
-        val = 0
-    seg_map = STATE.get("segment_denominators", {})
-    if not isinstance(seg_map, dict):
-        seg_map = {}
-    density_mode = STATE.get("curve_density_mode_by_link", {})
-    if not isinstance(density_mode, dict):
-        density_mode = {}
-    prev = int(seg_map.get(key, 0) or 0)
-    if val <= 0:
-        density_mode[key] = "follow"
-        STATE["curve_density_mode_by_link"] = density_mode
-        if key in seg_map:
-            seg_map.pop(key, None)
-            STATE["segment_denominators"] = seg_map
-            return True
-        return False
-    seg_map[key] = val
-    density_mode[key] = "fixed"
-    STATE["curve_density_mode_by_link"] = density_mode
+    changed, seg_map, density_mode = cm.set_segment_denominator(
+        STATE.get("segment_denominators", {}),
+        STATE.get("curve_density_mode_by_link", {}),
+        id_a,
+        id_b,
+        den,
+        _anchor_index_map(),
+    )
     STATE["segment_denominators"] = seg_map
-    return prev != val
+    STATE["curve_density_mode_by_link"] = density_mode
+    return changed
 
 
 def _normalize_shape_name(shape):
-    return "polyline" if str(shape or "").strip().lower() == "polyline" else "curve"
+    return cm.normalize_shape_name(shape)
 
 
 def _active_link_shape():
@@ -502,30 +459,23 @@ def _active_link_shape_is_polyline():
 
 
 def _segment_shape_for_link(id_a, id_b, fallback_shape="curve"):
-    key = _link_key(id_a, id_b)
-    if not key:
-        return _normalize_shape_name(fallback_shape)
-    seg_map = STATE.get("segment_shapes", {})
-    if isinstance(seg_map, dict) and key in seg_map:
-        return _normalize_shape_name(seg_map.get(key))
-    return _normalize_shape_name(fallback_shape)
+    return cm.segment_shape_for_link(
+        STATE.get("segment_shapes", {}),
+        id_a,
+        id_b,
+        _anchor_index_map(),
+        fallback_shape=fallback_shape,
+    )
 
 
 def _set_segment_shape(id_a, id_b, shape):
-    key = _link_key(id_a, id_b)
-    if not key:
-        return False
-    val = _normalize_shape_name(shape)
-    seg_map = STATE.get("segment_shapes", {})
-    if not isinstance(seg_map, dict):
-        seg_map = {}
-    prev = _normalize_shape_name(seg_map.get(key, "curve"))
-    if val == "curve":
-        changed = key in seg_map and prev != "curve"
-        seg_map.pop(key, None)
-    else:
-        changed = prev != val
-        seg_map[key] = val
+    changed, seg_map = cm.set_segment_shape(
+        STATE.get("segment_shapes", {}),
+        id_a,
+        id_b,
+        shape,
+        _anchor_index_map(),
+    )
     STATE["segment_shapes"] = seg_map
     return changed
 
