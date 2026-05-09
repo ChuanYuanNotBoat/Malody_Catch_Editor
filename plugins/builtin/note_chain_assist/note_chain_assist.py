@@ -30,6 +30,7 @@ from modular.core.state import (
 )
 from modular.core import time_math as tm
 from modular.core import curve_model as cm
+from modular.core import sidecar_v3 as scv3
 from modular.runtime.plugin_loop import run_plugin_loop as run_protocol_loop
 
 TRANSLATIONS = {
@@ -1303,128 +1304,53 @@ def _deserialize_anchor(raw, context):
 
 
 def _parse_int(value, fallback=0):
-    try:
-        return int(value)
-    except Exception:
-        return int(fallback)
+    return scv3.parse_int(value, fallback)
 
 
 def _parse_float(value, fallback=0.0):
-    try:
-        return float(value)
-    except Exception:
-        return float(fallback)
+    return scv3.parse_float(value, fallback)
 
 
 def _triplet_from_any(value, fallback_float=0.0):
-    beat = _triplet_to_float(value)
-    if beat is None:
-        beat = _parse_float(value, fallback_float)
-    return _float_to_triplet(float(beat), SERIALIZE_DEN)
+    return scv3.triplet_from_any(
+        value,
+        fallback_float,
+        triplet_to_float=_triplet_to_float,
+        float_to_triplet=_float_to_triplet,
+        serialize_den=SERIALIZE_DEN,
+    )
 
 
 def _beat_from_any(value, fallback_float=0.0):
-    beat = _triplet_to_float(value)
-    if beat is None:
-        beat = _parse_float(value, fallback_float)
-    return float(beat)
+    return scv3.beat_from_any(value, fallback_float, triplet_to_float=_triplet_to_float)
 
 
 def _clone_dict_or_empty(value):
-    return _clone(value) if isinstance(value, dict) else {}
+    return scv3.clone_dict_or_empty(value, clone=_clone)
 
 
 def _unique_positive_int_list(value, default_id):
-    out = []
-    used = set()
-    if isinstance(value, list):
-        for raw in value:
-            iv = _parse_int(raw, 0)
-            if iv <= 0 or iv in used:
-                continue
-            used.add(iv)
-            out.append(iv)
-    if not out and default_id > 0:
-        out = [int(default_id)]
-    return out
+    return scv3.unique_positive_int_list(value, default_id)
 
 
 def _next_available_positive(used, start=1):
-    value = max(1, int(start))
-    while value in used:
-        value += 1
-    return value
+    return scv3.next_available_positive(used, start)
 
 
 def _default_group_entry(group_id, name):
-    return {"group_id": int(group_id), "group_name": str(name), "reserved": {}}
+    return scv3.default_group_entry(group_id, name)
 
 
 def _dedupe_group_names(groups):
-    used_names = set()
-    for g in groups:
-        base = str(g.get("group_name", "") or "").strip()
-        if not base:
-            base = f"group_{int(g.get('group_id', 0))}"
-        name = base
-        suffix = 2
-        while name.casefold() in used_names:
-            name = f"{base}_{suffix}"
-            suffix += 1
-        used_names.add(name.casefold())
-        g["group_name"] = name
+    scv3.dedupe_group_names(groups)
 
 
 def _normalize_group_entries(entries, default_group_id, default_name):
-    raw_entries = entries if isinstance(entries, list) else []
-    normalized = []
-    used_ids = set()
-    auto_id = max(2, int(STATE.get("next_group_id", 2)))
-
-    for raw in raw_entries:
-        if not isinstance(raw, dict):
-            continue
-        gid = _parse_int(raw.get("group_id", 0), 0)
-        if gid <= 0 or gid in used_ids:
-            gid = _next_available_positive(used_ids, auto_id)
-            auto_id = gid + 1
-        used_ids.add(gid)
-        normalized.append({
-            "group_id": gid,
-            "group_name": str(raw.get("group_name", "") or "").strip(),
-            "reserved": _clone_dict_or_empty(raw.get("reserved")),
-        })
-
-    if default_group_id not in used_ids:
-        normalized.insert(0, _default_group_entry(default_group_id, default_name))
-        used_ids.add(default_group_id)
-
-    _dedupe_group_names(normalized)
-    max_id = max(used_ids) if used_ids else 1
-    STATE["next_group_id"] = max(int(STATE.get("next_group_id", 2)), max_id + 1)
-    return normalized
+    return scv3.normalize_group_entries(entries, default_group_id, default_name, state=STATE, clone=_clone)
 
 
 def _ensure_groups_contain_ids(groups_key, required_ids, default_prefix):
-    groups = STATE.get(groups_key, [])
-    if not isinstance(groups, list):
-        groups = []
-    used_ids = set()
-    for g in groups:
-        if not isinstance(g, dict):
-            continue
-        gid = _parse_int(g.get("group_id", 0), 0)
-        if gid > 0:
-            used_ids.add(gid)
-    for gid in required_ids:
-        if gid in used_ids or gid <= 0:
-            continue
-        groups.append(_default_group_entry(gid, f"{default_prefix}_{gid}"))
-        used_ids.add(gid)
-    _dedupe_group_names(groups)
-    STATE[groups_key] = groups
-    if used_ids:
-        STATE["next_group_id"] = max(int(STATE.get("next_group_id", 2)), max(used_ids) + 1)
+    scv3.ensure_groups_contain_ids(groups_key, required_ids, default_prefix, state=STATE)
 
 
 def _cleanup_v3_metadata():
@@ -1632,8 +1558,7 @@ def _build_v3_payload():
 
 
 def _set_save_error(code, detail=""):
-    STATE["last_save_error"] = str(code or "")
-    STATE["last_save_error_detail"] = str(detail or "")
+    scv3.set_save_error(STATE, code, detail)
     if code:
         try:
             sys.stderr.write(f"[note_chain_assist] save failed: {code} {detail}\n")
@@ -1643,10 +1568,7 @@ def _set_save_error(code, detail=""):
 
 
 def _read_disk_payload(path):
-    if not os.path.exists(path):
-        return None
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return scv3.read_disk_payload(path, json_module=json, os_module=os)
 
 
 def _save_project(path, context=None):
