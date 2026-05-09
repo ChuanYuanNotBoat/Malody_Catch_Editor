@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import time
+import uuid
 from fractions import Fraction
 
 LEFT_BUTTON = 1
@@ -17,6 +18,9 @@ KEY_BACKSPACE = 0x01000003
 MAX_HISTORY = 128
 SERIALIZE_DEN = 288
 CURVE_CHECKPOINT_PREFIX = "Plugin Curve Edit"
+CURVE_SIDECAR_FORMAT_VERSION = 3
+DEFAULT_NODE_GROUP_ID = 1
+DEFAULT_CURVE_GROUP_ID = 1
 
 STYLE_PRESETS = [
     [4, 8, 12, 16],
@@ -176,6 +180,25 @@ STATE = {
     "link_drag": {"active": False, "source_anchor_id": -1, "hover_anchor_id": -1, "x": 0.0, "y": 0.0},
     "shift_down": False,
     "last_host_selected_note_ids": [],
+    "anchor_group_ids": {},
+    "anchor_reserved": {},
+    "anchor_compat_handles": {},
+    "curve_id_by_link": {},
+    "curve_no_by_link": {},
+    "curve_group_ids_by_link": {},
+    "curve_density_mode_by_link": {},
+    "curve_reserved_by_link": {},
+    "curve_special_joystick_by_link": {},
+    "node_groups": [{"group_id": DEFAULT_NODE_GROUP_ID, "group_name": "base", "reserved": {}}],
+    "curve_groups": [{"group_id": DEFAULT_CURVE_GROUP_ID, "group_name": "base", "reserved": {}}],
+    "next_curve_id": 1,
+    "next_group_id": 2,
+    "project_revision": 0,
+    "project_file_uuid": "",
+    "project_last_writer_instance": "",
+    "last_save_error": "",
+    "last_save_error_detail": "",
+    "instance_id": f"{os.getpid()}-{uuid.uuid4().hex[:12]}",
 }
 
 TRANSLATIONS.update(
@@ -315,12 +338,25 @@ def _capture_snapshot():
         "style": _clone(STATE.get("style", {})),
         "segment_denominators": _clone(STATE.get("segment_denominators", {})),
         "segment_shapes": _clone(STATE.get("segment_shapes", {})),
+        "anchor_group_ids": _clone(STATE.get("anchor_group_ids", {})),
+        "anchor_reserved": _clone(STATE.get("anchor_reserved", {})),
+        "anchor_compat_handles": _clone(STATE.get("anchor_compat_handles", {})),
+        "curve_id_by_link": _clone(STATE.get("curve_id_by_link", {})),
+        "curve_no_by_link": _clone(STATE.get("curve_no_by_link", {})),
+        "curve_group_ids_by_link": _clone(STATE.get("curve_group_ids_by_link", {})),
+        "curve_density_mode_by_link": _clone(STATE.get("curve_density_mode_by_link", {})),
+        "curve_reserved_by_link": _clone(STATE.get("curve_reserved_by_link", {})),
+        "curve_special_joystick_by_link": _clone(STATE.get("curve_special_joystick_by_link", {})),
+        "node_groups": _clone(STATE.get("node_groups", [])),
+        "curve_groups": _clone(STATE.get("curve_groups", [])),
         "selection_targets": _clone(STATE.get("selection_targets", {"anchors": True, "segments": True, "notes": False})),
         "curve_visible": bool(STATE.get("curve_visible", True)),
         "active_link_shape": _active_link_shape(),
         "note_curve_snap_enabled": bool(STATE.get("note_curve_snap_enabled", False)),
         "anchor_placement_enabled": bool(STATE.get("anchor_placement_enabled", False)),
         "next_anchor_id": int(STATE.get("next_anchor_id", 1)),
+        "next_curve_id": int(STATE.get("next_curve_id", 1)),
+        "next_group_id": int(STATE.get("next_group_id", 2)),
         "pending_connect_anchor_id": int(STATE.get("pending_connect_anchor_id", -1)),
     }
 
@@ -336,6 +372,28 @@ def _restore_snapshot(snapshot):
     STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
     seg_shapes = snapshot.get("segment_shapes")
     STATE["segment_shapes"] = _clone(seg_shapes) if isinstance(seg_shapes, dict) else {}
+    anchor_group_ids = snapshot.get("anchor_group_ids")
+    STATE["anchor_group_ids"] = _clone(anchor_group_ids) if isinstance(anchor_group_ids, dict) else {}
+    anchor_reserved = snapshot.get("anchor_reserved")
+    STATE["anchor_reserved"] = _clone(anchor_reserved) if isinstance(anchor_reserved, dict) else {}
+    anchor_compat = snapshot.get("anchor_compat_handles")
+    STATE["anchor_compat_handles"] = _clone(anchor_compat) if isinstance(anchor_compat, dict) else {}
+    curve_id_by_link = snapshot.get("curve_id_by_link")
+    STATE["curve_id_by_link"] = _clone(curve_id_by_link) if isinstance(curve_id_by_link, dict) else {}
+    curve_no_by_link = snapshot.get("curve_no_by_link")
+    STATE["curve_no_by_link"] = _clone(curve_no_by_link) if isinstance(curve_no_by_link, dict) else {}
+    curve_group_ids_by_link = snapshot.get("curve_group_ids_by_link")
+    STATE["curve_group_ids_by_link"] = _clone(curve_group_ids_by_link) if isinstance(curve_group_ids_by_link, dict) else {}
+    curve_density_mode_by_link = snapshot.get("curve_density_mode_by_link")
+    STATE["curve_density_mode_by_link"] = _clone(curve_density_mode_by_link) if isinstance(curve_density_mode_by_link, dict) else {}
+    curve_reserved_by_link = snapshot.get("curve_reserved_by_link")
+    STATE["curve_reserved_by_link"] = _clone(curve_reserved_by_link) if isinstance(curve_reserved_by_link, dict) else {}
+    curve_special_js = snapshot.get("curve_special_joystick_by_link")
+    STATE["curve_special_joystick_by_link"] = _clone(curve_special_js) if isinstance(curve_special_js, dict) else {}
+    node_groups = snapshot.get("node_groups")
+    STATE["node_groups"] = _clone(node_groups) if isinstance(node_groups, list) else [{"group_id": DEFAULT_NODE_GROUP_ID, "group_name": "base", "reserved": {}}]
+    curve_groups = snapshot.get("curve_groups")
+    STATE["curve_groups"] = _clone(curve_groups) if isinstance(curve_groups, list) else [{"group_id": DEFAULT_CURVE_GROUP_ID, "group_name": "base", "reserved": {}}]
     targets = snapshot.get("selection_targets")
     if isinstance(targets, dict):
         STATE["selection_targets"] = {
@@ -358,6 +416,8 @@ def _restore_snapshot(snapshot):
     STATE["shift_down"] = False
     STATE["pending_connect_anchor_id"] = int(snapshot.get("pending_connect_anchor_id", -1))
     STATE["next_anchor_id"] = max(1, int(snapshot.get("next_anchor_id", 1)))
+    STATE["next_curve_id"] = max(1, int(snapshot.get("next_curve_id", 1)))
+    STATE["next_group_id"] = max(2, int(snapshot.get("next_group_id", 2)))
     _ensure_anchor_ids()
     _cleanup_links_and_selection()
     _seed_missing_segment_denominators()
@@ -437,6 +497,11 @@ def _segment_denominator_for_link(id_a, id_b, fallback_den=4):
     key = _link_key(id_a, id_b)
     if not key:
         return max(1, int(fallback_den))
+    density_mode = STATE.get("curve_density_mode_by_link", {})
+    if isinstance(density_mode, dict):
+        mode = str(density_mode.get(key, "") or "").strip().lower()
+        if mode == "follow":
+            return max(1, int(fallback_den))
     seg_map = STATE.get("segment_denominators", {})
     if isinstance(seg_map, dict):
         try:
@@ -459,14 +524,21 @@ def _set_segment_denominator(id_a, id_b, den):
     seg_map = STATE.get("segment_denominators", {})
     if not isinstance(seg_map, dict):
         seg_map = {}
+    density_mode = STATE.get("curve_density_mode_by_link", {})
+    if not isinstance(density_mode, dict):
+        density_mode = {}
     prev = int(seg_map.get(key, 0) or 0)
     if val <= 0:
+        density_mode[key] = "follow"
+        STATE["curve_density_mode_by_link"] = density_mode
         if key in seg_map:
             seg_map.pop(key, None)
             STATE["segment_denominators"] = seg_map
             return True
         return False
     seg_map[key] = val
+    density_mode[key] = "fixed"
+    STATE["curve_density_mode_by_link"] = density_mode
     STATE["segment_denominators"] = seg_map
     return prev != val
 
@@ -538,6 +610,9 @@ def _seed_missing_segment_denominators(context=None):
     if not isinstance(seg_map, dict):
         seg_map = {}
     default_den = _context_default_segment_denominator(context)
+    density_mode = STATE.get("curve_density_mode_by_link", {})
+    if not isinstance(density_mode, dict):
+        density_mode = {}
     changed = False
     for raw in links:
         if not isinstance(raw, list) or len(raw) != 2:
@@ -546,6 +621,8 @@ def _seed_missing_segment_denominators(context=None):
         if norm is None:
             continue
         key = f"{norm[0]}:{norm[1]}"
+        if str(density_mode.get(key, "") or "").strip().lower() == "follow":
+            continue
         try:
             cur = int(seg_map.get(key, 0))
         except Exception:
@@ -639,6 +716,16 @@ def _cleanup_links_and_selection():
             if shape == "polyline":
                 seg_shapes_cleaned[key] = shape
     STATE["segment_shapes"] = seg_shapes_cleaned
+    density_mode_raw = STATE.get("curve_density_mode_by_link", {})
+    density_mode_cleaned = {}
+    if isinstance(density_mode_raw, dict):
+        for key, raw_val in density_mode_raw.items():
+            if key not in valid_link_keys:
+                continue
+            mode = str(raw_val or "").strip().lower()
+            if mode in ("fixed", "follow"):
+                density_mode_cleaned[key] = mode
+    STATE["curve_density_mode_by_link"] = density_mode_cleaned
 
     selected_anchor_ids = [int(aid) for aid in STATE.get("selected_anchor_ids", []) if int(aid) in valid_ids]
     if not _selection_enabled("anchors"):
@@ -1393,28 +1480,594 @@ def _deserialize_anchor(raw, context):
     return None
 
 
+def _parse_int(value, fallback=0):
+    try:
+        return int(value)
+    except Exception:
+        return int(fallback)
+
+
+def _parse_float(value, fallback=0.0):
+    try:
+        return float(value)
+    except Exception:
+        return float(fallback)
+
+
+def _triplet_from_any(value, fallback_float=0.0):
+    beat = _triplet_to_float(value)
+    if beat is None:
+        beat = _parse_float(value, fallback_float)
+    return _float_to_triplet(float(beat), SERIALIZE_DEN)
+
+
+def _beat_from_any(value, fallback_float=0.0):
+    beat = _triplet_to_float(value)
+    if beat is None:
+        beat = _parse_float(value, fallback_float)
+    return float(beat)
+
+
+def _clone_dict_or_empty(value):
+    return _clone(value) if isinstance(value, dict) else {}
+
+
+def _unique_positive_int_list(value, default_id):
+    out = []
+    used = set()
+    if isinstance(value, list):
+        for raw in value:
+            iv = _parse_int(raw, 0)
+            if iv <= 0 or iv in used:
+                continue
+            used.add(iv)
+            out.append(iv)
+    if not out and default_id > 0:
+        out = [int(default_id)]
+    return out
+
+
+def _next_available_positive(used, start=1):
+    value = max(1, int(start))
+    while value in used:
+        value += 1
+    return value
+
+
+def _default_group_entry(group_id, name):
+    return {"group_id": int(group_id), "group_name": str(name), "reserved": {}}
+
+
+def _dedupe_group_names(groups):
+    used_names = set()
+    for g in groups:
+        base = str(g.get("group_name", "") or "").strip()
+        if not base:
+            base = f"group_{int(g.get('group_id', 0))}"
+        name = base
+        suffix = 2
+        while name.casefold() in used_names:
+            name = f"{base}_{suffix}"
+            suffix += 1
+        used_names.add(name.casefold())
+        g["group_name"] = name
+
+
+def _normalize_group_entries(entries, default_group_id, default_name):
+    raw_entries = entries if isinstance(entries, list) else []
+    normalized = []
+    used_ids = set()
+    auto_id = max(2, int(STATE.get("next_group_id", 2)))
+
+    for raw in raw_entries:
+        if not isinstance(raw, dict):
+            continue
+        gid = _parse_int(raw.get("group_id", 0), 0)
+        if gid <= 0 or gid in used_ids:
+            gid = _next_available_positive(used_ids, auto_id)
+            auto_id = gid + 1
+        used_ids.add(gid)
+        normalized.append({
+            "group_id": gid,
+            "group_name": str(raw.get("group_name", "") or "").strip(),
+            "reserved": _clone_dict_or_empty(raw.get("reserved")),
+        })
+
+    if default_group_id not in used_ids:
+        normalized.insert(0, _default_group_entry(default_group_id, default_name))
+        used_ids.add(default_group_id)
+
+    _dedupe_group_names(normalized)
+    max_id = max(used_ids) if used_ids else 1
+    STATE["next_group_id"] = max(int(STATE.get("next_group_id", 2)), max_id + 1)
+    return normalized
+
+
+def _ensure_groups_contain_ids(groups_key, required_ids, default_prefix):
+    groups = STATE.get(groups_key, [])
+    if not isinstance(groups, list):
+        groups = []
+    used_ids = set()
+    for g in groups:
+        if not isinstance(g, dict):
+            continue
+        gid = _parse_int(g.get("group_id", 0), 0)
+        if gid > 0:
+            used_ids.add(gid)
+    for gid in required_ids:
+        if gid in used_ids or gid <= 0:
+            continue
+        groups.append(_default_group_entry(gid, f"{default_prefix}_{gid}"))
+        used_ids.add(gid)
+    _dedupe_group_names(groups)
+    STATE[groups_key] = groups
+    if used_ids:
+        STATE["next_group_id"] = max(int(STATE.get("next_group_id", 2)), max(used_ids) + 1)
+
+
+def _cleanup_v3_metadata():
+    valid_link_keys = set()
+    for raw in STATE.get("links", []):
+        if not isinstance(raw, list) or len(raw) != 2:
+            continue
+        norm = _normalize_link(raw[0], raw[1])
+        if norm is None:
+            continue
+        valid_link_keys.add(f"{norm[0]}:{norm[1]}")
+
+    valid_anchor_ids = set(int(a.get("id", 0)) for a in STATE.get("anchors", []) if isinstance(a, dict))
+
+    for key in ("anchor_group_ids", "anchor_reserved", "anchor_compat_handles"):
+        raw_map = STATE.get(key, {})
+        cleaned = {}
+        if isinstance(raw_map, dict):
+            for raw_id, raw_val in raw_map.items():
+                aid = _parse_int(raw_id, 0)
+                if aid <= 0 or aid not in valid_anchor_ids:
+                    continue
+                cleaned[str(aid)] = _clone(raw_val)
+        STATE[key] = cleaned
+
+    for key in (
+        "curve_id_by_link",
+        "curve_no_by_link",
+        "curve_group_ids_by_link",
+        "curve_density_mode_by_link",
+        "curve_reserved_by_link",
+        "curve_special_joystick_by_link",
+    ):
+        raw_map = STATE.get(key, {})
+        cleaned = {}
+        if isinstance(raw_map, dict):
+            for raw_link_key, raw_val in raw_map.items():
+                if raw_link_key not in valid_link_keys:
+                    continue
+                cleaned[raw_link_key] = _clone(raw_val)
+        STATE[key] = cleaned
+
+    required_node_group_ids = set()
+    for aid in valid_anchor_ids:
+        key = str(aid)
+        gids = _unique_positive_int_list(STATE.get("anchor_group_ids", {}).get(key, []), DEFAULT_NODE_GROUP_ID)
+        STATE["anchor_group_ids"][key] = gids
+        required_node_group_ids.update(gids)
+        STATE["anchor_reserved"][key] = _clone_dict_or_empty(STATE.get("anchor_reserved", {}).get(key))
+
+    required_curve_group_ids = set()
+    density_mode = STATE.get("curve_density_mode_by_link", {})
+    if not isinstance(density_mode, dict):
+        density_mode = {}
+    for link_key in valid_link_keys:
+        gids = _unique_positive_int_list(STATE.get("curve_group_ids_by_link", {}).get(link_key, []), DEFAULT_CURVE_GROUP_ID)
+        STATE["curve_group_ids_by_link"][link_key] = gids
+        required_curve_group_ids.update(gids)
+        mode = str(density_mode.get(link_key, "") or "").strip().lower()
+        if mode not in ("fixed", "follow"):
+            den = _parse_int(STATE.get("segment_denominators", {}).get(link_key, 0), 0)
+            density_mode[link_key] = "fixed" if den > 0 else "follow"
+        STATE["curve_reserved_by_link"][link_key] = _clone_dict_or_empty(STATE.get("curve_reserved_by_link", {}).get(link_key))
+        STATE["curve_special_joystick_by_link"][link_key] = _clone_dict_or_empty(
+            STATE.get("curve_special_joystick_by_link", {}).get(link_key)
+        )
+    STATE["curve_density_mode_by_link"] = density_mode
+
+    STATE["node_groups"] = _normalize_group_entries(STATE.get("node_groups", []), DEFAULT_NODE_GROUP_ID, "base")
+    STATE["curve_groups"] = _normalize_group_entries(STATE.get("curve_groups", []), DEFAULT_CURVE_GROUP_ID, "base")
+    _ensure_groups_contain_ids("node_groups", required_node_group_ids, "node_group")
+    _ensure_groups_contain_ids("curve_groups", required_curve_group_ids, "curve_group")
+
+
+def _ensure_curve_identity_and_numbers():
+    _cleanup_links_and_selection()
+    _cleanup_v3_metadata()
+
+    ordered_keys = []
+    for raw in STATE.get("links", []):
+        if not isinstance(raw, list) or len(raw) != 2:
+            continue
+        norm = _normalize_link(raw[0], raw[1])
+        if norm is None:
+            continue
+        ordered_keys.append(f"{norm[0]}:{norm[1]}")
+
+    existing_id_map = _clone_dict_or_empty(STATE.get("curve_id_by_link", {}))
+    existing_no_map = _clone_dict_or_empty(STATE.get("curve_no_by_link", {}))
+    id_out = {}
+    no_out = {}
+
+    used_ids = set()
+    next_curve_id = max(1, _parse_int(STATE.get("next_curve_id", 1), 1))
+    for key in ordered_keys:
+        cid = _parse_int(existing_id_map.get(key, 0), 0)
+        if cid <= 0 or cid in used_ids:
+            cid = _next_available_positive(used_ids, next_curve_id)
+        used_ids.add(cid)
+        id_out[key] = cid
+        if cid >= next_curve_id:
+            next_curve_id = cid + 1
+
+    used_numbers = set()
+    for key in ordered_keys:
+        cno = _parse_int(existing_no_map.get(key, 0), 0)
+        if cno <= 0 or cno in used_numbers:
+            cno = _next_available_positive(used_numbers, 1)
+        used_numbers.add(cno)
+        no_out[key] = cno
+
+    STATE["curve_id_by_link"] = id_out
+    STATE["curve_no_by_link"] = no_out
+    STATE["next_curve_id"] = max(1, next_curve_id)
+
+
+def _serialize_node_for_v3(anchor):
+    aid = int(anchor.get("id", 0))
+    key = str(aid)
+    out_handle = anchor.get("out", [0.0, 0.0])
+    out_dx = _parse_float(out_handle[0] if isinstance(out_handle, list) and len(out_handle) >= 1 else 0.0, 0.0)
+    out_db = _parse_float(out_handle[1] if isinstance(out_handle, list) and len(out_handle) >= 2 else 0.0, 0.0)
+    compat_raw = STATE.get("anchor_compat_handles", {}).get(key, {})
+    compat = _clone_dict_or_empty(compat_raw)
+    if not compat:
+        compat = {
+            "in": {
+                "lane_dx": _parse_float(anchor.get("in", [0.0, 0.0])[0] if isinstance(anchor.get("in"), list) else 0.0, 0.0),
+                "beat_delta": _triplet_from_any(anchor.get("in", [0.0, 0.0])[1] if isinstance(anchor.get("in"), list) else 0.0, 0.0),
+            },
+            "out": {
+                "lane_dx": out_dx,
+                "beat_delta": _triplet_from_any(out_db, out_db),
+            },
+        }
+    return {
+        "node_id": aid,
+        "lane_x": _parse_float(anchor.get("lane_x", 0.0), 0.0),
+        "beat": _triplet_from_any(anchor.get("beat", 0.0), 0.0),
+        "joystick": {"lane_dx": out_dx, "beat_delta": _triplet_from_any(out_db, out_db)},
+        "group_ids": _unique_positive_int_list(STATE.get("anchor_group_ids", {}).get(key, []), DEFAULT_NODE_GROUP_ID),
+        "reserved": _clone_dict_or_empty(STATE.get("anchor_reserved", {}).get(key)),
+        "compat_handles": compat,
+        "smooth": bool(anchor.get("smooth", True)),
+    }
+
+
+def _serialize_curve_for_v3(norm):
+    key = f"{norm[0]}:{norm[1]}"
+    den = _parse_int(STATE.get("segment_denominators", {}).get(key, 0), 0)
+    density_mode = str(STATE.get("curve_density_mode_by_link", {}).get(key, "") or "").strip().lower()
+    if density_mode == "follow":
+        density = {"mode": "follow"}
+    elif den > 0:
+        density = {"mode": "fixed", "denominator": den}
+    else:
+        density = {"mode": "follow"}
+    shape = _normalize_shape_name(STATE.get("segment_shapes", {}).get(key, "curve"))
+    return {
+        "curve_id": _parse_int(STATE.get("curve_id_by_link", {}).get(key, 0), 0),
+        "curve_no": _parse_int(STATE.get("curve_no_by_link", {}).get(key, 0), 0),
+        "node_ids": [int(norm[0]), int(norm[1])],
+        "density": density,
+        "style_category": shape,
+        "group_ids": _unique_positive_int_list(STATE.get("curve_group_ids_by_link", {}).get(key, []), DEFAULT_CURVE_GROUP_ID),
+        "special_joystick_reserved": _clone_dict_or_empty(STATE.get("curve_special_joystick_by_link", {}).get(key)),
+        "reserved": _clone_dict_or_empty(STATE.get("curve_reserved_by_link", {}).get(key)),
+    }
+
+
+def _build_v3_payload():
+    _ensure_curve_identity_and_numbers()
+    anchors = STATE.get("anchors", [])
+    nodes = [_serialize_node_for_v3(a) for a in anchors]
+
+    curves = []
+    for raw in STATE.get("links", []):
+        if not isinstance(raw, list) or len(raw) != 2:
+            continue
+        norm = _normalize_link(raw[0], raw[1])
+        if norm is None:
+            continue
+        curves.append(_serialize_curve_for_v3(norm))
+
+    revision = max(0, _parse_int(STATE.get("project_revision", 0), 0))
+    file_uuid = str(STATE.get("project_file_uuid", "") or "").strip()
+    if not file_uuid:
+        file_uuid = uuid.uuid4().hex
+        STATE["project_file_uuid"] = file_uuid
+    return {
+        "format_version": CURVE_SIDECAR_FORMAT_VERSION,
+        "coordinate_space": "chart",
+        "revision": revision,
+        "file_uuid": file_uuid,
+        "updated_at": int(time.time() * 1000),
+        "last_writer_instance": str(STATE.get("instance_id", "") or ""),
+        "nodes": nodes,
+        "curves": curves,
+        "node_groups": _clone(STATE.get("node_groups", [])),
+        "curve_groups": _clone(STATE.get("curve_groups", [])),
+        "style": STATE.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"}),
+        "active_link_shape": _active_link_shape(),
+        "note_curve_snap_enabled": _note_curve_snap_enabled(),
+    }
+
+
+def _set_save_error(code, detail=""):
+    STATE["last_save_error"] = str(code or "")
+    STATE["last_save_error_detail"] = str(detail or "")
+    if code:
+        try:
+            sys.stderr.write(f"[note_chain_assist] save failed: {code} {detail}\n")
+            sys.stderr.flush()
+        except Exception:
+            pass
+
+
+def _read_disk_payload(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def _save_project(path, context=None):
     if not isinstance(path, str) or not path.strip():
+        _set_save_error("invalid_path")
         return False
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        payload = {
-            "format_version": 2,
-            "coordinate_space": "chart",
-            "anchors": [_serialize_anchor(a) for a in STATE.get("anchors", [])],
-            "links": _clone(STATE.get("links", [])),
-            "segment_denominators": _clone(STATE.get("segment_denominators", {})),
-            "segment_shapes": _clone(STATE.get("segment_shapes", {})),
-            "style": STATE.get("style", {"denominators": [4, 8, 12, 16], "style_name": "balanced"}),
-            "active_link_shape": _active_link_shape(),
-            "note_curve_snap_enabled": _note_curve_snap_enabled(),
-        }
-        with open(path, "w", encoding="utf-8") as f:
+
+        disk_payload = None
+        if os.path.exists(path):
+            try:
+                disk_payload = _read_disk_payload(path)
+            except Exception as ex:
+                _set_save_error("read_existing_failed", str(ex))
+                return False
+
+        disk_revision = 0
+        if isinstance(disk_payload, dict):
+            disk_revision = max(0, _parse_int(disk_payload.get("revision", 0), 0))
+        state_revision = max(0, _parse_int(STATE.get("project_revision", 0), 0))
+        if disk_revision != state_revision:
+            _set_save_error("revision_conflict", "file updated by another instance, please refresh")
+            return False
+
+        payload = _build_v3_payload()
+        payload["revision"] = disk_revision + 1
+        payload["updated_at"] = int(time.time() * 1000)
+        payload["last_writer_instance"] = str(STATE.get("instance_id", "") or "")
+
+        tmp_path = f"{path}.tmp.{os.getpid()}.{int(time.time() * 1000)}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, path)
+
         STATE["project_dirty"] = False
+        STATE["project_revision"] = int(payload.get("revision", 0))
+        STATE["project_file_uuid"] = str(payload.get("file_uuid", "") or "")
+        STATE["project_last_writer_instance"] = str(payload.get("last_writer_instance", "") or "")
+        _set_save_error("", "")
         return True
-    except Exception:
+    except Exception as ex:
+        _set_save_error("write_failed", str(ex))
         return False
+
+
+def _load_project_v2_payload(payload, context):
+    anchors_raw = payload.get("anchors")
+    parsed = []
+    if isinstance(anchors_raw, list):
+        for raw in anchors_raw:
+            a = _deserialize_anchor(raw, context)
+            if a is not None:
+                parsed.append(a)
+    STATE["anchors"] = parsed
+    _ensure_anchor_ids()
+
+    links_raw = payload.get("links")
+    if isinstance(links_raw, list):
+        STATE["links"] = _clone(links_raw)
+    else:
+        STATE["links"] = _default_links_for_anchors()
+    seg_dens = payload.get("segment_denominators")
+    STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
+    seg_shapes = payload.get("segment_shapes")
+    if isinstance(seg_shapes, dict):
+        STATE["segment_shapes"] = _clone(seg_shapes)
+    else:
+        legacy_shape = _normalize_shape_name(payload.get("curve_shape", "curve"))
+        STATE["segment_shapes"] = {}
+        if legacy_shape == "polyline":
+            for raw in STATE.get("links", []):
+                if isinstance(raw, list) and len(raw) == 2:
+                    norm = _normalize_link(raw[0], raw[1])
+                    if norm is not None:
+                        STATE["segment_shapes"][f"{norm[0]}:{norm[1]}"] = "polyline"
+
+    STATE["anchor_group_ids"] = {}
+    STATE["anchor_reserved"] = {}
+    STATE["anchor_compat_handles"] = {}
+    for a in STATE.get("anchors", []):
+        aid = int(a.get("id", 0))
+        if aid <= 0:
+            continue
+        key = str(aid)
+        STATE["anchor_group_ids"][key] = [DEFAULT_NODE_GROUP_ID]
+        STATE["anchor_reserved"][key] = {}
+        STATE["anchor_compat_handles"][key] = {
+            "in": {
+                "lane_dx": _parse_float(a.get("in", [0.0, 0.0])[0] if isinstance(a.get("in"), list) else 0.0, 0.0),
+                "beat_delta": _triplet_from_any(a.get("in", [0.0, 0.0])[1] if isinstance(a.get("in"), list) else 0.0, 0.0),
+            },
+            "out": {
+                "lane_dx": _parse_float(a.get("out", [0.0, 0.0])[0] if isinstance(a.get("out"), list) else 0.0, 0.0),
+                "beat_delta": _triplet_from_any(a.get("out", [0.0, 0.0])[1] if isinstance(a.get("out"), list) else 0.0, 0.0),
+            },
+        }
+
+    STATE["curve_id_by_link"] = {}
+    STATE["curve_no_by_link"] = {}
+    STATE["curve_group_ids_by_link"] = {}
+    STATE["curve_density_mode_by_link"] = {}
+    STATE["curve_reserved_by_link"] = {}
+    STATE["curve_special_joystick_by_link"] = {}
+    STATE["node_groups"] = [_default_group_entry(DEFAULT_NODE_GROUP_ID, "base")]
+    STATE["curve_groups"] = [_default_group_entry(DEFAULT_CURVE_GROUP_ID, "base")]
+
+    style = payload.get("style")
+    if isinstance(style, dict):
+        STATE["style"] = {
+            "style_name": str(style.get("style_name", "loaded")),
+            "denominators": _sanitize_denominators(style.get("denominators"), context),
+        }
+    active_shape = payload.get("active_link_shape", payload.get("curve_shape", "curve"))
+    STATE["active_link_shape"] = _normalize_shape_name(active_shape)
+    STATE["note_curve_snap_enabled"] = bool(payload.get("note_curve_snap_enabled", False))
+    STATE["project_revision"] = 0
+    STATE["project_file_uuid"] = str(STATE.get("project_file_uuid", "") or "") or uuid.uuid4().hex
+    STATE["project_last_writer_instance"] = str(payload.get("last_writer_instance", "") or "")
+    _cleanup_links_and_selection()
+    _seed_missing_segment_denominators(context)
+    _ensure_curve_identity_and_numbers()
+
+
+def _load_project_v3_payload(payload, context):
+    nodes = payload.get("nodes")
+    parsed_anchors = []
+    anchor_group_ids = {}
+    anchor_reserved = {}
+    anchor_compat = {}
+    if isinstance(nodes, list):
+        for raw in nodes:
+            if not isinstance(raw, dict):
+                continue
+            aid = _parse_int(raw.get("node_id", raw.get("id", 0)), 0)
+            if aid <= 0:
+                continue
+            lane_x = _parse_float(raw.get("lane_x", 0.0), 0.0)
+            beat = _beat_from_any(raw.get("beat"), 0.0)
+            joystick_raw = raw.get("joystick")
+            if isinstance(joystick_raw, dict):
+                joy_dx = _parse_float(joystick_raw.get("lane_dx", 0.0), 0.0)
+                joy_db = _beat_from_any(joystick_raw.get("beat_delta"), 0.0)
+            else:
+                compat_raw = raw.get("compat_handles", {})
+                out_raw = compat_raw.get("out", {}) if isinstance(compat_raw, dict) else {}
+                joy_dx = _parse_float(out_raw.get("lane_dx", 0.0), 0.0)
+                joy_db = _beat_from_any(out_raw.get("beat_delta"), 0.0)
+
+            lane_x, beat = _snap_chart_point(context, lane_x, beat)
+            parsed_anchors.append({
+                "id": aid,
+                "lane_x": lane_x,
+                "beat": beat,
+                "in": [-joy_dx, -joy_db],
+                "out": [joy_dx, joy_db],
+                "smooth": bool(raw.get("smooth", True)),
+            })
+            key = str(aid)
+            anchor_group_ids[key] = _unique_positive_int_list(raw.get("group_ids"), DEFAULT_NODE_GROUP_ID)
+            anchor_reserved[key] = _clone_dict_or_empty(raw.get("reserved"))
+            compat_payload = raw.get("compat_handles")
+            if isinstance(compat_payload, dict) and compat_payload:
+                anchor_compat[key] = _clone_dict_or_empty(compat_payload)
+            else:
+                anchor_compat[key] = {
+                    "in": {"lane_dx": -joy_dx, "beat_delta": _triplet_from_any(-joy_db, -joy_db)},
+                    "out": {"lane_dx": joy_dx, "beat_delta": _triplet_from_any(joy_db, joy_db)},
+                }
+
+    parsed_anchors.sort(key=lambda a: (float(a.get("beat", 0.0)), float(a.get("lane_x", 0.0)), int(a.get("id", 0))))
+    STATE["anchors"] = parsed_anchors
+    _ensure_anchor_ids()
+
+    curve_id_by_link = {}
+    curve_no_by_link = {}
+    curve_group_ids_by_link = {}
+    curve_density_mode_by_link = {}
+    curve_reserved_by_link = {}
+    curve_special_joystick_by_link = {}
+    links = []
+    dedup_links = set()
+    curves = payload.get("curves")
+    if isinstance(curves, list):
+        for raw in curves:
+            if not isinstance(raw, dict):
+                continue
+            node_ids = raw.get("node_ids")
+            if not isinstance(node_ids, list) or len(node_ids) != 2:
+                continue
+            norm = _normalize_link(node_ids[0], node_ids[1])
+            if norm is None or norm in dedup_links:
+                continue
+            dedup_links.add(norm)
+            links.append([norm[0], norm[1]])
+            key = f"{norm[0]}:{norm[1]}"
+            curve_id_by_link[key] = _parse_int(raw.get("curve_id", 0), 0)
+            curve_no_by_link[key] = _parse_int(raw.get("curve_no", 0), 0)
+            curve_group_ids_by_link[key] = _unique_positive_int_list(raw.get("group_ids"), DEFAULT_CURVE_GROUP_ID)
+            curve_reserved_by_link[key] = _clone_dict_or_empty(raw.get("reserved"))
+            curve_special_joystick_by_link[key] = _clone_dict_or_empty(raw.get("special_joystick_reserved"))
+
+            density = raw.get("density", {})
+            mode = str(density.get("mode", "follow") if isinstance(density, dict) else "follow").strip().lower()
+            if mode == "fixed":
+                den = _parse_int(density.get("denominator", 0), 0) if isinstance(density, dict) else 0
+                if den > 0:
+                    STATE["segment_denominators"][key] = den
+                    curve_density_mode_by_link[key] = "fixed"
+            else:
+                curve_density_mode_by_link[key] = "follow"
+            style_category = raw.get("style_category", "curve")
+            if _normalize_shape_name(style_category) == "polyline":
+                STATE["segment_shapes"][key] = "polyline"
+
+    STATE["links"] = links if links else _default_links_for_anchors()
+    STATE["anchor_group_ids"] = anchor_group_ids
+    STATE["anchor_reserved"] = anchor_reserved
+    STATE["anchor_compat_handles"] = anchor_compat
+    STATE["curve_id_by_link"] = curve_id_by_link
+    STATE["curve_no_by_link"] = curve_no_by_link
+    STATE["curve_group_ids_by_link"] = curve_group_ids_by_link
+    STATE["curve_density_mode_by_link"] = curve_density_mode_by_link
+    STATE["curve_reserved_by_link"] = curve_reserved_by_link
+    STATE["curve_special_joystick_by_link"] = curve_special_joystick_by_link
+    STATE["node_groups"] = _normalize_group_entries(payload.get("node_groups", []), DEFAULT_NODE_GROUP_ID, "base")
+    STATE["curve_groups"] = _normalize_group_entries(payload.get("curve_groups", []), DEFAULT_CURVE_GROUP_ID, "base")
+
+    style = payload.get("style")
+    if isinstance(style, dict):
+        STATE["style"] = {
+            "style_name": str(style.get("style_name", "loaded")),
+            "denominators": _sanitize_denominators(style.get("denominators"), context),
+        }
+    active_shape = payload.get("active_link_shape", payload.get("curve_shape", "curve"))
+    STATE["active_link_shape"] = _normalize_shape_name(active_shape)
+    STATE["note_curve_snap_enabled"] = bool(payload.get("note_curve_snap_enabled", False))
+    STATE["project_revision"] = max(0, _parse_int(payload.get("revision", 0), 0))
+    STATE["project_file_uuid"] = str(payload.get("file_uuid", "") or "").strip() or uuid.uuid4().hex
+    STATE["project_last_writer_instance"] = str(payload.get("last_writer_instance", "") or "")
+    _cleanup_links_and_selection()
+    _seed_missing_segment_denominators(context)
+    _ensure_curve_identity_and_numbers()
 
 
 def _load_project(path, context):
@@ -1424,52 +2077,20 @@ def _load_project(path, context):
         with open(path, "r", encoding="utf-8") as f:
             payload = json.load(f)
 
-        anchors_raw = payload.get("anchors")
-        parsed = []
-        if isinstance(anchors_raw, list):
-            for raw in anchors_raw:
-                a = _deserialize_anchor(raw, context)
-                if a is not None:
-                    parsed.append(a)
-        STATE["anchors"] = parsed
-        _ensure_anchor_ids()
-
-        links_raw = payload.get("links")
-        if isinstance(links_raw, list):
-            STATE["links"] = _clone(links_raw)
+        STATE["segment_denominators"] = {}
+        STATE["segment_shapes"] = {}
+        format_version = _parse_int(payload.get("format_version", 0), 0)
+        if format_version >= CURVE_SIDECAR_FORMAT_VERSION or ("nodes" in payload and "curves" in payload):
+            _load_project_v3_payload(payload, context)
         else:
-            STATE["links"] = _default_links_for_anchors()
-        seg_dens = payload.get("segment_denominators")
-        STATE["segment_denominators"] = _clone(seg_dens) if isinstance(seg_dens, dict) else {}
-        seg_shapes = payload.get("segment_shapes")
-        if isinstance(seg_shapes, dict):
-            STATE["segment_shapes"] = _clone(seg_shapes)
-        else:
-            legacy_shape = _normalize_shape_name(payload.get("curve_shape", "curve"))
-            STATE["segment_shapes"] = {}
-            if legacy_shape == "polyline":
-                for raw in STATE.get("links", []):
-                    if isinstance(raw, list) and len(raw) == 2:
-                        norm = _normalize_link(raw[0], raw[1])
-                        if norm is not None:
-                            STATE["segment_shapes"][f"{norm[0]}:{norm[1]}"] = "polyline"
-        _cleanup_links_and_selection()
-        _seed_missing_segment_denominators(context)
-
-        style = payload.get("style")
-        if isinstance(style, dict):
-            STATE["style"] = {
-                "style_name": str(style.get("style_name", "loaded")),
-                "denominators": _sanitize_denominators(style.get("denominators"), context),
-            }
-        active_shape = payload.get("active_link_shape", payload.get("curve_shape", "curve"))
-        STATE["active_link_shape"] = _normalize_shape_name(active_shape)
-        STATE["note_curve_snap_enabled"] = bool(payload.get("note_curve_snap_enabled", False))
+            _load_project_v2_payload(payload, context)
 
         _invalidate_curve_cache()
         STATE["project_dirty"] = False
+        _set_save_error("", "")
         return True
-    except Exception:
+    except Exception as ex:
+        _set_save_error("load_failed", str(ex))
         return False
 
 
@@ -1493,6 +2114,25 @@ def _ensure_project_context(context):
             STATE["anchors"] = _default_anchors()
             _ensure_anchor_ids()
             STATE["links"] = _default_links_for_anchors()
+            STATE["segment_denominators"] = {}
+            STATE["segment_shapes"] = {}
+            STATE["anchor_group_ids"] = {}
+            STATE["anchor_reserved"] = {}
+            STATE["anchor_compat_handles"] = {}
+            STATE["curve_id_by_link"] = {}
+            STATE["curve_no_by_link"] = {}
+            STATE["curve_group_ids_by_link"] = {}
+            STATE["curve_density_mode_by_link"] = {}
+            STATE["curve_reserved_by_link"] = {}
+            STATE["curve_special_joystick_by_link"] = {}
+            STATE["node_groups"] = [_default_group_entry(DEFAULT_NODE_GROUP_ID, "base")]
+            STATE["curve_groups"] = [_default_group_entry(DEFAULT_CURVE_GROUP_ID, "base")]
+            STATE["next_curve_id"] = 1
+            STATE["next_group_id"] = 2
+            STATE["project_revision"] = 0
+            STATE["project_file_uuid"] = uuid.uuid4().hex
+            STATE["project_last_writer_instance"] = ""
+            _set_save_error("", "")
             STATE["project_dirty"] = True
             _invalidate_curve_cache()
         STATE["history"] = []
@@ -1745,6 +2385,19 @@ def _reset_anchors(context):
     STATE["links"] = []
     STATE["segment_denominators"] = {}
     STATE["segment_shapes"] = {}
+    STATE["anchor_group_ids"] = {}
+    STATE["anchor_reserved"] = {}
+    STATE["anchor_compat_handles"] = {}
+    STATE["curve_id_by_link"] = {}
+    STATE["curve_no_by_link"] = {}
+    STATE["curve_group_ids_by_link"] = {}
+    STATE["curve_density_mode_by_link"] = {}
+    STATE["curve_reserved_by_link"] = {}
+    STATE["curve_special_joystick_by_link"] = {}
+    STATE["node_groups"] = [_default_group_entry(DEFAULT_NODE_GROUP_ID, "base")]
+    STATE["curve_groups"] = [_default_group_entry(DEFAULT_CURVE_GROUP_ID, "base")]
+    STATE["next_curve_id"] = 1
+    STATE["next_group_id"] = 2
     STATE["drag"] = {"mode": "", "index": -1}
     STATE["selected_anchor_ids"] = []
     STATE["selected_links"] = []
@@ -2755,7 +3408,8 @@ def _run_tool_action(payload):
         return True
     if action_id in ("commit_curve_to_notes", "commit_curve_to_notes_sidebar", "commit_context_segments_to_notes"):
         if STATE["project_path"] and STATE["project_dirty"]:
-            _save_project(STATE["project_path"], context)
+            if not _save_project(STATE["project_path"], context):
+                return False
         return True
     if action_id == "toggle_anchor_placement":
         STATE["anchor_placement_enabled"] = not bool(STATE.get("anchor_placement_enabled", False))

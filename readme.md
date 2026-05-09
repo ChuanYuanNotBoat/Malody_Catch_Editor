@@ -37,6 +37,8 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 - Undo / redo / 撤销与重做
 - Plugin system (experimental)
   插件系统（实验性）
+- Curve sidecar V3 (`.mcce-plugin/*.curve_tbd.json`): nodes/curves/groups schema, CAS revision conflict guard, stable `curve_id` + unique `curve_no`.
+  曲线 sidecar V3（`.mcce-plugin/*.curve_tbd.json`）：节点/曲线/分组结构、CAS 版本冲突保护、稳定 `curve_id` 与唯一 `curve_no`。
 
 ---
 
