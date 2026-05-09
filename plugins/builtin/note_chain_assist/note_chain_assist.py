@@ -1907,6 +1907,28 @@ def _try_seed_curve_project_from_source(context, target_curve_path):
         return False
 
 
+def _sync_project_sidecar_to_chart(chart_path):
+    if bool(STATE.get("project_load_failed", False)):
+        return False
+    source_sidecar = str(STATE.get("project_path", "") or "").strip()
+    if not source_sidecar or not os.path.exists(source_sidecar):
+        return False
+    chart_path = str(chart_path or "").strip()
+    if not chart_path:
+        return False
+    target_dir = os.path.join(os.path.dirname(chart_path), ".mcce-plugin")
+    target_name = os.path.splitext(os.path.basename(chart_path))[0] + ".curve_tbd.json"
+    target_sidecar = os.path.join(target_dir, target_name)
+    if os.path.normcase(os.path.abspath(source_sidecar)) == os.path.normcase(os.path.abspath(target_sidecar)):
+        return True
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        shutil.copy2(source_sidecar, target_sidecar)
+        return True
+    except Exception:
+        return False
+
+
 def _mark_dirty(context, flush=False):
     STATE["project_dirty"] = True
     if not flush:
@@ -2362,6 +2384,7 @@ def run_plugin_loop():
         "build_batch_edit": _build_batch_edit,
         "respond": _respond,
         "save_project": _save_project,
+        "sync_sidecar_to_chart": _sync_project_sidecar_to_chart,
     })
 
 

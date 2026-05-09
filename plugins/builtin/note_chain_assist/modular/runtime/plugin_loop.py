@@ -19,6 +19,7 @@ def run_plugin_loop(callbacks):
     build_batch_edit = callbacks["build_batch_edit"]
     respond = callbacks["respond"]
     save_project = callbacks["save_project"]
+    sync_sidecar_to_chart = callbacks["sync_sidecar_to_chart"]
 
     for raw in sys.stdin:
         raw = raw.strip()
@@ -48,6 +49,9 @@ def run_plugin_loop(callbacks):
                     state["suppress_persist_once"] = False
                     if state["project_path"] and state["project_dirty"]:
                         save_project(state["project_path"], state.get("last_context", {}))
+                    chart_path = str(payload.get("chart_path", "") or "").strip()
+                    if chart_path:
+                        sync_sidecar_to_chart(chart_path)
                 elif event == "shutdown":
                     break
                 elif event == "onHostUndo":
