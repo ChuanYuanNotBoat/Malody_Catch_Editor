@@ -2396,28 +2396,20 @@ def _handle_canvas_input(payload):
                 if bool(anchor_result.get("immediate_return", False)):
                     return input_ui.build_canvas_response(consumed, cursor, status, request_checkpoint, response_callbacks)
             elif seg_hit is not None:
-                if ctrl:
-                    _toggle_selected_link(seg_hit[0], seg_hit[1])
-                else:
-                    _set_single_selected_link(seg_hit[0], seg_hit[1])
-                if _selection_enabled("anchors"):
-                    seg_anchor_ids = []
-                    for aid in (int(seg_hit[0]), int(seg_hit[1])):
-                        if aid > 0 and aid not in seg_anchor_ids:
-                            seg_anchor_ids.append(aid)
-                    if ctrl:
-                        merged = [int(v) for v in STATE.get("selected_anchor_ids", []) if int(v) > 0]
-                        for aid in seg_anchor_ids:
-                            if aid not in merged:
-                                merged.append(aid)
-                        STATE["selected_anchor_ids"] = merged
-                    else:
-                        STATE["selected_anchor_ids"] = seg_anchor_ids
-                else:
-                    STATE["selected_anchor_ids"] = []
-                consumed = True
-                cursor = "pointing_hand"
-                status = tr(STATE["last_context"], "status_segment_selected")
+                segment_result = input_ui.handle_mouse_down_segment_hit(
+                    seg_hit,
+                    ctrl,
+                    {
+                        "state": STATE,
+                        "tr": tr,
+                        "toggle_selected_link": _toggle_selected_link,
+                        "set_single_selected_link": _set_single_selected_link,
+                        "selection_enabled": _selection_enabled,
+                    },
+                )
+                consumed = bool(segment_result.get("consumed", consumed))
+                cursor = str(segment_result.get("cursor", cursor))
+                status = str(segment_result.get("status", status))
             elif (ctrl or is_select_mode) and not notes_selectable:
                 STATE["box_select"] = {"active": True, "start": [x, y], "end": [x, y], "append": bool(ctrl)}
                 consumed = True

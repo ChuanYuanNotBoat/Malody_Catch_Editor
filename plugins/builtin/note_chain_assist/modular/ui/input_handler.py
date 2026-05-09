@@ -584,3 +584,38 @@ def handle_mouse_down_anchor_hit(aidx, x, y, ts, ctrl, shift, callbacks):
         "request_checkpoint": False,
         "immediate_return": False,
     }
+
+
+def handle_mouse_down_segment_hit(seg_hit, ctrl, callbacks):
+    state = callbacks["state"]
+    tr = callbacks["tr"]
+    toggle_selected_link = callbacks["toggle_selected_link"]
+    set_single_selected_link = callbacks["set_single_selected_link"]
+    selection_enabled = callbacks["selection_enabled"]
+
+    if ctrl:
+        toggle_selected_link(seg_hit[0], seg_hit[1])
+    else:
+        set_single_selected_link(seg_hit[0], seg_hit[1])
+
+    if selection_enabled("anchors"):
+        seg_anchor_ids = []
+        for aid in (int(seg_hit[0]), int(seg_hit[1])):
+            if aid > 0 and aid not in seg_anchor_ids:
+                seg_anchor_ids.append(aid)
+        if ctrl:
+            merged = [int(v) for v in state.get("selected_anchor_ids", []) if int(v) > 0]
+            for aid in seg_anchor_ids:
+                if aid not in merged:
+                    merged.append(aid)
+            state["selected_anchor_ids"] = merged
+        else:
+            state["selected_anchor_ids"] = seg_anchor_ids
+    else:
+        state["selected_anchor_ids"] = []
+
+    return {
+        "consumed": True,
+        "cursor": "pointing_hand",
+        "status": tr(state["last_context"], "status_segment_selected"),
+    }
