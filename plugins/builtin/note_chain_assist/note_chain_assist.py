@@ -860,9 +860,12 @@ def _extract_host_action_title(action_text):
     if not text:
         return ""
     # Host action text is usually "Plugin Action: <title>" (localized prefix possible).
-    sep_idx = text.find(":")
-    if sep_idx < 0:
-        sep_idx = text.find("：")
+    sep_idx = -1
+    for sep in (":", "\uFF1A"):
+        idx = text.find(sep)
+        if idx >= 0:
+            sep_idx = idx
+            break
     if sep_idx >= 0:
         return text[sep_idx + 1 :].strip()
     return text
@@ -1878,6 +1881,8 @@ def _ensure_project_context(context):
             STATE["project_dirty"] = False
         if path_changed:
             STATE["project_path"] = path
+            # Reset default link shape when switching chart/project.
+            STATE["active_link_shape"] = "curve"
         STATE["project_load_failed"] = False
         STATE["suppress_persist_once"] = False
         _try_seed_curve_project_from_source(context, path)
@@ -1912,6 +1917,9 @@ def _ensure_project_context(context):
                 _set_save_error("", "")
                 STATE["project_dirty"] = True
             _invalidate_curve_cache()
+        # Always start a chart/project with curve as the default shape for
+        # newly created links, regardless of persisted sidecar preference.
+        STATE["active_link_shape"] = "curve"
         STATE["history"] = []
         STATE["history_index"] = -1
         _push_history()
@@ -2199,19 +2207,26 @@ def _selected_links_all_polyline():
 
 def _toggle_polyline_for_active_or_selected(context):
     links = _selected_target_links()
-    target = "polyline"
-    if links and all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links):
-        target = "curve"
-    elif not links and _active_link_shape_is_polyline():
-        target = "curve"
+    # With selected targets, only mutate those segments and keep the default
+    # shape for future links unchanged.
+    if links:
+        target = "polyline"
+        if all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links):
+            target = "curve"
+        changed = False
+        for id0, id1 in links:
+            changed = _set_segment_shape(id0, id1, target) or changed
+        if changed:
+            _invalidate_curve_cache()
+            _mark_dirty(context, flush=False)
+        return True
 
+    # No selection: this is an explicit default-shape toggle for new links.
+    prev_active = _active_link_shape()
+    target = "curve" if _active_link_shape_is_polyline() else "polyline"
     STATE["active_link_shape"] = target
-    changed = False
-    for id0, id1 in links:
-        changed = _set_segment_shape(id0, id1, target) or changed
-    if links and changed:
-        _invalidate_curve_cache()
-    _record_history_state(context)
+    if prev_active != target:
+        _mark_dirty(context, flush=False)
     return True
 
 
@@ -2259,13 +2274,12 @@ def _toggle_polyline_for_context_links(context):
         return False
 
     target = "curve" if all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links) else "polyline"
-    STATE["active_link_shape"] = target
     changed = False
     for id0, id1 in links:
         changed = _set_segment_shape(id0, id1, target) or changed
     if changed:
         _invalidate_curve_cache()
-    _record_history_state(context)
+        _mark_dirty(context, flush=False)
     return True
 
 
@@ -2280,7 +2294,7 @@ def _set_density_for_selected_segments(context, target_den):
     for id0, id1 in links:
         changed = _set_segment_denominator(id0, id1, den) or changed
     if changed:
-        _record_history_state(context)
+        _mark_dirty(context, flush=False)
     return changed
 
 
@@ -2369,7 +2383,7 @@ def _run_tool_action(payload):
             "ensure_project_context": _ensure_project_context,
             "reset_anchors": _reset_anchors,
             "save_project": _save_project,
-            "record_history_state": _record_history_state,
+            "mark_dirty": _mark_dirty,
             "toggle_polyline_for_active_or_selected": _toggle_polyline_for_active_or_selected,
             "toggle_polyline_for_context_links": _toggle_polyline_for_context_links,
             "note_curve_snap_enabled": _note_curve_snap_enabled,

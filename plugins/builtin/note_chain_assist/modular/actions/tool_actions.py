@@ -211,7 +211,7 @@ def run_tool_action(payload, callbacks):
     ensure_project_context = callbacks["ensure_project_context"]
     reset_anchors = callbacks["reset_anchors"]
     save_project = callbacks["save_project"]
-    record_history_state = callbacks["record_history_state"]
+    mark_dirty = callbacks["mark_dirty"]
     toggle_polyline_for_active_or_selected = callbacks["toggle_polyline_for_active_or_selected"]
     toggle_polyline_for_context_links = callbacks["toggle_polyline_for_context_links"]
     note_curve_snap_enabled = callbacks["note_curve_snap_enabled"]
@@ -238,11 +238,10 @@ def run_tool_action(payload, callbacks):
         return True
     if action_id == "toggle_anchor_placement":
         state["anchor_placement_enabled"] = not bool(state.get("anchor_placement_enabled", False))
-        record_history_state(context)
+        # UI mode toggle only: avoid polluting plugin/host undo stacks.
         return True
     if action_id == "toggle_curve_visible":
         state["curve_visible"] = not bool(state.get("curve_visible", True))
-        record_history_state(context)
         return True
     if action_id == "toggle_polyline_mode":
         return toggle_polyline_for_active_or_selected(context)
@@ -250,26 +249,23 @@ def run_tool_action(payload, callbacks):
         return toggle_polyline_for_context_links(context)
     if action_id == "toggle_note_curve_snap":
         state["note_curve_snap_enabled"] = not note_curve_snap_enabled()
-        record_history_state(context)
+        mark_dirty(context, flush=False)
         return True
     if action_id == "toggle_select_anchors":
         cur = bool(state.get("selection_targets", {}).get("anchors", True))
         state["selection_targets"]["anchors"] = not cur
         if not state["selection_targets"]["anchors"]:
             state["selected_anchor_ids"] = []
-        record_history_state(context)
         return True
     if action_id == "toggle_select_segments":
         cur = bool(state.get("selection_targets", {}).get("segments", True))
         state["selection_targets"]["segments"] = not cur
         if not state["selection_targets"]["segments"]:
             state["selected_links"] = []
-        record_history_state(context)
         return True
     if action_id == "toggle_select_notes":
         cur = bool(state.get("selection_targets", {}).get("notes", False))
         state["selection_targets"]["notes"] = not cur
-        record_history_state(context)
         return True
     if action_id == "set_segment_density_follow":
         return set_density_for_selected_segments(context, 0)
@@ -304,7 +300,7 @@ def run_tool_action(payload, callbacks):
     if action_id == "import_style_preset":
         ok = load_style(context)
         if ok:
-            record_history_state(context)
+            mark_dirty(context, flush=False)
         return ok
     return False
 
