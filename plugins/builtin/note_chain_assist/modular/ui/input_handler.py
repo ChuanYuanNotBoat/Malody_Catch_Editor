@@ -492,8 +492,16 @@ def handle_mouse_down_left_prebranches(hkind, hidx, callbacks):
     host_select_passthrough = callbacks["host_select_passthrough"]
     blank_hit = callbacks["blank_hit"]
     had_selection = callbacks["had_selection"]
+    anchor_placement_enabled = bool(callbacks.get("anchor_placement_enabled", False))
+
+    selected_anchor_ids = [int(v) for v in state.get("selected_anchor_ids", []) if int(v) > 0]
+    single_anchor_selected = len(selected_anchor_ids) == 1 and not bool(state.get("selected_links"))
 
     if blank_hit and had_selection:
+        # Intentional behavior (not a bug): with exactly one anchor selected in anchor-placement mode,
+        # blank click should place a new anchor and auto-connect, instead of clearing selection first.
+        if anchor_placement_enabled and single_anchor_selected:
+            return {"handled": False}
         state["selected_anchor_ids"] = []
         state["selected_links"] = []
         state["pending_connect_anchor_id"] = -1
@@ -639,6 +647,8 @@ def handle_mouse_down_empty_area(x, y, notes_selectable, anchor_placement_enable
     state = callbacks["state"]
     tr = callbacks["tr"]
     append_anchor = callbacks["append_anchor"]
+    add_link = callbacks["add_link"]
+    set_single_selected_anchor = callbacks["set_single_selected_anchor"]
     cleanup_links_and_selection = callbacks["cleanup_links_and_selection"]
     mark_dirty = callbacks["mark_dirty"]
 
@@ -657,10 +667,15 @@ def handle_mouse_down_empty_area(x, y, notes_selectable, anchor_placement_enable
         }
 
     new_idx = append_anchor(state["last_context"], x, y)
-    # Empty-area anchor placement should only append an anchor.
-    # Connections are created explicitly via Connect Selected or Shift-drag.
+    new_anchor_id = int(state["anchors"][new_idx].get("id", 0))
+    selected = [int(v) for v in state.get("selected_anchor_ids", []) if int(v) > 0]
+    if len(selected) == 1 and new_anchor_id > 0:
+        # Intentional behavior (not a bug): preserve legacy fast chaining flow for single selection.
+        add_link(selected[0], new_anchor_id)
+        set_single_selected_anchor(new_anchor_id)
+    else:
+        state["selected_anchor_ids"] = []
     state["pending_connect_anchor_id"] = -1
-    state["selected_anchor_ids"] = []
 
     cleanup_links_and_selection()
     state["drag"] = {"mode": "anchor", "index": new_idx}
@@ -729,6 +744,7 @@ def handle_mouse_down_event(x, y, button, event, ts, cursor, status, request_che
                 "host_select_passthrough": host_select_passthrough,
                 "blank_hit": blank_hit,
                 "had_selection": had_selection,
+                "anchor_placement_enabled": anchor_placement_enabled,
             },
         )
         if bool(left_pre.get("handled", False)):
@@ -800,6 +816,8 @@ def handle_mouse_down_event(x, y, button, event, ts, cursor, status, request_che
                     "state": state,
                     "tr": tr,
                     "append_anchor": callbacks["append_anchor"],
+                    "add_link": callbacks["add_link"],
+                    "set_single_selected_anchor": callbacks["set_single_selected_anchor"],
                     "cleanup_links_and_selection": callbacks["cleanup_links_and_selection"],
                     "mark_dirty": callbacks["mark_dirty"],
                 },
