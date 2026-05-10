@@ -2259,12 +2259,13 @@ def _toggle_polyline_for_context_links(context):
         return False
 
     target = "curve" if all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links) else "polyline"
+    STATE["active_link_shape"] = target
     changed = False
     for id0, id1 in links:
         changed = _set_segment_shape(id0, id1, target) or changed
     if changed:
         _invalidate_curve_cache()
-        _record_history_state(context)
+    _record_history_state(context)
     return True
 
 
@@ -2352,7 +2353,7 @@ def _list_tool_actions():
         {
             "state": STATE,
             "tr": tr,
-            "selected_links_all_polyline": _selected_links_all_polyline,
+            "active_link_shape_is_polyline": _active_link_shape_is_polyline,
             "note_curve_snap_enabled": _note_curve_snap_enabled,
             "context_links_all_polyline": _context_links_all_polyline,
             "context_density_menu_state": _context_density_menu_state,

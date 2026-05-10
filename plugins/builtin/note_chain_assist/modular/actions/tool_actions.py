@@ -2,7 +2,7 @@
 def list_tool_actions(callbacks):
     state = callbacks["state"]
     tr = callbacks["tr"]
-    selected_links_all_polyline = callbacks["selected_links_all_polyline"]
+    active_link_shape_is_polyline = callbacks["active_link_shape_is_polyline"]
     note_curve_snap_enabled = callbacks["note_curve_snap_enabled"]
     context_links_all_polyline = callbacks["context_links_all_polyline"]
     context_density_menu_state = callbacks["context_density_menu_state"]
@@ -13,6 +13,16 @@ def list_tool_actions(callbacks):
     density_mode = str(density_state.get("mode", ""))
     density_den = int(density_state.get("den", 0) or 0)
     density_has_target = bool(density_state.get("has_target", False))
+    right_panel_target_shape_key = "shape_curve" if active_link_shape_is_polyline() else "shape_polyline"
+    context_target_shape_key = "shape_curve" if context_links_all_polyline() else "shape_polyline"
+    right_panel_toggle_title = (
+        f"{tr(state.get('last_context', {}), 'action_polyline_mode')}: "
+        f"{tr(state.get('last_context', {}), right_panel_target_shape_key)}"
+    )
+    context_toggle_title = (
+        f"{tr(state.get('last_context', {}), 'action_toggle_context_shape')}: "
+        f"{tr(state.get('last_context', {}), context_target_shape_key)}"
+    )
 
     actions = [
         {
@@ -43,12 +53,12 @@ def list_tool_actions(callbacks):
         },
         {
             "action_id": "toggle_polyline_mode",
-            "title": tr(state.get("last_context", {}), "action_polyline_mode"),
+            "title": right_panel_toggle_title,
             "description": tr(state.get("last_context", {}), "action_polyline_mode_desc"),
             "placement": "right_note_panel",
             "requires_undo_snapshot": False,
             "checkable": True,
-            "checked": selected_links_all_polyline(),
+            "checked": active_link_shape_is_polyline(),
         },
         {
             "action_id": "toggle_note_curve_snap",
@@ -102,12 +112,10 @@ def list_tool_actions(callbacks):
         },
         {
             "action_id": "toggle_context_polyline_mode",
-            "title": tr(state.get("last_context", {}), "action_toggle_context_shape"),
+            "title": context_toggle_title,
             "description": tr(state.get("last_context", {}), "action_polyline_context_desc"),
             "placement": "plugin_context_menu",
             "requires_undo_snapshot": False,
-            "checkable": True,
-            "checked": context_links_all_polyline(),
         },
         {
             "action_id": "reset_curve",
