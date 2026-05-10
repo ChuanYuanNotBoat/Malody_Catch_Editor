@@ -1248,6 +1248,43 @@ def _enforce_handle_time_constraints(index, context):
         a["in"][1] = _clamp(a["in"][1], in_lower, 0.0)
 
 
+def _connected_neighbor_anchor_indices(anchor_index=None, anchor_id=None):
+    anchors = STATE.get("anchors", [])
+    idx = int(anchor_index) if isinstance(anchor_index, int) else -1
+    if anchor_id is None:
+        if not (0 <= idx < len(anchors)):
+            return []
+        anchor_id = int(anchors[idx].get("id", 0))
+    else:
+        anchor_id = int(anchor_id)
+
+    if anchor_id <= 0:
+        return []
+
+    out = set()
+    for i0, i1, id0, id1, _a0, _a1 in _connected_anchor_segments():
+        if id0 == anchor_id:
+            out.add(int(i1))
+        elif id1 == anchor_id:
+            out.add(int(i0))
+    if 0 <= idx < len(anchors) and idx in out:
+        out.remove(idx)
+    return [i for i in sorted(out) if 0 <= i < len(anchors)]
+
+
+def _enforce_anchor_and_connected_handle_constraints(index, context):
+    if not (0 <= index < len(STATE["anchors"])):
+        return
+    neighbors = _connected_neighbor_anchor_indices(anchor_index=index)
+    if not neighbors:
+        # Unconnected anchors should not trigger any curve constraint pass.
+        return
+    _enforce_anchor_time_order(index, context)
+    _enforce_handle_time_constraints(index, context)
+    for neighbor_idx in neighbors:
+        _enforce_handle_time_constraints(neighbor_idx, context)
+
+
 def _serialize_anchor(a):
     return {
         "id": int(a.get("id", 0)),
@@ -2028,10 +2065,7 @@ def _append_anchor(context, cx, cy):
         ob = _clamp(db * 0.25, -2.0, 2.0)
 
     anchors.insert(idx, {"id": _new_anchor_id(), "lane_x": lane_x, "beat": beat, "in": [-ol, -ob], "out": [ol, ob], "smooth": True})
-    _enforce_anchor_time_order(idx, context)
-    _enforce_handle_time_constraints(idx, context)
-    _enforce_handle_time_constraints(idx - 1, context)
-    _enforce_handle_time_constraints(idx + 1, context)
+    _enforce_anchor_and_connected_handle_constraints(idx, context)
     _cleanup_links_and_selection()
     _invalidate_curve_cache()
     return idx
@@ -2305,6 +2339,7 @@ def _handle_canvas_input(payload):
             "snap_chart_point": _snap_chart_point,
             "enforce_anchor_time_order": _enforce_anchor_time_order,
             "enforce_handle_time_constraints": _enforce_handle_time_constraints,
+            "enforce_anchor_and_connected_handle_constraints": _enforce_anchor_and_connected_handle_constraints,
             "set_anchor_in_abs_chart": _set_anchor_in_abs_chart,
             "set_anchor_out_abs_chart": _set_anchor_out_abs_chart,
             "apply_box_selection": _apply_box_selection,

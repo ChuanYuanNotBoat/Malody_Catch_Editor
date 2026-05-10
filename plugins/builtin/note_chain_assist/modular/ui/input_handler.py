@@ -383,8 +383,8 @@ def handle_drag_edit_on_mouse_move(x, y, callbacks):
     state = callbacks["state"]
     canvas_to_chart = callbacks["canvas_to_chart"]
     snap_chart_point = callbacks["snap_chart_point"]
-    enforce_anchor_time_order = callbacks["enforce_anchor_time_order"]
     enforce_handle_time_constraints = callbacks["enforce_handle_time_constraints"]
+    enforce_anchor_and_connected_handle_constraints = callbacks["enforce_anchor_and_connected_handle_constraints"]
     set_anchor_in_abs_chart = callbacks["set_anchor_in_abs_chart"]
     set_anchor_out_abs_chart = callbacks["set_anchor_out_abs_chart"]
     invalidate_curve_cache = callbacks["invalidate_curve_cache"]
@@ -403,10 +403,7 @@ def handle_drag_edit_on_mouse_move(x, y, callbacks):
         lane_x, beat = snap_chart_point(state["last_context"], lane_x, beat, snap_beat=True, snap_lane=False)
         a["lane_x"] = lane_x
         a["beat"] = beat
-        enforce_anchor_time_order(idx, state["last_context"])
-        enforce_handle_time_constraints(idx, state["last_context"])
-        if idx > 0:
-            enforce_handle_time_constraints(idx - 1, state["last_context"])
+        enforce_anchor_and_connected_handle_constraints(idx, state["last_context"])
         cursor = "size_all"
     elif mode == "in":
         lane_x, beat = canvas_to_chart(state["last_context"], x, y)
@@ -642,8 +639,6 @@ def handle_mouse_down_empty_area(x, y, notes_selectable, anchor_placement_enable
     state = callbacks["state"]
     tr = callbacks["tr"]
     append_anchor = callbacks["append_anchor"]
-    add_link = callbacks["add_link"]
-    set_single_selected_anchor = callbacks["set_single_selected_anchor"]
     cleanup_links_and_selection = callbacks["cleanup_links_and_selection"]
     mark_dirty = callbacks["mark_dirty"]
 
@@ -662,28 +657,10 @@ def handle_mouse_down_empty_area(x, y, notes_selectable, anchor_placement_enable
         }
 
     new_idx = append_anchor(state["last_context"], x, y)
-    new_anchor_id = int(state["anchors"][new_idx].get("id", 0))
-    selected = [int(v) for v in state.get("selected_anchor_ids", []) if int(v) > 0]
-    keep_selected_new_anchor = False
-    if len(selected) == 1:
-        add_link(selected[0], new_anchor_id)
-        state["pending_connect_anchor_id"] = -1
-        keep_selected_new_anchor = True
-    elif len(selected) == 0:
-        pending_id = int(state.get("pending_connect_anchor_id", -1))
-        if pending_id > 0:
-            add_link(pending_id, new_anchor_id)
-            state["pending_connect_anchor_id"] = -1
-        else:
-            state["pending_connect_anchor_id"] = new_anchor_id
-    else:
-        state["pending_connect_anchor_id"] = -1
-        keep_selected_new_anchor = False
-
-    if keep_selected_new_anchor:
-        set_single_selected_anchor(new_anchor_id)
-    else:
-        state["selected_anchor_ids"] = []
+    # Empty-area anchor placement should only append an anchor.
+    # Connections are created explicitly via Connect Selected or Shift-drag.
+    state["pending_connect_anchor_id"] = -1
+    state["selected_anchor_ids"] = []
 
     cleanup_links_and_selection()
     state["drag"] = {"mode": "anchor", "index": new_idx}
@@ -823,8 +800,6 @@ def handle_mouse_down_event(x, y, button, event, ts, cursor, status, request_che
                     "state": state,
                     "tr": tr,
                     "append_anchor": callbacks["append_anchor"],
-                    "add_link": callbacks["add_link"],
-                    "set_single_selected_anchor": callbacks["set_single_selected_anchor"],
                     "cleanup_links_and_selection": callbacks["cleanup_links_and_selection"],
                     "mark_dirty": callbacks["mark_dirty"],
                 },
@@ -911,8 +886,8 @@ def handle_mouse_move_event(x, y, event, cursor, status, request_checkpoint, cal
             "state": state,
             "canvas_to_chart": callbacks["canvas_to_chart"],
             "snap_chart_point": callbacks["snap_chart_point"],
-            "enforce_anchor_time_order": callbacks["enforce_anchor_time_order"],
             "enforce_handle_time_constraints": callbacks["enforce_handle_time_constraints"],
+            "enforce_anchor_and_connected_handle_constraints": callbacks["enforce_anchor_and_connected_handle_constraints"],
             "set_anchor_in_abs_chart": callbacks["set_anchor_in_abs_chart"],
             "set_anchor_out_abs_chart": callbacks["set_anchor_out_abs_chart"],
             "invalidate_curve_cache": callbacks["invalidate_curve_cache"],
