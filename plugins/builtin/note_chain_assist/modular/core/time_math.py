@@ -69,12 +69,23 @@ def triplet_to_float(tri):
 
 
 def context_dims(context):
-    cw = max(1.0, float(context.get("canvas_width", 1024.0)))
-    ch = max(1.0, float(context.get("canvas_height", 768.0)))
-    l = float(context.get("lane_left", 64.0))
-    r = float(context.get("lane_right", cw - 64.0))
+    cw = max(1.0, float(context.get("canvas_width", 1200.0)))
+    ch = max(1.0, float(context.get("canvas_height", 800.0)))
     lane_w = max(1.0, float(context.get("lane_width", 512.0)))
-    available = max(1.0, r - l)
+
+    # Host currently provides left/right margins. Keep this path as primary to
+    # preserve the legacy coordinate mapping used before modularization.
+    has_margin_fields = isinstance(context, dict) and ("left_margin" in context or "right_margin" in context)
+    if has_margin_fields:
+        l = float(context.get("left_margin", 0.0))
+        r_margin = float(context.get("right_margin", 0.0))
+        available = max(1.0, cw - l - r_margin)
+        r = l + available
+    else:
+        # Fallback for contexts that expose lane bounds directly.
+        l = float(context.get("lane_left", 64.0))
+        r = float(context.get("lane_right", cw - 64.0))
+        available = max(1.0, r - l)
     return cw, ch, l, r, lane_w, available
 
 

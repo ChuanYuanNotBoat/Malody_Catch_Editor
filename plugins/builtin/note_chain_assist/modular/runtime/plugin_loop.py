@@ -53,6 +53,12 @@ def run_plugin_loop(callbacks):
                     if chart_path:
                         sync_sidecar_to_chart(chart_path)
                 elif event == "shutdown":
+                    if (
+                        (not bool(state.get("suppress_persist_once", False)))
+                        and state["project_path"]
+                        and state["project_dirty"]
+                    ):
+                        save_project(state["project_path"], state.get("last_context", {}))
                     break
                 elif event == "onHostUndo":
                     action_text = str(payload.get("action_text", "") or "")
