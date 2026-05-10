@@ -11,6 +11,7 @@
 #include "utils/Logger.h"
 #include <QDir>
 #include <QDebug>
+#include <QFileInfo>
 
 namespace
 {
@@ -37,7 +38,39 @@ QStringList availableSkinBaseDirs()
 
 QString resolvePluginsDir()
 {
+    const QString envDirRaw = qEnvironmentVariable("MCCE_PLUGINS_DIR").trimmed();
+    if (!envDirRaw.isEmpty())
+    {
+        QFileInfo envInfo(envDirRaw);
+        const QString envPath = envInfo.isAbsolute()
+                                    ? envInfo.absoluteFilePath()
+                                    : QDir(QCoreApplication::applicationDirPath()).absoluteFilePath(envDirRaw);
+        return QDir(envPath).absolutePath();
+    }
+
     const QString appDir = QCoreApplication::applicationDirPath();
+    const QDir appDirObj(appDir);
+
+    // Developer convenience: when running from a local build directory, prefer
+    // repository plugins so script/manifest edits are hot-reloadable without
+    // recompiling the host executable.
+    const QStringList devRootCandidates = {
+        appDirObj.absoluteFilePath("../.."),
+        appDirObj.absoluteFilePath(".."),
+    };
+    for (const QString &root : devRootCandidates)
+    {
+        const QString cmakePath = QDir(root).filePath("CMakeLists.txt");
+        const QString srcPath = QDir(root).filePath("src");
+        const QString pluginsPath = QDir(root).filePath("plugins");
+        if (QFileInfo::exists(cmakePath) &&
+            QFileInfo(srcPath).isDir() &&
+            QFileInfo(pluginsPath).isDir())
+        {
+            return QDir(pluginsPath).absolutePath();
+        }
+    }
+
     return QDir(appDir).filePath("plugins");
 }
 } // namespace
@@ -164,6 +197,7 @@ bool Application::initialize()
             if (!QDir().mkpath(pluginsDir))
                 Logger::warn(QString("Failed to create plugins directory: %1").arg(pluginsDir));
             Logger::info(QString("Plugin directory: %1").arg(QDir(pluginsDir).absolutePath()));
+            Logger::info(QString("Plugin hot-reload mode: edit files under this directory and click Reload Plugins."));
             m_pluginManager->loadPlugins(pluginsDir, m_mainWindow);
             m_pluginSystemReady = true;
             Logger::info("Plugins loaded.");
