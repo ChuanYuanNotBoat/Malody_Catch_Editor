@@ -455,7 +455,9 @@ def analyze_mouse_down_context(x, y, event, callbacks):
     seg_hit = find_segment_hit(state["last_context"], x, y) if selection_enabled("segments") else None
     mods = int(event.get("modifiers", 0))
     ctrl = (mods & ctrl_modifier_mask) != 0
-    shift = event_has_shift(event) or bool(state.get("shift_down", False))
+    # For pointer interactions, trust real-time event modifiers only.
+    # This avoids stale keyboard-state cache causing accidental link-drag.
+    shift = event_has_shift(event)
     host_sel = state["last_context"].get("host_selection_tool", {}) if isinstance(state["last_context"], dict) else {}
     is_select_mode = bool(host_sel.get("is_select_mode", False)) if isinstance(host_sel, dict) else False
     notes_selectable = selection_enabled("notes")
@@ -864,7 +866,8 @@ def handle_mouse_move_event(x, y, event, cursor, status, request_checkpoint, cal
             "immediate_return": True,
         }
 
-    shift_now = event_has_shift(event) or bool(state.get("shift_down", False))
+    # Pointer move should also follow real-time modifier state.
+    shift_now = event_has_shift(event)
     switch_result = maybe_switch_anchor_drag_to_link_drag(
         x,
         y,

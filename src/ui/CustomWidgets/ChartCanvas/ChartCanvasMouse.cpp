@@ -14,7 +14,6 @@
 #include <QMessageBox>
 #include <QDateTime>
 #include <QCoreApplication>
-#include <QGuiApplication>
 #include <QHash>
 #include <algorithm>
 #include <cmath>
@@ -43,10 +42,12 @@ void fillPluginEventModifiers(PluginInterface::CanvasInputEvent *outEvent, Qt::K
 {
     if (!outEvent)
         return;
-    const Qt::KeyboardModifiers merged = eventModifiers | QGuiApplication::queryKeyboardModifiers();
-    outEvent->modifiers = static_cast<int>(merged);
-    outEvent->shiftDown = merged.testFlag(Qt::ShiftModifier);
-    outEvent->ctrlDown = merged.testFlag(Qt::ControlModifier);
+    // Trust modifier state from the current input event only.
+    // Mixing in global queryKeyboardModifiers may produce stale flags and
+    // cause accidental Shift/Ctrl gesture paths.
+    outEvent->modifiers = static_cast<int>(eventModifiers);
+    outEvent->shiftDown = eventModifiers.testFlag(Qt::ShiftModifier);
+    outEvent->ctrlDown = eventModifiers.testFlag(Qt::ControlModifier);
 }
 
 struct ColorDivisionOption
