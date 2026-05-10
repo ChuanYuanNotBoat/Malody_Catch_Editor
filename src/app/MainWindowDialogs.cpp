@@ -40,6 +40,7 @@
 #include <QColorDialog>
 #include <QPainter>
 #include <QTabWidget>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QVariant>
 #include <QSlider>
@@ -889,7 +890,7 @@ void MainWindow::openSessionSettings()
 {
     QDialog dialog(this);
     dialog.setWindowTitle(tr("Session Settings"));
-    dialog.setMinimumSize(420, 220);
+    dialog.setMinimumSize(460, 260);
     dialog.setStyleSheet(themedDialogCss(Settings::instance().backgroundColor()));
 
     QVBoxLayout *layout = new QVBoxLayout(&dialog);
@@ -906,10 +907,21 @@ void MainWindow::openSessionSettings()
     connect(autoSaveCheck, &QCheckBox::toggled, autoSaveIntervalSpin, &QWidget::setEnabled);
     QCheckBox *audioCorrectionCheck = new QCheckBox(tr("Enable Audio Correction (Testing)"), sessionGroup);
     audioCorrectionCheck->setChecked(Settings::instance().audioCorrectionEnabled());
+    QComboBox *fpsCapCombo = new QComboBox(sessionGroup);
+    fpsCapCombo->addItem(tr("Lock 60 FPS"), 60);
+    fpsCapCombo->addItem(tr("Lock 90 FPS"), 90);
+    fpsCapCombo->addItem(tr("Lock 120 FPS"), 120);
+    fpsCapCombo->addItem(tr("Unlimited"), 0);
+    {
+        const int currentCap = Settings::instance().playbackFrameRateCap();
+        const int idx = fpsCapCombo->findData(currentCap);
+        fpsCapCombo->setCurrentIndex(idx >= 0 ? idx : 2);
+    }
 
     sessionLayout->addRow(autoSaveCheck);
     sessionLayout->addRow(tr("Auto Save Interval:"), autoSaveIntervalSpin);
     sessionLayout->addRow(audioCorrectionCheck);
+    sessionLayout->addRow(tr("Playback FPS Cap:"), fpsCapCombo);
     layout->addWidget(sessionGroup);
     layout->addStretch();
 
@@ -919,8 +931,12 @@ void MainWindow::openSessionSettings()
         Settings::instance().setAutoSaveEnabled(autoSaveCheck->isChecked());
         Settings::instance().setAutoSaveIntervalSec(autoSaveIntervalSpin->value());
         Settings::instance().setAudioCorrectionEnabled(audioCorrectionCheck->isChecked());
+        const int fpsCap = fpsCapCombo->currentData().toInt();
+        Settings::instance().setPlaybackFrameRateCap(fpsCap);
         if (d->playbackController && d->playbackController->audioPlayer())
             d->playbackController->audioPlayer()->setAudioCorrectionEnabled(audioCorrectionCheck->isChecked());
+        if (d->playbackController)
+            d->playbackController->setFrameRateCap(fpsCap);
         setupAutoSaveTimer();
         statusBar()->showMessage(tr("Session settings updated"), 2000);
         dialog.accept(); });

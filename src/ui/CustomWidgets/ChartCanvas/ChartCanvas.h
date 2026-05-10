@@ -88,6 +88,7 @@ public:
     QVariantMap pluginOverlayToggles() const { return m_pluginOverlayToggles; }
     QVariantMap pluginCanvasActionContext() const;
     bool triggerPluginDeleteSelection();
+    void recordManualJerkMark();
 
 public slots:
     void showGridSettings();
@@ -335,6 +336,7 @@ private:
     bool m_backgroundCacheDirty;
 
     QElapsedTimer m_fpsTimer;
+    QElapsedTimer m_playbackVisualClock;
     int m_frameCount;
     double m_currentFps;
 
@@ -349,6 +351,7 @@ private:
     int rightMargin() const;
     void invalidateChartCaches(bool includeBackground);
     void resetOverlayQueryState();
+    void advancePlaybackVisual(bool scheduleRepaint, bool recordProbe = true);
 
 private slots:
     void onSelectionChanged();
@@ -369,6 +372,14 @@ private:
     bool m_gridCacheValid;
     int m_gridCachePadPx;
     qint64 m_lastPlaybackFrameSeq;
+    double m_lastPlaybackPredictedTimeMs;
+    double m_lastPlaybackTargetTimeMs;
+    double m_lastPlaybackStepMs;
+    double m_lastPlaybackScrollStepPx;
+    double m_lastPlaybackPlayheadYPx;
+    double m_lastPlaybackPlayheadStepPx;
+    bool m_playbackVisualFramePending;
+    qint64 m_lastPlaybackTickNs;
+    qint64 m_lastPlaybackVisualAdvanceNs;
     int m_overlayPlaybackIntervalMs;
 };
-

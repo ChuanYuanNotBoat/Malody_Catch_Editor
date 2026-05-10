@@ -31,7 +31,7 @@ void LeftPanel::setupUi()
     m_zoomInBtn->setFixedWidth(30);
 
     m_timeScaleSpin = new QDoubleSpinBox(this);
-    m_timeScaleSpin->setRange(0.2, 5.0);
+    m_timeScaleSpin->setRange(0.2, 10.0);
     m_timeScaleSpin->setSingleStep(0.1);
     m_timeScaleSpin->setDecimals(2);
     m_timeScaleSpin->setValue(2.25);

@@ -10,11 +10,13 @@
 #include "plugin/PluginManager.h"
 #include "utils/MathUtils.h"
 #include "utils/Settings.h"
+#include "utils/PlaybackStutterProbe.h"
 #include "utils/DiagnosticCollector.h"
 #include "utils/Logger.h"
 #include "model/Chart.h"
 #include <QPainter>
 #include <QPen>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <algorithm>
@@ -36,6 +38,37 @@ PluginManager *activePluginManager()
 void ChartCanvas::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
+    QElapsedTimer paintTimer;
+    paintTimer.start();
+    m_playbackVisualFramePending = false;
+    if (m_isPlaying && m_lastPlaybackTargetTimeMs >= 0.0 && m_playbackController)
+    {
+        const qint64 nowNs = m_playbackVisualClock.nsecsElapsed();
+        if (m_lastPlaybackVisualAdvanceNs <= 0)
+            m_lastPlaybackVisualAdvanceNs = nowNs;
+        const qint64 deltaNs = qMax<qint64>(0, nowNs - m_lastPlaybackVisualAdvanceNs);
+        m_lastPlaybackVisualAdvanceNs = nowNs;
+
+        double extrapolatedMs = m_lastPlaybackTargetTimeMs;
+        if (m_lastPlaybackTickNs > 0 && nowNs > m_lastPlaybackTickNs)
+        {
+            const double dtMs = static_cast<double>(nowNs - m_lastPlaybackTickNs) / 1000000.0;
+            extrapolatedMs += dtMs * m_playbackController->speed();
+        }
+
+        const double paintDtMs = static_cast<double>(deltaNs) / 1000000.0;
+        const double clampedPaintDtMs = qBound(0.0, paintDtMs, 34.0);
+        // Drive visual time with a stable render-time integrator, then
+        // gently pull toward extrapolated playback target to suppress
+        // periodic cadence artifacts from tick arrival jitter.
+        m_currentPlayTime += clampedPaintDtMs * m_playbackController->speed();
+        const double errorMs = extrapolatedMs - m_currentPlayTime;
+        const double alpha = 1.0 - std::exp(-clampedPaintDtMs / 120.0);
+        m_currentPlayTime += errorMs * qBound(0.0, alpha, 1.0);
+        m_currentPlayTime = qMax(0.0, m_currentPlayTime);
+        // Keep scroll/playhead tied to render time to remove 16/17ms tick cadence from visuals.
+        advancePlaybackVisual(false, false);
+    }
 
     m_frameCount++;
     qint64 elapsed = m_fpsTimer.elapsed();
@@ -60,8 +93,14 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     const auto &bpmList = currentChart->bpmList();
     const auto &notes = currentChart->notes();
 
+    QElapsedTimer bgGridTimer;
+    bgGridTimer.start();
     drawBackground(painter);
     drawGrid(painter);
+    PlaybackStutterProbe::recordDuration("canvas.bg_grid",
+                                         static_cast<double>(bgGridTimer.nsecsElapsed()) / 1000000.0,
+                                         3.0,
+                                         m_isPlaying);
 
     double startBeat = m_scrollBeat;
     double visibleRange = effectiveVisibleBeatRange();
@@ -145,6 +184,9 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         }
     };
 
+    QElapsedTimer noteTimer;
+    noteTimer.start();
+
     if (!m_sortedRainNoteIndicesByBeat.isEmpty())
     {
         const auto rainBegin = std::lower_bound(
@@ -222,6 +264,10 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         painter.setBrush(QColor(255, 255, 0, 80));
         painter.drawRect(rect);
     }
+    PlaybackStutterProbe::recordDuration("canvas.notes_and_guides",
+                                         static_cast<double>(noteTimer.nsecsElapsed()) / 1000000.0,
+                                         8.0,
+                                         m_isPlaying);
 
     drawPluginOverlays(painter, lmargin, rmargin);
 
@@ -232,6 +278,104 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     painter.fillRect(fpsRect, QColor(0, 0, 0, 128));
     painter.drawText(fpsRect, Qt::AlignCenter, fpsText);
 
+    if (Settings::instance().playbackStutterProbeEnabled())
+    {
+        const PlaybackStutterProbe::LiveMetrics live = PlaybackStutterProbe::latestMetrics();
+        QString hotspot = live.topHotspot;
+        const int paren = hotspot.indexOf('(');
+        if (paren > 0)
+            hotspot = hotspot.left(paren);
+        if (hotspot.size() > 52)
+            hotspot = hotspot.left(49) + "...";
+
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        const qint64 ageMs = (live.lastUpdateMs > 0) ? qMax<qint64>(0, nowMs - live.lastUpdateMs) : 0;
+        const QColor tone = (live.valid && live.fpsCanvas >= 57.0 && live.canvasSlowPct <= 10.0)
+                                ? QColor(120, 220, 120)
+                                : ((live.valid && live.fpsCanvas >= 50.0) ? QColor(255, 210, 120) : QColor(255, 130, 130));
+
+        const int hudWidth = 500;
+        const int hudHeight = 194;
+        const QRect hudRect(qMax(8, width() - hudWidth - 14), 10, hudWidth, hudHeight);
+        painter.fillRect(hudRect, QColor(0, 0, 0, 165));
+        painter.setPen(QColor(200, 200, 200));
+        painter.drawRect(hudRect);
+
+        painter.setPen(QColor(230, 230, 230));
+        painter.drawText(hudRect.adjusted(8, 6, -8, -8),
+                         Qt::AlignLeft | Qt::AlignTop,
+                         QString("Playback Probe  win=%1ms  age=%2ms").arg(live.windowMs).arg(ageMs));
+
+        if (!live.valid)
+        {
+            painter.setPen(QColor(255, 220, 140));
+            painter.drawText(hudRect.adjusted(8, 34, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("Waiting for playback samples..."));
+            painter.setPen(QColor(180, 215, 255));
+            painter.drawText(hudRect.adjusted(8, 58, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("Make sure playback is running for a few seconds."));
+        }
+        else
+        {
+            painter.setPen(tone);
+            painter.drawText(hudRect.adjusted(8, 28, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("fps canvas/tick/preview: %1 / %2 / %3")
+                                 .arg(live.fpsCanvas, 0, 'f', 1)
+                                 .arg(live.fpsTick, 0, 'f', 1)
+                                 .arg(live.fpsPreview, 0, 'f', 1));
+
+            painter.setPen(QColor(255, 220, 140));
+            painter.drawText(hudRect.adjusted(8, 49, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("jitter p95=%1ms  jitter_slow=%2%  canvas_slow=%3%")
+                                 .arg(live.jitterP95Ms, 0, 'f', 2)
+                                 .arg(live.jitterSlowPct, 0, 'f', 1)
+                                 .arg(live.canvasSlowPct, 0, 'f', 1));
+
+            painter.setPen(QColor(255, 190, 120));
+            painter.drawText(hudRect.adjusted(8, 70, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("pacing std=%1ms  jerk p95=%2ms  step jerk p95=%3ms")
+                                 .arg(live.pacingStdMs, 0, 'f', 2)
+                                 .arg(live.pacingJerkP95Ms, 0, 'f', 2)
+                                 .arg(live.stepJerkP95Ms, 0, 'f', 2));
+
+            painter.setPen(QColor(255, 175, 135));
+            painter.drawText(hudRect.adjusted(8, 91, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("visual scroll p95=%1px  jerk p95=%2px  drift p95=%3px")
+                                 .arg(live.visualScrollStepP95Px, 0, 'f', 2)
+                                 .arg(live.visualScrollJerkP95Px, 0, 'f', 2)
+                                 .arg(live.visualPlayheadDriftP95Px, 0, 'f', 2));
+
+            painter.setPen(QColor(250, 175, 125));
+            painter.drawText(hudRect.adjusted(8, 112, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("jank=%1 step_jank=%2 visual_jank=%3 marks=%4 ui gap p95=%5ms")
+                                 .arg(live.jankEvents)
+                                 .arg(live.stepJankEvents)
+                                 .arg(live.visualJankEvents)
+                                 .arg(live.manualJerkMarks)
+                                 .arg(live.uiGapP95Ms, 0, 'f', 2));
+
+            painter.setPen(QColor(250, 165, 125));
+            painter.drawText(hudRect.adjusted(8, 133, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("ui hitch=%1  ui stall=%2  visual_backtrack=%3")
+                                 .arg(live.uiHitchEvents)
+                                 .arg(live.uiStallEvents)
+                                 .arg(live.visualBacktrackEvents));
+
+            painter.setPen(QColor(180, 215, 255));
+            painter.drawText(hudRect.adjusted(8, 154, -8, -8),
+                             Qt::AlignLeft | Qt::AlignTop,
+                             QString("hotspot: %1").arg(hotspot.isEmpty() ? QString("n/a") : hotspot));
+        }
+    }
+
     auto now = std::chrono::high_resolution_clock::now();
     static auto lastRecord = now;
     auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRecord).count();
@@ -241,6 +385,10 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
         lastRecord = now;
     }
 
+    PlaybackStutterProbe::recordDuration("canvas.paint_total",
+                                         static_cast<double>(paintTimer.nsecsElapsed()) / 1000000.0,
+                                         16.0,
+                                         m_isPlaying);
 }
 
 void ChartCanvas::drawPastePreview(QPainter &painter,
@@ -441,6 +589,9 @@ void ChartCanvas::drawMirrorGuide(QPainter &painter, int canvasHeight, int lmarg
 
 void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin)
 {
+    QElapsedTimer overlayTotalTimer;
+    overlayTotalTimer.start();
+
     PluginManager *pm = activePluginManager();
     if (!pm)
         return;
@@ -476,6 +627,11 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
         m_lastOverlayQueryMs = nowMs;
 
         const qint64 elapsedMs = requestTimer.elapsed();
+        PlaybackStutterProbe::recordDuration("canvas.overlay_query",
+                                             static_cast<double>(elapsedMs),
+                                             kOverlayPlaybackQueryBudgetMs,
+                                             m_isPlaying);
+        PlaybackStutterProbe::recordCounter("canvas.overlay_items_returned", m_overlayCache.size(), m_isPlaying);
         if (isPlaying)
         {
             if (elapsedMs > kOverlayPlaybackQueryBudgetMs)
@@ -509,9 +665,15 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
             }
         }
     }
+    else if (allowQueryInCurrentState && dueForQuery && !canQuery)
+    {
+        PlaybackStutterProbe::recordCounter("canvas.overlay_query_blocked", 1, m_isPlaying);
+    }
 
     QList<PluginInterface::CanvasOverlayItem> drawItems = m_overlayCache;
 
+    QElapsedTimer drawTimer;
+    drawTimer.start();
     for (const auto &item : drawItems)
     {
         QPen pen(item.color, item.width);
@@ -555,6 +717,14 @@ void ChartCanvas::drawPluginOverlays(QPainter &painter, int lmargin, int rmargin
             painter.drawLine(from, to);
         }
     }
+    PlaybackStutterProbe::recordDuration("canvas.overlay_draw",
+                                         static_cast<double>(drawTimer.nsecsElapsed()) / 1000000.0,
+                                         2.0,
+                                         m_isPlaying);
+    PlaybackStutterProbe::recordDuration("canvas.overlay_total",
+                                         static_cast<double>(overlayTotalTimer.nsecsElapsed()) / 1000000.0,
+                                         3.0,
+                                         m_isPlaying);
 }
 
 void ChartCanvas::drawBackground(QPainter &painter)
@@ -624,6 +794,24 @@ void ChartCanvas::drawGrid(QPainter &painter)
         MathUtils::floatToBeat(m_scrollBeat + effectiveVisibleBeatRange(), endBeatNum, endNum, endDen);
         const double endTime = MathUtils::beatToMs(endBeatNum, endNum, endDen, bpmCache);
 
+        const bool colorEnabled = Settings::instance().timelineDivisionColorEnabled();
+        const QString colorPreset = Settings::instance().timelineDivisionColorPreset();
+        const QList<int> colorCustom = Settings::instance().timelineDivisionColorCustomDivisions();
+
+        // During playback, avoid chunked cache-quantization switches that can
+        // manifest as periodic micro-jitter on otherwise empty charts.
+        if (m_isPlaying)
+        {
+            m_gridRenderer->drawGrid(painter, rect, m_gridDivision,
+                                     startTime, endTime,
+                                     m_timeDivision, bpmCache,
+                                     m_verticalFlip,
+                                     colorEnabled,
+                                     colorPreset,
+                                     colorCustom);
+            return;
+        }
+
         const int viewportHeight = qMax(1, rect.height());
         const double rawSpanMs = qMax(1.0, endTime - startTime);
         const double msPerPixel = rawSpanMs / viewportHeight;
@@ -643,9 +831,6 @@ void ChartCanvas::drawGrid(QPainter &painter)
         const double cacheEndTime = renderEndTime + cachePadMs;
         const QSize cacheSize(rect.width(), viewportHeight + cachePadPx * 2);
 
-        const bool colorEnabled = Settings::instance().timelineDivisionColorEnabled();
-        const QString colorPreset = Settings::instance().timelineDivisionColorPreset();
-        const QList<int> colorCustom = Settings::instance().timelineDivisionColorCustomDivisions();
         const bool needRebuild =
             !m_gridCacheValid ||
             m_gridCacheRect.size() != rect.size() ||

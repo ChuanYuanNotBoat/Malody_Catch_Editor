@@ -1,9 +1,11 @@
 #include "PluginManager.h"
 #include "file/PluginLoader.h"
 #include "utils/Logger.h"
+#include "utils/PlaybackStutterProbe.h"
 #include "utils/Settings.h"
 #include <QLocale>
 #include <QSet>
+#include <QElapsedTimer>
 #include <exception>
 
 namespace
@@ -472,6 +474,9 @@ QList<PluginInterface::CanvasOverlayItem> PluginManager::canvasOverlays(const QV
 {
     QList<PluginInterface::CanvasOverlayItem> items;
     const QVariantMap enrichedContext = enrichContextWithLocale(context);
+    const bool isPlaying = enrichedContext.value("is_playing").toBool();
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     for (PluginInterface *p : m_plugins)
     {
         if (!p)
@@ -480,7 +485,14 @@ QList<PluginInterface::CanvasOverlayItem> PluginManager::canvasOverlays(const QV
             continue;
         try
         {
+            QElapsedTimer pluginTimer;
+            pluginTimer.start();
             const auto overlay = p->canvasOverlays(enrichedContext);
+            const double elapsedMs = static_cast<double>(pluginTimer.nsecsElapsed()) / 1000000.0;
+            const QString pluginId = p->pluginId().trimmed().isEmpty() ? QString("unknown") : p->pluginId().trimmed();
+            const QString key = QString("plugin.overlay.%1").arg(pluginId);
+            PlaybackStutterProbe::recordDuration(key, elapsedMs, 3.0, isPlaying);
+            PlaybackStutterProbe::recordCounter(QString("%1.items").arg(key), overlay.size(), isPlaying);
             for (const auto &item : overlay)
                 items.append(item);
         }
@@ -489,6 +501,10 @@ QList<PluginInterface::CanvasOverlayItem> PluginManager::canvasOverlays(const QV
             Logger::warn(QString("Error in plugin '%1' canvasOverlays").arg(localizedNameForLog(p)));
         }
     }
+    PlaybackStutterProbe::recordDuration("plugin.overlay.total",
+                                         static_cast<double>(totalTimer.nsecsElapsed()) / 1000000.0,
+                                         4.0,
+                                         isPlaying);
     return items;
 }
 

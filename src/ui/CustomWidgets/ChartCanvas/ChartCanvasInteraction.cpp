@@ -10,6 +10,7 @@
 #include "utils/MathUtils.h"
 #include "utils/Settings.h"
 #include "utils/Logger.h"
+#include "utils/PlaybackStutterProbe.h"
 #include "utils/DiagnosticCollector.h"
 #include "model/Chart.h"
 #include "app/Application.h"
@@ -111,7 +112,7 @@ void ChartCanvas::showGridSettings()
 
 void ChartCanvas::setTimeScale(double scale)
 {
-    const double clampedScale = qBound(0.2, scale, 5.0);
+    const double clampedScale = qBound(0.2, scale, 10.0);
     if (qFuzzyCompare(m_timeScale, clampedScale))
         return;
 
@@ -243,12 +244,15 @@ void ChartCanvas::refreshBackground()
     update();
 }
 
-void ChartCanvas::requestNextFrame()
+void ChartCanvas::advancePlaybackVisual(bool scheduleRepaint, bool recordProbe)
 {
     constexpr double kScrollSignalEpsilonBeat = 1e-6;
 
     if (!m_isPlaying || !chart())
         return;
+
+    QElapsedTimer timer;
+    timer.start();
 
     if (m_autoScrollEnabled)
     {
@@ -292,26 +296,143 @@ void ChartCanvas::requestNextFrame()
             m_scrollBeat = 0;
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
         const bool scrollChanged = std::abs(m_scrollBeat - previousScrollBeat) > kScrollSignalEpsilonBeat;
-        if (scrollChanged && (m_lastScrollSignalTimeMs == 0 || nowMs - m_lastScrollSignalTimeMs >= kScrollSignalIntervalMs))
+        if (!m_isPlaying &&
+            scrollChanged &&
+            (m_lastScrollSignalTimeMs == 0 || nowMs - m_lastScrollSignalTimeMs >= kScrollSignalIntervalMs))
         {
             emit scrollPositionChanged(m_scrollBeat);
             m_lastScrollSignalTimeMs = nowMs;
+            PlaybackStutterProbe::recordCounter("canvas.scroll_signal_emits", 1, m_isPlaying);
         }
     }
 
-    update();
+    if (scheduleRepaint)
+        update();
+    if (recordProbe)
+    {
+        PlaybackStutterProbe::recordDuration("canvas.request_next_frame",
+                                             static_cast<double>(timer.nsecsElapsed()) / 1000000.0,
+                                             1.5,
+                                             m_isPlaying);
+    }
+}
+
+void ChartCanvas::requestNextFrame()
+{
+    advancePlaybackVisual(true, true);
 }
 
 void ChartCanvas::onPlaybackFrameTick(double predictedTimeMs, qint64 frameSeq)
 {
+    constexpr double kVisualScrollJerkBudgetPx = 1.4;
+    constexpr double kVisualPlayheadStepJerkBudgetPx = 1.4;
+    constexpr double kVisualPlayheadDriftBudgetPx = 0.9;
+    constexpr double kVisualScrollStepJankThresholdPx = 3.5;
+    constexpr double kVisualPlayheadStepJankThresholdPx = 2.4;
+    constexpr double kVisualPlayheadDriftEventThresholdPx = 2.0;
+    const bool lightProbeSample = (frameSeq % 3) == 0;
     if (!m_isPlaying)
         return;
-    if (frameSeq <= m_lastPlaybackFrameSeq)
-        return;
+    QElapsedTimer timer;
+    timer.start();
 
+    if (frameSeq <= m_lastPlaybackFrameSeq)
+    {
+        PlaybackStutterProbe::recordCounter("canvas.tick_out_of_order", 1, true);
+        return;
+    }
+
+    if (m_lastPlaybackFrameSeq >= 0 && frameSeq > m_lastPlaybackFrameSeq + 1)
+        PlaybackStutterProbe::recordCounter("canvas.tick_gap", frameSeq - m_lastPlaybackFrameSeq - 1, true);
+
+    if (m_playbackVisualFramePending)
+    {
+        m_lastPlaybackPredictedTimeMs = predictedTimeMs;
+        m_lastPlaybackFrameSeq = frameSeq;
+        m_lastPlaybackTickNs = m_playbackVisualClock.nsecsElapsed();
+        m_lastPlaybackTargetTimeMs = qMax(0.0, predictedTimeMs);
+        PlaybackStutterProbe::markUiHeartbeat(true);
+        advancePlaybackVisual(false, lightProbeSample);
+        if (lightProbeSample)
+            PlaybackStutterProbe::recordCounter("canvas.tick_coalesced", 1, true);
+        return;
+    }
+
+    if (m_lastPlaybackPredictedTimeMs >= 0.0)
+    {
+        const double stepMs = qMax(0.0, predictedTimeMs - m_lastPlaybackPredictedTimeMs);
+        PlaybackStutterProbe::recordDuration("playback.time_step_ms", stepMs, 20.0, true);
+        if (m_lastPlaybackStepMs >= 0.0)
+        {
+            const double stepJerkMs = std::abs(stepMs - m_lastPlaybackStepMs);
+            PlaybackStutterProbe::recordDuration("playback.time_step_jerk", stepJerkMs, 4.0, true);
+            if (stepJerkMs > 8.0)
+                PlaybackStutterProbe::recordCounter("playback.time_step_jank_events", 1, true);
+        }
+        m_lastPlaybackStepMs = stepMs;
+    }
+
+    const double previousScrollBeat = m_scrollBeat;
+    const double previousPlayheadYPx = m_lastPlaybackPlayheadYPx;
+
+    m_lastPlaybackPredictedTimeMs = predictedTimeMs;
     m_lastPlaybackFrameSeq = frameSeq;
-    m_currentPlayTime = qMax(0.0, predictedTimeMs);
-    requestNextFrame();
+    m_lastPlaybackTickNs = m_playbackVisualClock.nsecsElapsed();
+    m_lastPlaybackTargetTimeMs = qMax(0.0, predictedTimeMs);
+    PlaybackStutterProbe::markUiHeartbeat(true);
+    m_playbackVisualFramePending = true;
+    advancePlaybackVisual(true, lightProbeSample);
+
+    const double visibleRange = qMax(1e-6, effectiveVisibleBeatRange());
+    const double pixelsPerBeat = (height() > 0) ? (static_cast<double>(height()) / visibleRange) : 0.0;
+    const double scrollDeltaBeat = m_scrollBeat - previousScrollBeat;
+    const double scrollStepPx = std::abs(scrollDeltaBeat) * pixelsPerBeat;
+    if (lightProbeSample)
+        PlaybackStutterProbe::recordDuration("visual.scroll_step_px", scrollStepPx, 24.0, true);
+    if (m_lastPlaybackScrollStepPx >= 0.0)
+    {
+        const double scrollJerkPx = std::abs(scrollStepPx - m_lastPlaybackScrollStepPx);
+        if (lightProbeSample)
+            PlaybackStutterProbe::recordDuration("visual.scroll_step_jerk_px", scrollJerkPx, kVisualScrollJerkBudgetPx, true);
+        if (lightProbeSample && scrollJerkPx > kVisualScrollStepJankThresholdPx)
+            PlaybackStutterProbe::recordCounter("visual.scroll_step_jank_events", 1, true);
+    }
+    m_lastPlaybackScrollStepPx = scrollStepPx;
+    if (lightProbeSample && scrollDeltaBeat < -1e-5)
+        PlaybackStutterProbe::recordCounter("visual.scroll_backtrack_events", 1, true);
+
+    const double playheadYPx = yPosFromTime(m_currentPlayTime);
+    const double baselineY = static_cast<double>(height()) * kReferenceLineRatio;
+    const double playheadDriftPx = std::abs(playheadYPx - baselineY);
+    if (lightProbeSample)
+        PlaybackStutterProbe::recordDuration("visual.playhead_drift_px", playheadDriftPx, kVisualPlayheadDriftBudgetPx, true);
+    if (lightProbeSample && playheadDriftPx > kVisualPlayheadDriftEventThresholdPx)
+        PlaybackStutterProbe::recordCounter("visual.playhead_drift_events", 1, true);
+
+    if (previousPlayheadYPx >= 0.0)
+    {
+        const double playheadStepPx = std::abs(playheadYPx - previousPlayheadYPx);
+        if (lightProbeSample)
+            PlaybackStutterProbe::recordDuration("visual.playhead_step_px", playheadStepPx, 18.0, true);
+        if (m_lastPlaybackPlayheadStepPx >= 0.0)
+        {
+            const double stepJerkPx = std::abs(playheadStepPx - m_lastPlaybackPlayheadStepPx);
+            if (lightProbeSample)
+                PlaybackStutterProbe::recordDuration("visual.playhead_step_jerk_px", stepJerkPx, kVisualPlayheadStepJerkBudgetPx, true);
+            if (lightProbeSample && stepJerkPx > kVisualPlayheadStepJankThresholdPx)
+                PlaybackStutterProbe::recordCounter("visual.playhead_step_jank_events", 1, true);
+        }
+        m_lastPlaybackPlayheadStepPx = playheadStepPx;
+    }
+    m_lastPlaybackPlayheadYPx = playheadYPx;
+
+    if (lightProbeSample)
+    {
+        PlaybackStutterProbe::recordDuration("canvas.playback_tick_handler",
+                                             static_cast<double>(timer.nsecsElapsed()) / 1000000.0,
+                                             1.0,
+                                             true);
+    }
 }
 
 void ChartCanvas::setPluginToolMode(bool enabled, const QString &pluginId)

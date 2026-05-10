@@ -113,13 +113,22 @@ ChartCanvas::ChartCanvas(QWidget *parent)
       m_gridCacheValid(false),
       m_gridCachePadPx(0),
       m_lastPlaybackFrameSeq(-1),
+      m_lastPlaybackPredictedTimeMs(-1.0),
+      m_lastPlaybackTargetTimeMs(-1.0),
+      m_lastPlaybackStepMs(-1.0),
+      m_lastPlaybackScrollStepPx(-1.0),
+      m_lastPlaybackPlayheadYPx(-1.0),
+      m_lastPlaybackPlayheadStepPx(-1.0),
+      m_playbackVisualFramePending(false),
+      m_lastPlaybackTickNs(0),
+      m_lastPlaybackVisualAdvanceNs(0),
       m_overlayPlaybackIntervalMs(kOverlayQueryIntervalMsToolModePlaying)
 {
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setMinimumSize(800, 400);
     setAttribute(Qt::WA_OpaquePaintEvent, true);
-    setAttribute(Qt::WA_NativeWindow);
+    setAttribute(Qt::WA_NativeWindow, false);
 
     m_noteRenderer->setNoteSize(Settings::instance().noteSize());
     m_noteSoundPlayer = new NoteSoundPlayer(this);
@@ -129,6 +138,7 @@ ChartCanvas::ChartCanvas(QWidget *parent)
     m_noteSoundPlayer->setEnabled(!noteSoundPath.isEmpty());
 
     m_fpsTimer.start();
+    m_playbackVisualClock.start();
     m_pluginOverlayToggles.insert("overlay_enabled", true);
     m_pluginOverlayToggles.insert("preview", true);
     m_pluginOverlayToggles.insert("control_points", true);
@@ -357,6 +367,15 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
                 m_isPlaying = true;
                 m_lastScrollSignalTimeMs = 0;
                 m_lastPlaybackFrameSeq = -1;
+                m_lastPlaybackPredictedTimeMs = -1.0;
+                m_lastPlaybackTargetTimeMs = -1.0;
+                m_lastPlaybackStepMs = -1.0;
+                m_lastPlaybackScrollStepPx = -1.0;
+                m_lastPlaybackPlayheadYPx = -1.0;
+                m_lastPlaybackPlayheadStepPx = -1.0;
+                m_playbackVisualFramePending = false;
+                m_lastPlaybackTickNs = 0;
+                m_lastPlaybackVisualAdvanceNs = 0;
                 const double startMs = m_playbackController ? m_playbackController->currentTime() : m_currentPlayTime;
                 m_currentPlayTime = qMax(0.0, startMs);
                 m_lastNoteSoundTimeMs = m_currentPlayTime;
@@ -368,6 +387,15 @@ void ChartCanvas::setPlaybackController(PlaybackController *controller)
             } else {
                 m_isPlaying = false;
                 m_lastPlaybackFrameSeq = -1;
+                m_lastPlaybackPredictedTimeMs = -1.0;
+                m_lastPlaybackTargetTimeMs = -1.0;
+                m_lastPlaybackStepMs = -1.0;
+                m_lastPlaybackScrollStepPx = -1.0;
+                m_lastPlaybackPlayheadYPx = -1.0;
+                m_lastPlaybackPlayheadStepPx = -1.0;
+                m_playbackVisualFramePending = false;
+                m_lastPlaybackTickNs = 0;
+                m_lastPlaybackVisualAdvanceNs = 0;
                 m_lastNoteSoundTimeMs = m_currentPlayTime;
                 snapPlayheadToGrid();
                 update();

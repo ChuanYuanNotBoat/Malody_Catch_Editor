@@ -1538,6 +1538,13 @@ void MainWindow::createMenus()
     d->playAction = playMenu->addAction(tr("&Play/Pause"), this, &MainWindow::togglePlayback);
     d->playAction->setEnabled(d->audioPlaybackReady);
     registerShortcutAction(d->playAction, "playback.play_pause", QKeySequence(Qt::Key_Space));
+    QAction *markJerkAction = playMenu->addAction(tr("Mark Playback Jerk"));
+    connect(markJerkAction, &QAction::triggered, this, [this]()
+            {
+        if (d->canvas)
+            d->canvas->recordManualJerkMark(); });
+    registerShortcutAction(markJerkAction, "playback.mark_manual_jerk", QKeySequence(Qt::Key_F8));
+    markJerkAction->setShortcutContext(Qt::ApplicationShortcut);
     playMenu->addSeparator();
     QMenu *speedMenu = playMenu->addMenu(tr("&Speed"));
     d->speedActionGroup = new QActionGroup(this);
@@ -1553,6 +1560,32 @@ void MainWindow::createMenus()
         act->setData(sp);
         act->setActionGroup(d->speedActionGroup);
         act->setChecked(qFuzzyCompare(sp, Settings::instance().playbackSpeed()));
+    }
+    QMenu *fpsCapMenu = playMenu->addMenu(tr("Playback FPS Cap"));
+    QActionGroup *fpsCapGroup = new QActionGroup(this);
+    fpsCapGroup->setExclusive(true);
+    const QList<QPair<QString, int>> fpsCapOptions = {
+        {tr("Lock 60 FPS"), 60},
+        {tr("Lock 90 FPS"), 90},
+        {tr("Lock 120 FPS"), 120},
+        {tr("Unlimited"), 0},
+    };
+    const int currentFpsCap = Settings::instance().playbackFrameRateCap();
+    for (const auto &option : fpsCapOptions)
+    {
+        QAction *capAction = fpsCapMenu->addAction(option.first);
+        capAction->setCheckable(true);
+        capAction->setData(option.second);
+        capAction->setActionGroup(fpsCapGroup);
+        capAction->setChecked(option.second == currentFpsCap);
+        connect(capAction, &QAction::triggered, this, [this, capAction]()
+                {
+                    const int fpsCap = capAction->data().toInt();
+                    Settings::instance().setPlaybackFrameRateCap(fpsCap);
+                    if (d->playbackController)
+                        d->playbackController->setFrameRateCap(fpsCap);
+                    const QString capText = (fpsCap <= 0) ? tr("Unlimited") : QString::number(fpsCap);
+                    statusBar()->showMessage(tr("Playback FPS cap: %1").arg(capText), 2000); });
     }
     QMenu *toolsMenu = menuBar()->addMenu(tr("&Tools"));
     d->pluginsMenu = menuBar()->addMenu(tr("&Plugins"));

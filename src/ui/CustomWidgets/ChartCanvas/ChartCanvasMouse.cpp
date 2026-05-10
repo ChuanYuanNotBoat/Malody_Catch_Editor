@@ -1282,7 +1282,7 @@ void ChartCanvas::wheelEvent(QWheelEvent *event)
         {
             double factor = (delta > 0) ? 1.2 : 1.0 / 1.2;
             double newScale = m_timeScale * factor;
-            newScale = qBound(0.2, newScale, 5.0);
+            newScale = qBound(0.2, newScale, 10.0);
             setTimeScale(newScale);
         }
         event->accept();
