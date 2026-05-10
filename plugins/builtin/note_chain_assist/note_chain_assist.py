@@ -2204,6 +2204,7 @@ def _selected_links_all_polyline():
 
 def _toggle_polyline_for_active_or_selected(context):
     links = _selected_target_links()
+    prev_active = _active_link_shape()
     target = "polyline"
     if links and all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links):
         target = "curve"
@@ -2211,12 +2212,14 @@ def _toggle_polyline_for_active_or_selected(context):
         target = "curve"
 
     STATE["active_link_shape"] = target
+    active_changed = prev_active != target
     changed = False
     for id0, id1 in links:
         changed = _set_segment_shape(id0, id1, target) or changed
     if links and changed:
         _invalidate_curve_cache()
-    _record_history_state(context)
+    if active_changed or changed:
+        _mark_dirty(context, flush=False)
     return True
 
 
@@ -2263,14 +2266,17 @@ def _toggle_polyline_for_context_links(context):
     if not links:
         return False
 
+    prev_active = _active_link_shape()
     target = "curve" if all(_segment_shape_for_link(id0, id1) == "polyline" for id0, id1 in links) else "polyline"
     STATE["active_link_shape"] = target
+    active_changed = prev_active != target
     changed = False
     for id0, id1 in links:
         changed = _set_segment_shape(id0, id1, target) or changed
     if changed:
         _invalidate_curve_cache()
-    _record_history_state(context)
+    if active_changed or changed:
+        _mark_dirty(context, flush=False)
     return True
 
 
@@ -2285,7 +2291,7 @@ def _set_density_for_selected_segments(context, target_den):
     for id0, id1 in links:
         changed = _set_segment_denominator(id0, id1, den) or changed
     if changed:
-        _record_history_state(context)
+        _mark_dirty(context, flush=False)
     return changed
 
 
@@ -2374,7 +2380,7 @@ def _run_tool_action(payload):
             "ensure_project_context": _ensure_project_context,
             "reset_anchors": _reset_anchors,
             "save_project": _save_project,
-            "record_history_state": _record_history_state,
+            "mark_dirty": _mark_dirty,
             "toggle_polyline_for_active_or_selected": _toggle_polyline_for_active_or_selected,
             "toggle_polyline_for_context_links": _toggle_polyline_for_context_links,
             "note_curve_snap_enabled": _note_curve_snap_enabled,
