@@ -1300,7 +1300,22 @@ MainWindow::MainWindow(ChartController *chartCtrl,
                        {
         if (PluginManager *pm = activePluginManager())
         {
-            connect(pm, &PluginManager::pluginsChanged, this, &MainWindow::refreshPluginUiExtensions);
+            connect(pm, &PluginManager::pluginsChanged, this, [this, pm]()
+                    {
+                        refreshPluginUiExtensions();
+
+                        if (!d->chartController)
+                            return;
+                        const QString chartPath = d->chartController->chartFilePath().trimmed();
+                        if (chartPath.isEmpty())
+                            return;
+
+                        // After plugin reload, replay chart context so stateful plugins
+                        // can rebuild their runtime actions/panels consistently.
+                        pm->notifyChartLoaded(chartPath);
+                        pm->notifyChartChanged();
+                        refreshPluginUiExtensions();
+                    });
             refreshPluginUiExtensions();
         } });
     QTimer::singleShot(0, this, [this]()
