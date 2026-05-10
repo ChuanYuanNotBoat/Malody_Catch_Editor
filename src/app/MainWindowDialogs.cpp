@@ -761,6 +761,28 @@ void MainWindow::openPluginManager()
     }
 
     PluginManagerDialog dialog(app->pluginManager(), this);
+    connect(&dialog, &PluginManagerDialog::pluginsReloading, this, [this]()
+            {
+                closePluginPanels(tr("Plugin panels were closed after plugin reload."));
+                if (d->leftPanel)
+                    d->leftPanel->setPluginQuickActions({});
+                if (d->notePanel)
+                    d->notePanel->setPluginPlacementActions({});
+            });
+    connect(&dialog, &PluginManagerDialog::pluginsReloaded, this, [this, app]()
+            {
+                QString chartPath = d->workingChartPath;
+                if (chartPath.trimmed().isEmpty() && d->chartController)
+                    chartPath = d->chartController->chartFilePath();
+
+                chartPath = chartPath.trimmed();
+                if (!chartPath.isEmpty())
+                {
+                    app->pluginManager()->notifyChartLoaded(chartPath);
+                    app->pluginManager()->notifyChartChanged();
+                }
+                refreshPluginUiExtensions();
+            });
     dialog.exec();
     refreshPluginUiExtensions();
 }
