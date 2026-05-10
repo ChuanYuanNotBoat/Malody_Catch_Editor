@@ -860,9 +860,12 @@ def _extract_host_action_title(action_text):
     if not text:
         return ""
     # Host action text is usually "Plugin Action: <title>" (localized prefix possible).
-    sep_idx = text.find(":")
-    if sep_idx < 0:
-        sep_idx = text.find("：")
+    sep_idx = -1
+    for sep in (":", "\uFF1A"):
+        idx = text.find(sep)
+        if idx >= 0:
+            sep_idx = idx
+            break
     if sep_idx >= 0:
         return text[sep_idx + 1 :].strip()
     return text
@@ -1878,6 +1881,8 @@ def _ensure_project_context(context):
             STATE["project_dirty"] = False
         if path_changed:
             STATE["project_path"] = path
+            # Reset default link shape when switching chart/project.
+            STATE["active_link_shape"] = "curve"
         STATE["project_load_failed"] = False
         STATE["suppress_persist_once"] = False
         _try_seed_curve_project_from_source(context, path)

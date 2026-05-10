@@ -238,7 +238,7 @@ def run_tool_action(payload, callbacks):
         return True
     if action_id == "toggle_anchor_placement":
         state["anchor_placement_enabled"] = not bool(state.get("anchor_placement_enabled", False))
-        record_history_state(context)
+        # UI mode toggle only: avoid polluting plugin/host undo stacks.
         return True
     if action_id == "toggle_curve_visible":
         state["curve_visible"] = not bool(state.get("curve_visible", True))
