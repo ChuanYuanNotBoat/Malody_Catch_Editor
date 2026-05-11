@@ -106,7 +106,7 @@ void GridRenderer::drawGrid(QPainter &painter, const QRect &rect, int xDivisions
         font.setPointSize(8);
         painter.setFont(font);
 
-        double lastDrawnY = -9999.0;
+        int lastDrawnY = -9999;
         const QSet<int> customSet = QSet<int>(customDivisions.begin(), customDivisions.end());
         for (int tick = startTick; tick <= endTick; ++tick)
         {
@@ -119,16 +119,16 @@ void GridRenderer::drawGrid(QPainter &painter, const QRect &rect, int xDivisions
             if (ms < startTime || ms > endTime)
                 continue;
 
-            double y = 0.0;
+            int y = 0;
             if (!verticalFlip)
-                y = static_cast<double>(rect.top()) + (ms - startTime) / totalDuration * rect.height();
+                y = rect.top() + static_cast<int>((ms - startTime) / totalDuration * rect.height());
             else
-                y = static_cast<double>(rect.bottom()) - (ms - startTime) / totalDuration * rect.height();
+                y = rect.bottom() - static_cast<int>((ms - startTime) / totalDuration * rect.height());
 
             if (skipDenseTicks && !isIntegerBeat)
                 continue;
 
-            if (std::abs(y - lastDrawnY) < 0.35)
+            if (qAbs(y - lastDrawnY) < 1)
                 continue;
             lastDrawnY = y;
 
@@ -141,24 +141,24 @@ void GridRenderer::drawGrid(QPainter &painter, const QRect &rect, int xDivisions
             }
 
             painter.setPen(linePen);
-            painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+            painter.drawLine(rect.left(), y, rect.right(), y);
 
             if (isIntegerBeat)
             {
                 const QString text = QString::number(beatNum);
                 painter.setPen(Qt::darkGray);
-                int textY = qRound(y);
+                int textY = y;
                 if (verticalFlip)
                 {
-                    textY = qRound(y) + 12;
+                    textY = y + 12;
                     if (textY > rect.bottom())
-                        textY = qRound(y) - 12;
+                        textY = y - 12;
                 }
                 else
                 {
-                    textY = qRound(y) - 2;
+                    textY = y - 2;
                     if (textY < rect.top())
-                        textY = qRound(y) + 12;
+                        textY = y + 12;
                 }
                 painter.drawText(rect.left() + 2, textY, text);
             }

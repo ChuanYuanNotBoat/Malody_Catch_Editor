@@ -52,16 +52,13 @@ private slots:
     void onFramePulseTimeout();
 
 private:
-    static constexpr int kFramePulseMinIntervalMs = 1;
-    static constexpr double kAnchorDeadZoneMs = 4.0;
-    static constexpr double kAnchorModerateWindowMs = 64.0;
-    static constexpr double kAnchorModerateGain = 0.02;
+    static constexpr int kFramePulseIntervalMs = 16;
+    static constexpr double kAnchorDeadZoneMs = 2.0;
+    static constexpr double kAnchorModerateWindowMs = 48.0;
+    static constexpr double kAnchorModerateGain = 0.04;
     static constexpr double kAnchorLargeWindowMs = 220.0;
-    static constexpr double kAnchorLargeGain = 0.08;
+    static constexpr double kAnchorLargeGain = 0.10;
 
-    int sanitizeFrameRateCap(int fpsCap) const;
-    double targetFrameIntervalMsForCap(int fpsCap) const;
-    void scheduleNextFramePulse();
     qint64 clampSeekTargetMs(qint64 timeMs) const;
     void applySeekNow(qint64 targetMs, const char *reason);
     void resetFrameAnchor(double timeMs, qint64 nowMs);
@@ -75,9 +72,6 @@ private:
     QTimer *m_framePulseTimer;
     int m_frameRateCap;
     QElapsedTimer m_frameClock;
-    qint64 m_lastFramePulseWallMs;
-    double m_lastPulseIntervalMs;
-    double m_framePulseAccumulatorMs;
     bool m_frameAnchorValid;
     double m_frameAnchorTimeMs;
     qint64 m_frameAnchorWallMs;

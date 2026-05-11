@@ -345,19 +345,6 @@ void ChartCanvas::onPlaybackFrameTick(double predictedTimeMs, qint64 frameSeq)
     if (m_lastPlaybackFrameSeq >= 0 && frameSeq > m_lastPlaybackFrameSeq + 1)
         PlaybackStutterProbe::recordCounter("canvas.tick_gap", frameSeq - m_lastPlaybackFrameSeq - 1, true);
 
-    if (m_playbackVisualFramePending)
-    {
-        m_lastPlaybackPredictedTimeMs = predictedTimeMs;
-        m_lastPlaybackFrameSeq = frameSeq;
-        m_lastPlaybackTickNs = m_playbackVisualClock.nsecsElapsed();
-        m_lastPlaybackTargetTimeMs = qMax(0.0, predictedTimeMs);
-        PlaybackStutterProbe::markUiHeartbeat(true);
-        advancePlaybackVisual(false, lightProbeSample);
-        if (lightProbeSample)
-            PlaybackStutterProbe::recordCounter("canvas.tick_coalesced", 1, true);
-        return;
-    }
-
     if (m_lastPlaybackPredictedTimeMs >= 0.0)
     {
         const double stepMs = qMax(0.0, predictedTimeMs - m_lastPlaybackPredictedTimeMs);
@@ -379,8 +366,9 @@ void ChartCanvas::onPlaybackFrameTick(double predictedTimeMs, qint64 frameSeq)
     m_lastPlaybackFrameSeq = frameSeq;
     m_lastPlaybackTickNs = m_playbackVisualClock.nsecsElapsed();
     m_lastPlaybackTargetTimeMs = qMax(0.0, predictedTimeMs);
+    m_currentPlayTime = m_lastPlaybackTargetTimeMs;
     PlaybackStutterProbe::markUiHeartbeat(true);
-    m_playbackVisualFramePending = true;
+    m_playbackVisualFramePending = false;
     advancePlaybackVisual(true, lightProbeSample);
 
     const double visibleRange = qMax(1e-6, effectiveVisibleBeatRange());

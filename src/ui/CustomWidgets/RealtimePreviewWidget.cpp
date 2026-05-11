@@ -6,7 +6,6 @@
 #include "render/HyperfruitDetector.h"
 #include "render/NoteRenderer.h"
 #include "utils/MathUtils.h"
-#include "utils/PlaybackStutterProbe.h"
 #include <cmath>
 #include <limits>
 #include <QPainter>
@@ -241,36 +240,15 @@ void RealtimePreviewWidget::handlePlaybackFrameTick(double predictedTimeMs, qint
 {
     if (!m_playbackController || m_playbackController->state() != PlaybackController::Playing)
         return;
-
-    QElapsedTimer timer;
-    timer.start();
-
     if (frameSeq <= m_lastPlaybackFrameSeq)
-    {
-        PlaybackStutterProbe::recordCounter("preview.tick_out_of_order", 1, true);
         return;
-    }
-    if (m_lastPlaybackFrameSeq >= 0 && frameSeq > m_lastPlaybackFrameSeq + 1)
-        PlaybackStutterProbe::recordCounter("preview.tick_gap", frameSeq - m_lastPlaybackFrameSeq - 1, true);
     m_lastPlaybackFrameSeq = frameSeq;
-    m_currentTimeMs = qMax(0.0, predictedTimeMs);
-
-    if (m_frameTimer.isValid() && m_frameTimer.elapsed() < kPlaybackFrameIntervalMs)
-    {
-        PlaybackStutterProbe::recordCounter("preview.tick_coalesced", 1, true);
-        return;
-    }
-
     if (m_deferredUpdateTimer->isActive())
         m_deferredUpdateTimer->stop();
     m_updateScheduled = false;
-    PlaybackStutterProbe::markUiHeartbeat(true);
+    m_currentTimeMs = qMax(0.0, predictedTimeMs);
     update();
     m_frameTimer.restart();
-    PlaybackStutterProbe::recordDuration("preview.tick_handler",
-                                         static_cast<double>(timer.nsecsElapsed()) / 1000000.0,
-                                         1.0,
-                                         true);
 }
 
 void RealtimePreviewWidget::invalidateHyperCache()
@@ -400,8 +378,6 @@ void RealtimePreviewWidget::ensureHyperCache()
 void RealtimePreviewWidget::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
-    QElapsedTimer timer;
-    timer.start();
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, false);
@@ -506,10 +482,4 @@ void RealtimePreviewWidget::paintEvent(QPaintEvent *event)
         painter.setBrush(Qt::NoBrush);
         painter.drawEllipse(center, radius, radius);
     }
-
-    const bool isPlaying = m_playbackController && m_playbackController->state() == PlaybackController::Playing;
-    PlaybackStutterProbe::recordDuration("preview.paint_total",
-                                         static_cast<double>(timer.nsecsElapsed()) / 1000000.0,
-                                         4.0,
-                                         isPlaying);
 }

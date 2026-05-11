@@ -1,12 +1,10 @@
 #include "PlaybackController.h"
 #include "utils/MathUtils.h"
 #include "utils/Logger.h"
-#include "utils/PlaybackStutterProbe.h"
 #include "utils/Settings.h"
 #include "model/Chart.h"
 #include <QTimer>
 #include <algorithm>
-#include <cmath>
 
 namespace
 {
@@ -21,10 +19,7 @@ PlaybackController::PlaybackController(AudioPlayer *audioPlayer, QObject *parent
       m_noteSoundEnabled(true),
       m_autoPausedAtEnd(false),
       m_framePulseTimer(new QTimer(this)),
-      m_frameRateCap(0),
-      m_lastFramePulseWallMs(0),
-      m_lastPulseIntervalMs(-1.0),
-      m_framePulseAccumulatorMs(0.0),
+      m_frameRateCap(60),
       m_frameAnchorValid(false),
       m_frameAnchorTimeMs(0.0),
       m_frameAnchorWallMs(0),
@@ -34,7 +29,7 @@ PlaybackController::PlaybackController(AudioPlayer *audioPlayer, QObject *parent
     connect(m_audioPlayer, &AudioPlayer::positionChanged, this, &PlaybackController::onAudioPositionChanged);
     connect(m_audioPlayer, &AudioPlayer::stateChanged, this, &PlaybackController::onAudioStateChanged);
     connect(m_audioPlayer, &AudioPlayer::errorOccurred, this, &PlaybackController::onAudioError);
-    m_framePulseTimer->setInterval(kFramePulseMinIntervalMs);
+    m_framePulseTimer->setInterval(kFramePulseIntervalMs);
     m_framePulseTimer->setTimerType(Qt::PreciseTimer);
     connect(m_framePulseTimer, &QTimer::timeout, this, &PlaybackController::onFramePulseTimeout);
     m_frameClock.start();
@@ -72,17 +67,10 @@ void PlaybackController::play()
         m_state = Playing;
         m_frameSeq = 0;
         m_lastFrameTickMs = currentTime();
-        m_lastFramePulseWallMs = 0;
-        m_lastPulseIntervalMs = -1.0;
-        m_framePulseAccumulatorMs = 0.0;
         resetFrameAnchor(m_lastFrameTickMs, m_frameClock.elapsed());
         if (!m_framePulseTimer->isActive())
-        {
-            scheduleNextFramePulse();
             m_framePulseTimer->start();
-        }
         Logger::debug(QString("PlaybackController::play - Playing from position %1ms").arg(m_audioPlayer->position()));
-        PlaybackStutterProbe::markPlaybackState(true);
         emit stateChanged(m_state);
         emit playbackFrameTick(m_lastFrameTickMs, m_frameSeq);
     }
@@ -120,12 +108,8 @@ void PlaybackController::pause()
         m_state = Paused;
         if (m_framePulseTimer->isActive())
             m_framePulseTimer->stop();
-        m_lastFramePulseWallMs = 0;
-        m_lastPulseIntervalMs = -1.0;
-        m_framePulseAccumulatorMs = 0.0;
         m_frameAnchorValid = false;
         Logger::debug(QString("PlaybackController::pause - Paused at position %1ms").arg(m_audioPlayer->position()));
-        PlaybackStutterProbe::markPlaybackState(false);
         emit stateChanged(m_state);
     }
 }
@@ -139,13 +123,9 @@ void PlaybackController::stop()
         m_state = Stopped;
         if (m_framePulseTimer->isActive())
             m_framePulseTimer->stop();
-        m_lastFramePulseWallMs = 0;
-        m_lastPulseIntervalMs = -1.0;
-        m_framePulseAccumulatorMs = 0.0;
         m_frameAnchorValid = false;
         m_frameSeq = 0;
         Logger::debug("PlaybackController::stop - Playback stopped");
-        PlaybackStutterProbe::markPlaybackState(false);
         emit stateChanged(m_state);
     }
 }
@@ -174,17 +154,26 @@ double PlaybackController::speed() const
 
 void PlaybackController::setFrameRateCap(int fpsCap)
 {
-    const int sanitized = sanitizeFrameRateCap(fpsCap);
-    if (m_frameRateCap == sanitized)
-        return;
+    switch (fpsCap)
+    {
+    case 0:
+    case 60:
+    case 90:
+    case 120:
+        m_frameRateCap = fpsCap;
+        break;
+    default:
+        m_frameRateCap = 60;
+        break;
+    }
 
-    m_frameRateCap = sanitized;
-    m_framePulseAccumulatorMs = 0.0;
-    scheduleNextFramePulse();
+    int intervalMs = kFramePulseIntervalMs;
+    if (m_frameRateCap == 120 || m_frameRateCap == 0)
+        intervalMs = 8;
+    else if (m_frameRateCap == 90)
+        intervalMs = 11;
 
-    const QString capText = (m_frameRateCap <= 0) ? QStringLiteral("unlimited")
-                                                   : QString::number(m_frameRateCap);
-    Logger::info(QString("PlaybackController::setFrameRateCap - Frame cap set to %1").arg(capText));
+    m_framePulseTimer->setInterval(intervalMs);
 }
 
 int PlaybackController::frameRateCap() const
@@ -244,14 +233,10 @@ void PlaybackController::onAudioStateChanged(QMediaPlayer::PlaybackState state)
         m_state = Paused;
         if (m_framePulseTimer->isActive())
             m_framePulseTimer->stop();
-        m_lastFramePulseWallMs = 0;
-        m_lastPulseIntervalMs = -1.0;
-        m_framePulseAccumulatorMs = 0.0;
         m_frameAnchorValid = false;
         m_frameSeq = 0;
         m_lastFrameTickMs = 0.0;
         Logger::info("PlaybackController::onAudioStateChanged - Reached end of media, auto-paused at beginning");
-        PlaybackStutterProbe::markPlaybackState(false);
         emit positionChanged(static_cast<double>(m_audioPlayer->adjustedPosition()));
         emit stateChanged(m_state);
     }
@@ -266,12 +251,8 @@ void PlaybackController::onAudioError(const QString &error)
         m_state = Stopped;
         if (m_framePulseTimer->isActive())
             m_framePulseTimer->stop();
-        m_lastFramePulseWallMs = 0;
-        m_lastPulseIntervalMs = -1.0;
-        m_framePulseAccumulatorMs = 0.0;
         m_frameAnchorValid = false;
         m_frameSeq = 0;
-        PlaybackStutterProbe::markPlaybackState(false);
         emit stateChanged(m_state);
     }
     emit errorOccurred(error);
@@ -308,41 +289,7 @@ void PlaybackController::onFramePulseTimeout()
     if (m_state != Playing)
         return;
 
-    scheduleNextFramePulse();
-
-    QElapsedTimer dispatchTimer;
-    dispatchTimer.start();
-
     const qint64 nowMs = m_frameClock.elapsed();
-    if (m_lastFramePulseWallMs > 0)
-    {
-        const double targetIntervalMs = targetFrameIntervalMsForCap(m_frameRateCap);
-        const bool hasCap = targetIntervalMs > 0.0;
-        const double kPulseEarlyThresholdMs = hasCap ? qMax(2.0, targetIntervalMs * 0.70) : 14.0;
-        const double kPulseLateThresholdMs = hasCap ? qMax(4.0, targetIntervalMs * 1.25) : 18.0;
-        const double kPulseVeryLateThresholdMs = hasCap ? qMax(8.0, targetIntervalMs * 1.60) : 22.0;
-        const double intervalMs = static_cast<double>(nowMs - m_lastFramePulseWallMs);
-        PlaybackStutterProbe::recordDuration("playback.pulse_interval",
-                                             intervalMs,
-                                             hasCap ? kPulseLateThresholdMs : 20.0,
-                                             true);
-        if (hasCap && intervalMs < kPulseEarlyThresholdMs)
-            PlaybackStutterProbe::recordCounter("playback.pulse_early_events", 1, true);
-        if (hasCap && intervalMs > kPulseLateThresholdMs)
-            PlaybackStutterProbe::recordCounter("playback.pulse_late_events", 1, true);
-        if (hasCap && intervalMs > kPulseVeryLateThresholdMs)
-            PlaybackStutterProbe::recordCounter("playback.pulse_very_late_events", 1, true);
-        if (m_lastPulseIntervalMs > 0.0)
-        {
-            const double jerkMs = std::abs(intervalMs - m_lastPulseIntervalMs);
-            PlaybackStutterProbe::recordDuration("playback.pulse_interval_jerk", jerkMs, 3.0, true);
-            if (jerkMs > 6.0)
-                PlaybackStutterProbe::recordCounter("playback.pulse_jank_events", 1, true);
-        }
-        m_lastPulseIntervalMs = intervalMs;
-    }
-    m_lastFramePulseWallMs = nowMs;
-
     if (!m_frameAnchorValid)
         resetFrameAnchor(currentTime(), nowMs);
 
@@ -355,10 +302,6 @@ void PlaybackController::onFramePulseTimeout()
     m_lastFrameTickMs = predictedMs;
     ++m_frameSeq;
     emit playbackFrameTick(predictedMs, m_frameSeq);
-    PlaybackStutterProbe::recordDuration("playback.frame_pulse_dispatch",
-                                         static_cast<double>(dispatchTimer.nsecsElapsed()) / 1000000.0,
-                                         1.0,
-                                         true);
 }
 
 void PlaybackController::resetFrameAnchor(double timeMs, qint64 nowMs)
@@ -380,68 +323,23 @@ void PlaybackController::applyObservedTimeToAnchor(double observedMs, qint64 now
     const double predicted = m_frameAnchorTimeMs +
                              static_cast<double>(nowMs - m_frameAnchorWallMs) * m_speed;
     const double delta = clampedObserved - predicted;
-    const double absDelta = std::abs(delta);
-    PlaybackStutterProbe::recordDuration("playback.anchor_delta_abs", absDelta, 3.0, m_state == Playing);
 
-    if (absDelta <= kAnchorDeadZoneMs)
+    if (std::abs(delta) <= kAnchorDeadZoneMs)
     {
-        PlaybackStutterProbe::recordCounter("playback.anchor_deadzone_hits", 1, m_state == Playing);
         resetFrameAnchor(predicted, nowMs);
         return;
     }
-    if (absDelta < kAnchorModerateWindowMs)
+    if (std::abs(delta) < kAnchorModerateWindowMs)
     {
-        PlaybackStutterProbe::recordCounter("playback.anchor_moderate_adjust", 1, m_state == Playing);
         resetFrameAnchor(predicted + delta * kAnchorModerateGain, nowMs);
         return;
     }
-    if (absDelta < kAnchorLargeWindowMs)
+    if (std::abs(delta) < kAnchorLargeWindowMs)
     {
-        PlaybackStutterProbe::recordCounter("playback.anchor_large_adjust", 1, m_state == Playing);
         resetFrameAnchor(predicted + delta * kAnchorLargeGain, nowMs);
         return;
     }
 
-    PlaybackStutterProbe::recordCounter("playback.anchor_hard_resync", 1, m_state == Playing);
     resetFrameAnchor(clampedObserved, nowMs);
-}
-
-int PlaybackController::sanitizeFrameRateCap(int fpsCap) const
-{
-    switch (fpsCap)
-    {
-    case 0:
-    case 60:
-    case 90:
-    case 120:
-        return fpsCap;
-    default:
-        return 120;
-    }
-}
-
-double PlaybackController::targetFrameIntervalMsForCap(int fpsCap) const
-{
-    if (fpsCap <= 0)
-        return 0.0;
-    return 1000.0 / static_cast<double>(fpsCap);
-}
-
-void PlaybackController::scheduleNextFramePulse()
-{
-    int nextIntervalMs = kFramePulseMinIntervalMs;
-    const double targetMs = targetFrameIntervalMsForCap(m_frameRateCap);
-    if (targetMs > 0.0)
-    {
-        m_framePulseAccumulatorMs += targetMs;
-        nextIntervalMs = qMax(kFramePulseMinIntervalMs,
-                              static_cast<int>(std::floor(m_framePulseAccumulatorMs + 1e-6)));
-        m_framePulseAccumulatorMs -= static_cast<double>(nextIntervalMs);
-        if (m_framePulseAccumulatorMs < 0.0)
-            m_framePulseAccumulatorMs = 0.0;
-    }
-
-    if (m_framePulseTimer->interval() != nextIntervalMs)
-        m_framePulseTimer->setInterval(nextIntervalMs);
 }
 

@@ -378,7 +378,7 @@ void Settings::setQtMessageFilterPrefixes(const QStringList &prefixes)
 
 bool Settings::playbackStutterProbeEnabled() const
 {
-    return m_settings.value("logging/playbackStutterProbeEnabled", true).toBool();
+    return m_settings.value("logging/playbackStutterProbeEnabled", false).toBool();
 }
 
 void Settings::setPlaybackStutterProbeEnabled(bool enabled)
