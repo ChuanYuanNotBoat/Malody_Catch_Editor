@@ -5,11 +5,13 @@ A desktop chart editor for Malody Catch mode, developed to fill the feature gaps
 
 当前版本 / Current Version: **Beta v1.10.2**
 
-> ⚠️ **Early Stage Notice / 早期状态说明**
-> This project is in a very early stage of development. It is not yet ready for production use. Features may be incomplete, unstable, or subject to change.
-> 本项目处于极早期开发阶段，尚未具备实际使用价值。功能可能不完整、不稳定或随时变更。
-> Use at your own risk / 使用风险自负。
-
+> ~~⚠️ Early Stage / 极早期阶段~~ *(那都是三四十个版本前的事了 / That was 30+ versions ago)*  
+> 🚧 **Current: Beta & Active Development / 当前状态：公测 & 积极开发中**  
+> The project is functional and largely stable, though you might still encounter occasional bugs or edge-case issues.  
+> 项目已具备可用性且大体稳定，只是偶尔仍可能遇到一些 bug 或边界情况问题。  
+> Use at your own risk — but honestly, it's way more solid than it sounds.  
+> 使用风险自负——但说实话，它比这句话听起来要稳得多。  
+> Feedback and bug reports are always welcome / 欢迎随时反馈和提交 bug。
 ---
 
 ## 📥 下载
