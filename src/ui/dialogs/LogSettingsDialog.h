@@ -30,6 +30,7 @@ private slots:
     void onVerboseModeChanged(int state);
     void onJsonLoggingChanged(int state);
     void onPerformanceTimingChanged(int state);
+    void onPlaybackProbeChanged(int state);
     void onLogLevelChanged(int index);
     void onClearLogsClicked();
     void onShowLogDialogClicked();
@@ -46,6 +47,7 @@ private:
     QCheckBox *m_verboseModeCheckbox;
     QCheckBox *m_jsonLoggingCheckbox;
     QCheckBox *m_performanceTimingCheckbox;
+    QCheckBox *m_playbackProbeCheckbox;
     QPushButton *m_clearLogsButton;
     QPushButton *m_showLogButton;
     QPushButton *m_exportButton;

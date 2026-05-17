@@ -89,6 +89,10 @@ public:
     void setQtMessageFilterCategories(const QStringList &categories);
     QStringList qtMessageFilterPrefixes() const;
     void setQtMessageFilterPrefixes(const QStringList &prefixes);
+    bool playbackStutterProbeEnabled() const;
+    void setPlaybackStutterProbeEnabled(bool enabled);
+    int playbackFrameRateCap() const;
+    void setPlaybackFrameRateCap(int fpsCap);
 
     int chartPickerPrimaryColumnWidth() const;
     void setChartPickerPrimaryColumnWidth(int width);

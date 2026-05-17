@@ -6,6 +6,23 @@
 #include <QStringList>
 #include <algorithm>
 
+namespace
+{
+int sanitizePlaybackFrameRateCap(int fpsCap)
+{
+    switch (fpsCap)
+    {
+    case 0:
+    case 60:
+    case 90:
+    case 120:
+        return fpsCap;
+    default:
+        return 120;
+    }
+}
+}
+
 Settings::Settings() : m_settings("CatchEditor", "CatchChartEditor") {}
 
 Settings &Settings::instance()
@@ -357,6 +374,26 @@ void Settings::setQtMessageFilterPrefixes(const QStringList &prefixes)
             cleaned.append(trimmed);
     }
     m_settings.setValue("logging/qtMessageFilterPrefixes", cleaned);
+}
+
+bool Settings::playbackStutterProbeEnabled() const
+{
+    return m_settings.value("logging/playbackStutterProbeEnabled", false).toBool();
+}
+
+void Settings::setPlaybackStutterProbeEnabled(bool enabled)
+{
+    m_settings.setValue("logging/playbackStutterProbeEnabled", enabled);
+}
+
+int Settings::playbackFrameRateCap() const
+{
+    return sanitizePlaybackFrameRateCap(m_settings.value("playback/frameRateCap", 120).toInt());
+}
+
+void Settings::setPlaybackFrameRateCap(int fpsCap)
+{
+    m_settings.setValue("playback/frameRateCap", sanitizePlaybackFrameRateCap(fpsCap));
 }
 
 int Settings::chartPickerPrimaryColumnWidth() const

@@ -2,6 +2,7 @@
 #include "utils/Logger.h"
 #include "utils/PerformanceTimer.h"
 #include "utils/DiagnosticCollector.h"
+#include "utils/Settings.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
@@ -50,10 +51,12 @@ void LogSettingsDialog::setupUI()
     m_verboseModeCheckbox = new QCheckBox(tr("详细日志模式 - 记录每个操作的详细信息"));
     m_jsonLoggingCheckbox = new QCheckBox(tr("JSON结构化日志 - 便于自动化分析"));
     m_performanceTimingCheckbox = new QCheckBox(tr("性能计时 - 记录各操作的耗时"));
+    m_playbackProbeCheckbox = new QCheckBox(tr("播放卡顿探针 - 窗口化FPS与抖动追踪"));
 
     featuresLayout->addWidget(m_verboseModeCheckbox);
     featuresLayout->addWidget(m_jsonLoggingCheckbox);
     featuresLayout->addWidget(m_performanceTimingCheckbox);
+    featuresLayout->addWidget(m_playbackProbeCheckbox);
     mainLayout->addWidget(featuresGroup);
 
     // 操作按钮组
@@ -85,6 +88,8 @@ void LogSettingsDialog::setupUI()
             this, &LogSettingsDialog::onJsonLoggingChanged);
     connect(m_performanceTimingCheckbox, QOverload<int>::of(&QCheckBox::stateChanged),
             this, &LogSettingsDialog::onPerformanceTimingChanged);
+    connect(m_playbackProbeCheckbox, QOverload<int>::of(&QCheckBox::stateChanged),
+            this, &LogSettingsDialog::onPlaybackProbeChanged);
     connect(m_logLevelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &LogSettingsDialog::onLogLevelChanged);
     connect(m_clearLogsButton, &QPushButton::clicked,
@@ -104,6 +109,7 @@ void LogSettingsDialog::loadSettings()
     m_verboseModeCheckbox->setChecked(Logger::isVerbose());
     m_jsonLoggingCheckbox->setChecked(Logger::isJsonLoggingEnabled());
     m_performanceTimingCheckbox->setChecked(PerformanceTimer::isEnabled());
+    m_playbackProbeCheckbox->setChecked(Settings::instance().playbackStutterProbeEnabled());
 }
 
 void LogSettingsDialog::saveSettings()
@@ -111,6 +117,7 @@ void LogSettingsDialog::saveSettings()
     Logger::setVerbose(m_verboseModeCheckbox->isChecked());
     Logger::setJsonLoggingEnabled(m_jsonLoggingCheckbox->isChecked());
     PerformanceTimer::setEnabled(m_performanceTimingCheckbox->isChecked());
+    Settings::instance().setPlaybackStutterProbeEnabled(m_playbackProbeCheckbox->isChecked());
 }
 
 void LogSettingsDialog::onVerboseModeChanged(int state)
@@ -129,6 +136,13 @@ void LogSettingsDialog::onPerformanceTimingChanged(int state)
 {
     PerformanceTimer::setEnabled(state == Qt::Checked);
     Logger::info(QString("日志：性能计时 %1").arg(state == Qt::Checked ? "启用" : "禁用"));
+}
+
+void LogSettingsDialog::onPlaybackProbeChanged(int state)
+{
+    const bool enabled = (state == Qt::Checked);
+    Settings::instance().setPlaybackStutterProbeEnabled(enabled);
+    Logger::info(QString("日志：播放卡顿探针 %1").arg(enabled ? "启用" : "禁用"));
 }
 
 void LogSettingsDialog::onLogLevelChanged(int index)

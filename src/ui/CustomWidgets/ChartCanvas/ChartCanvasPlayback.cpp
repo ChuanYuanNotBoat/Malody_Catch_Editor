@@ -4,6 +4,7 @@
 #include "controller/PlaybackController.h"
 #include "audio/NoteSoundPlayer.h"
 #include "utils/MathUtils.h"
+#include "utils/PlaybackStutterProbe.h"
 #include "app/Application.h"
 #include "plugin/PluginManager.h"
 #include <QDateTime>
@@ -56,24 +57,24 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
         return;
     }
 
-    m_currentPlayTime = clampedTimeMs;
+    const double audioTimeMs = clampedTimeMs;
 
     if (m_noteSoundPlayer &&
         m_noteSoundPlayer->isEnabled() &&
         m_noteSoundPlayer->hasValidSound() &&
         !m_playableNoteTimesMs.isEmpty())
     {
-        if (clampedTimeMs < m_lastNoteSoundTimeMs - 2.0)
+        if (audioTimeMs < m_lastNoteSoundTimeMs - 2.0)
         {
             m_nextPlayableNoteIndex = static_cast<int>(std::lower_bound(
                 m_playableNoteTimesMs.begin(),
                 m_playableNoteTimesMs.end(),
-                clampedTimeMs) - m_playableNoteTimesMs.begin());
+                audioTimeMs) - m_playableNoteTimesMs.begin());
         }
 
         bool hasHit = false;
         while (m_nextPlayableNoteIndex < m_playableNoteTimesMs.size() &&
-               m_playableNoteTimesMs[m_nextPlayableNoteIndex] <= clampedTimeMs + 0.5)
+               m_playableNoteTimesMs[m_nextPlayableNoteIndex] <= audioTimeMs + 0.5)
         {
             if (m_playableNoteTimesMs[m_nextPlayableNoteIndex] > m_lastNoteSoundTimeMs + 0.5)
                 hasHit = true;
@@ -84,7 +85,7 @@ void ChartCanvas::playbackPositionChanged(double timeMs)
             m_noteSoundPlayer->playHitSound();
     }
 
-    m_lastNoteSoundTimeMs = clampedTimeMs;
+    m_lastNoteSoundTimeMs = audioTimeMs;
 }
 
 void ChartCanvas::playFromReferenceLine()
@@ -109,12 +110,25 @@ double ChartCanvas::currentPlayTime() const
     return m_currentPlayTime;
 }
 
+void ChartCanvas::recordManualJerkMark()
+{
+    PlaybackStutterProbe::markManualJerk(m_currentPlayTime, m_lastPlaybackFrameSeq);
+    emit statusMessage(tr("Manual jerk mark recorded (F8)."));
+}
+
 void ChartCanvas::onSelectionChanged()
 {
 }
 
 void ChartCanvas::keyPressEvent(QKeyEvent *event)
 {
+    if (event->key() == Qt::Key_F8)
+    {
+        recordManualJerkMark();
+        event->accept();
+        return;
+    }
+
     if (m_pluginToolModeActive && event->key() == Qt::Key_Return)
     {
         if (triggerPluginBatchAction("commit_curve_to_notes", tr("Commit Curve -> Notes")))

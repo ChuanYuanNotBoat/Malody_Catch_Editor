@@ -30,6 +30,7 @@ set(SOURCES
     src/utils/Logger.cpp
     src/utils/Translator.cpp
     src/utils/PerformanceTimer.cpp
+    src/utils/PlaybackStutterProbe.cpp
     src/utils/DiagnosticCollector.cpp
     src/file/ChartIO.cpp
     src/file/SkinIO.cpp

@@ -56,6 +56,19 @@ void ChartCanvas::paintEvent(QPaintEvent *event)
     if (m_timesDirty || m_noteDataDirty)
         rebuildNoteTimesCache();
 
+    if (m_isPlaying && m_playbackController && m_lastPlaybackTargetTimeMs >= 0.0)
+    {
+        const qint64 nowNs = m_playbackVisualClock.nsecsElapsed();
+        double visualTimeMs = m_lastPlaybackTargetTimeMs;
+        if (m_lastPlaybackTickNs > 0 && nowNs > m_lastPlaybackTickNs)
+        {
+            const double dtMs = static_cast<double>(nowNs - m_lastPlaybackTickNs) / 1000000.0;
+            visualTimeMs += dtMs * m_playbackController->speed();
+        }
+        m_currentPlayTime = qMax(0.0, visualTimeMs);
+        advancePlaybackVisual(false, false);
+    }
+
     const Chart *currentChart = chart();
     const auto &bpmList = currentChart->bpmList();
     const auto &notes = currentChart->notes();

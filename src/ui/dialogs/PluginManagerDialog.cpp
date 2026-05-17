@@ -13,6 +13,7 @@
 #include <QTextEdit>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QEventLoop>
 
 namespace
 {
@@ -60,14 +61,17 @@ PluginManagerDialog::PluginManagerDialog(PluginManager *pluginManager, QWidget *
     QHBoxLayout *buttonsLayout = new QHBoxLayout;
     buttonsLayout->addStretch();
     m_openFolderButton = new QPushButton(tr("Open Plugins Folder"), this);
+    m_reloadSelectedButton = new QPushButton(tr("Reload Selected Plugin"), this);
     m_reloadButton = new QPushButton(tr("Reload Plugins"), this);
     QPushButton *closeButton = new QPushButton(tr("Close"), this);
     buttonsLayout->addWidget(m_openFolderButton);
+    buttonsLayout->addWidget(m_reloadSelectedButton);
     buttonsLayout->addWidget(m_reloadButton);
     buttonsLayout->addWidget(closeButton);
     root->addLayout(buttonsLayout);
 
     connect(m_reloadButton, &QPushButton::clicked, this, &PluginManagerDialog::reloadPlugins);
+    connect(m_reloadSelectedButton, &QPushButton::clicked, this, &PluginManagerDialog::reloadSelectedPlugin);
     connect(m_openFolderButton, &QPushButton::clicked, this, &PluginManagerDialog::openPluginsFolder);
     connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
     connect(m_table, &QTableWidget::itemSelectionChanged, this, &PluginManagerDialog::updateDetails);
@@ -81,8 +85,36 @@ void PluginManagerDialog::reloadPlugins()
     if (!m_pluginManager)
         return;
 
+    emit pluginsReloading();
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     m_pluginManager->reloadPlugins();
     rebuildTable();
+    emit pluginsReloaded();
+}
+
+void PluginManagerDialog::reloadSelectedPlugin()
+{
+    if (!m_pluginManager)
+        return;
+
+    const QString targetPluginId = selectedPluginId();
+    if (targetPluginId.isEmpty())
+        return;
+
+    emit pluginsReloading();
+    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    m_pluginManager->reloadPlugins();
+    rebuildTable();
+
+    for (int row = 0; row < m_infos.size(); ++row)
+    {
+        if (m_infos[row].pluginId == targetPluginId)
+        {
+            m_table->selectRow(row);
+            break;
+        }
+    }
+    emit pluginsReloaded();
 }
 
 void PluginManagerDialog::openPluginsFolder()
@@ -114,9 +146,14 @@ void PluginManagerDialog::updateDetails()
     const int row = m_table->currentRow();
     if (row < 0 || row >= m_infos.size())
     {
+        if (m_reloadSelectedButton)
+            m_reloadSelectedButton->setEnabled(false);
         m_details->clear();
         return;
     }
+
+    if (m_reloadSelectedButton)
+        m_reloadSelectedButton->setEnabled(true);
 
     const PluginManager::PluginInfo &info = m_infos[row];
     QString details;
@@ -156,6 +193,8 @@ void PluginManagerDialog::rebuildTable()
         m_summaryLabel->setText(tr("Plugin manager is not available."));
         m_table->setRowCount(0);
         m_details->clear();
+        if (m_reloadSelectedButton)
+            m_reloadSelectedButton->setEnabled(false);
         return;
     }
 
@@ -226,7 +265,11 @@ void PluginManagerDialog::rebuildTable()
     if (!m_infos.isEmpty())
         m_table->selectRow(0);
     else
+    {
         m_details->clear();
+        if (m_reloadSelectedButton)
+            m_reloadSelectedButton->setEnabled(false);
+    }
 }
 
 QString PluginManagerDialog::safeText(const QString &value) const
@@ -234,4 +277,12 @@ QString PluginManagerDialog::safeText(const QString &value) const
     if (value.isEmpty())
         return tr("(empty)");
     return value;
+}
+
+QString PluginManagerDialog::selectedPluginId() const
+{
+    const int row = m_table ? m_table->currentRow() : -1;
+    if (row < 0 || row >= m_infos.size())
+        return QString();
+    return m_infos[row].pluginId;
 }

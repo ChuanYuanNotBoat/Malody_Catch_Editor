@@ -28,6 +28,8 @@ public:
     void stop();
     void setSpeed(double speed);
     double speed() const;
+    void setFrameRateCap(int fpsCap);
+    int frameRateCap() const;
     void seekTo(double timeMs);
     void seekToBeat(int beat, int num, int den);
 
@@ -68,6 +70,7 @@ private:
     bool m_noteSoundEnabled;
     bool m_autoPausedAtEnd;
     QTimer *m_framePulseTimer;
+    int m_frameRateCap;
     QElapsedTimer m_frameClock;
     bool m_frameAnchorValid;
     double m_frameAnchorTimeMs;

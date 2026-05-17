@@ -1,6 +1,7 @@
 #include "PlaybackController.h"
 #include "utils/MathUtils.h"
 #include "utils/Logger.h"
+#include "utils/Settings.h"
 #include "model/Chart.h"
 #include <QTimer>
 #include <algorithm>
@@ -18,6 +19,7 @@ PlaybackController::PlaybackController(AudioPlayer *audioPlayer, QObject *parent
       m_noteSoundEnabled(true),
       m_autoPausedAtEnd(false),
       m_framePulseTimer(new QTimer(this)),
+      m_frameRateCap(60),
       m_frameAnchorValid(false),
       m_frameAnchorTimeMs(0.0),
       m_frameAnchorWallMs(0),
@@ -31,6 +33,7 @@ PlaybackController::PlaybackController(AudioPlayer *audioPlayer, QObject *parent
     m_framePulseTimer->setTimerType(Qt::PreciseTimer);
     connect(m_framePulseTimer, &QTimer::timeout, this, &PlaybackController::onFramePulseTimeout);
     m_frameClock.start();
+    setFrameRateCap(Settings::instance().playbackFrameRateCap());
 }
 
 PlaybackController::State PlaybackController::state() const
@@ -147,6 +150,35 @@ void PlaybackController::setSpeed(double speed)
 double PlaybackController::speed() const
 {
     return m_speed;
+}
+
+void PlaybackController::setFrameRateCap(int fpsCap)
+{
+    switch (fpsCap)
+    {
+    case 0:
+    case 60:
+    case 90:
+    case 120:
+        m_frameRateCap = fpsCap;
+        break;
+    default:
+        m_frameRateCap = 60;
+        break;
+    }
+
+    int intervalMs = kFramePulseIntervalMs;
+    if (m_frameRateCap == 120 || m_frameRateCap == 0)
+        intervalMs = 8;
+    else if (m_frameRateCap == 90)
+        intervalMs = 11;
+
+    m_framePulseTimer->setInterval(intervalMs);
+}
+
+int PlaybackController::frameRateCap() const
+{
+    return m_frameRateCap;
 }
 
 void PlaybackController::seekTo(double timeMs)
